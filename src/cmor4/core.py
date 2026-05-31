@@ -25,10 +25,6 @@ AXIS_ALIASES = {
 }
 
 INTERNAL_DATASET_KEYS = {
-    "_AXIS_ENTRY_FILE",
-    "_FORMULA_VAR_FILE",
-    "_cmip7_option",
-    "_controlled_vocabulary_file",
     "_history_template",
     "outpath",
     "output_file_template",
@@ -90,6 +86,8 @@ def create_dataset(
 
     if project is not None:
         dataset, variable = project.prepare_inputs(dataset, variable)
+        axes = project.prepare_axes(axes)
+        zfactors = project.prepare_zfactors(zfactors)
 
     coords: dict[str, Any] = {}
     data_vars: dict[str, Any] = {}
@@ -198,6 +196,8 @@ def cmorize(
 
     if project is not None:
         dataset, variable = project.prepare_inputs(dataset, variable)
+        axes = project.prepare_axes(axes)
+        zfactors = project.prepare_zfactors(zfactors)
     ds = create_dataset(
         dataset,
         variable,
@@ -313,9 +313,11 @@ def _add_axis(
     if axis.get("scalar", False):
         coords[out_name] = ((), _scalar(values), coord_attrs)
         axis_dims[name] = ()
+        _add_axis_dim_aliases(axis, axis_dims, ())
         scalar_coord_names.append(out_name)
     elif axis.get("auxiliary_name"):
         axis_dims[name] = (out_name,)
+        _add_axis_dim_aliases(axis, axis_dims, (out_name,))
         coords[out_name] = (
             out_name,
             np.arange(len(values), dtype="i4"),
@@ -333,6 +335,7 @@ def _add_axis(
         coords[out_name] = (dims, values, coord_attrs)
         if len(dims) == 1:
             axis_dims[name] = dims
+            _add_axis_dim_aliases(axis, axis_dims, dims)
         auxiliary = bool(axis.get("auxiliary", False)) or len(dims) > 1
         if auxiliary:
             auxiliary_coord_names.append(out_name)
@@ -362,26 +365,28 @@ def _add_zfactor(
     axis_dims: Mapping[str, tuple[str, ...]],
 ) -> str:
     name = str(zfactor["name"])
+    out_name = str(zfactor.get("out_name") or name)
     values = _array(zfactor.get("values", zfactor.get("data", [])))
     dims = _named_dimensions(zfactor.get("dimensions", ()), axis_dims)
     if not dims and values.ndim > 0:
-        dims = (name,)
+        dims = (out_name,)
     attrs = _attrs(zfactor.get("attrs", {}))
-    if "units" in zfactor:
-        attrs["units"] = zfactor["units"]
-    data_vars[name] = (dims, values, attrs)
+    for key in ("units", "standard_name", "long_name"):
+        if key in zfactor:
+            attrs[key] = zfactor[key]
+    data_vars[out_name] = (dims, values, attrs)
 
     if "bounds" in zfactor:
-        bounds_name = str(zfactor.get("bounds_name") or f"{name}_bnds")
+        bounds_name = str(zfactor.get("bounds_name") or f"{out_name}_bnds")
         data_vars[bounds_name] = (
             dims + (str(zfactor.get("bounds_dim", "bnds")),),
             _array(zfactor["bounds"]),
             _attrs(zfactor.get("bounds_attrs", {})),
         )
-        attrs = dict(data_vars[name][2])
+        attrs = dict(data_vars[out_name][2])
         attrs["bounds"] = bounds_name
-        data_vars[name] = (dims, values, attrs)
-    return name
+        data_vars[out_name] = (dims, values, attrs)
+    return out_name
 
 
 def _add_grid_mapping(
@@ -408,19 +413,25 @@ def _set_formula_terms(
     variable: Mapping[str, Any],
     zfactor_names: Sequence[str],
 ) -> None:
-    formula_terms = variable.get("formula_terms")
-    if not formula_terms and set(zfactor_names).issuperset(
-        {"a", "b", "p0", "ps"}
-    ):
-        formula_terms = "a: a b: b p0: p0 ps: ps"
-    if not formula_terms:
-        return
+    variable_dims = set(variable.get("dimensions", ()))
     for axis in axes:
+        formula_terms = variable.get("formula_terms") or axis.get("z_factors")
+        if not formula_terms and set(zfactor_names).issuperset(
+            {"a", "b", "p0", "ps"}
+        ):
+            formula_terms = "a: a b: b p0: p0 ps: ps"
+        if not formula_terms:
+            continue
         axis_name = axis.get("name")
-        if axis_name in variable.get("dimensions", ()) and axis_name in {
-            "standard_hybrid_sigma",
-            "alevel",
-        }:
+        generic_level_name = axis.get("generic_level_name")
+        out_name = axis.get("out_name") or AXIS_ALIASES.get(
+            str(axis_name), axis_name
+        )
+        if {
+            str(value)
+            for value in (axis_name, generic_level_name, out_name)
+            if value
+        } & variable_dims:
             coord_name = str(
                 axis.get("out_name")
                 or AXIS_ALIASES.get(str(axis_name), axis_name)
@@ -548,10 +559,21 @@ def _axis_attrs(
     attrs = _attrs(axis.get("attrs", {}))
     if include_units and "units" in axis:
         attrs["units"] = axis["units"]
-    for key in ("standard_name", "long_name", "axis", "positive"):
+    for key in ("standard_name", "long_name", "axis", "positive", "formula"):
         if key in axis:
             attrs[key] = axis[key]
     return attrs
+
+
+def _add_axis_dim_aliases(
+    axis: Mapping[str, Any],
+    axis_dims: dict[str, tuple[str, ...]],
+    dims: tuple[str, ...],
+) -> None:
+    for key in ("generic_level_name", "out_name"):
+        value = axis.get(key)
+        if value:
+            axis_dims.setdefault(str(value), dims)
 
 
 def _axis_dimensions(

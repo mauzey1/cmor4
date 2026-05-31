@@ -12,8 +12,10 @@ axes, optional grids or z-factors, and data arrays; `cmor4` creates an
 ## Project Tables
 
 For table-backed validation, pass the project CV file and the variable table
-files that define the variables you want to write. These files come from the
-project table repositories, not from `cmor4`.
+files that define the variables you want to write. Coordinate metadata and
+formula-term metadata are also read from the project coordinate and formula
+tables. These files come from the project table repositories, not from
+`cmor4`.
 
 Examples:
 
@@ -64,6 +66,8 @@ project = cmor4.ProjectTables.from_directory(
     "../cmip7-cmor-tables",
     cv_file="tables-cvs/cmor-cvs.json",
     variable_tables=["tables/CMIP7_atmos.json"],
+    coordinate_table="tables/CMIP7_coordinate.json",
+    formula_table="tables/CMIP7_formula_terms.json",
 )
 
 dataset = {
@@ -90,28 +94,20 @@ axes = [
         "values": [15.0, 45.0],
         "bounds": [[0.0, 30.0], [30.0, 60.0]],
         "units": "days since 2000-01-01",
-        "standard_name": "time",
-        "axis": "T",
     },
     {
         "name": "height2m",
-        "values": [2.0],
-        "units": "m",
-        "standard_name": "height",
-        "positive": "up",
         "scalar": True,
     },
     {
         "name": "latitude",
         "values": [-45.0, 45.0],
         "bounds": [[-90.0, 0.0], [0.0, 90.0]],
-        "units": "degrees_north",
     },
     {
         "name": "longitude",
         "values": [90.0, 270.0],
         "bounds": [[0.0, 180.0], [180.0, 360.0]],
-        "units": "degrees_east",
     },
 ]
 

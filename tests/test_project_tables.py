@@ -51,6 +51,8 @@ class ProjectTablesTest(unittest.TestCase):
 
         self.assertIn("activity_id", project.cv)
         self.assertIn("tos_tavg-u-hxy-sea", project.variable_entries)
+        self.assertIn("latitude", project.coordinate_entries)
+        self.assertIn("ps", project.formula_entries)
         self.assertEqual(
             project.variable_entries["tos_tavg-u-hxy-sea"].entry["out_name"],
             "tos",
@@ -129,6 +131,10 @@ class ProjectTablesTest(unittest.TestCase):
             )
 
             self.assertEqual(result.dataset["tos"].attrs["units"], "degC")
+            self.assertEqual(
+                result.dataset["lat"].attrs["standard_name"], "latitude"
+            )
+            self.assertEqual(result.dataset["lat"].attrs["axis"], "Y")
             self.assertEqual(
                 result.dataset["tos"].attrs["standard_name"],
                 "sea_surface_temperature",

@@ -173,41 +173,31 @@ class Cmor4Test(unittest.TestCase):
             axes = [
                 time_axis(),
                 {
-                    "name": "alevel",
-                    "out_name": "lev",
+                    "name": "standard_hybrid_sigma",
                     "values": [0.1, 0.9],
                     "bounds": [[0.0, 0.5], [0.5, 1.0]],
-                    "units": "1",
-                    "standard_name": (
-                        "atmosphere_hybrid_sigma_pressure_coordinate"
-                    ),
                 },
                 *horizontal_axes(),
             ]
             variable = {
                 "name": "tnhusscpbl_tavg-al-hxy-u",
                 "table_id": "atmos",
-                "formula_terms": "a: a b: b p0: p0 ps: ps",
             }
             zfactors = [
                 {
                     "name": "a",
-                    "dimensions": ["alevel"],
                     "values": [0.1, 0.9],
                     "bounds": [[0.0, 0.5], [0.5, 1.0]],
                 },
                 {
                     "name": "b",
-                    "dimensions": ["alevel"],
                     "values": [0.9, 0.1],
                     "bounds": [[1.0, 0.5], [0.5, 0.0]],
                 },
-                {"name": "p0", "values": 100000.0, "units": "Pa"},
+                {"name": "p0", "values": 100000.0},
                 {
                     "name": "ps",
-                    "dimensions": ["time", "latitude", "longitude"],
                     "values": np.ones((2, 2, 2), dtype="f4") * 99000.0,
-                    "units": "Pa",
                 },
             ]
 
@@ -224,8 +214,17 @@ class Cmor4Test(unittest.TestCase):
                 ds["tnhusscpbl"].dims, ("time", "lev", "lat", "lon")
             )
             self.assertEqual(
-                ds["lev"].attrs["formula_terms"], "a: a b: b p0: p0 ps: ps"
+                ds["lev"].attrs["formula_terms"], "p0: p0 a: a b: b ps: ps"
             )
+            self.assertEqual(
+                ds["lev"].attrs["formula"],
+                "p = a*p0 + b*ps",
+            )
+            self.assertEqual(
+                ds["a"].attrs["long_name"],
+                "vertical coordinate formula term: a",
+            )
+            self.assertEqual(ds["p0"].attrs["units"], "Pa")
             self.assertEqual(ds["a_bnds"].dims, ("lev", "bnds"))
             self.assertEqual(ds["ps"].dims, ("time", "lat", "lon"))
 
