@@ -1,0 +1,10 @@
+[submodule "project_tables/cmip7-cmor-tables"]
+	path = project_tables/cmip7-cmor-tables
+	url = https://github.com/WCRP-CMIP/cmip7-cmor-tables
+[submodule "project_tables/DRCDP"]
+	path = project_tables/DRCDP
+	url = https://github.com/PCMDI/DRCDP
+[submodule "project_tables/obs4MIPs-cmor-tables"]
+	path = project_tables/obs4MIPs-cmor-tables
+	url = https://github.com/PCMDI/obs4MIPs-cmor-tables
+	branch = master
