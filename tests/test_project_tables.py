@@ -53,6 +53,8 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertIn("tos_tavg-u-hxy-sea", project.variable_entries)
         self.assertIn("latitude", project.coordinate_entries)
         self.assertIn("ps", project.formula_entries)
+        self.assertEqual(project.coordinate_aliases["latitude"], "lat")
+        self.assertEqual(project.coordinate_aliases["height2m"], "height")
         self.assertEqual(
             project.variable_entries["tos_tavg-u-hxy-sea"].entry["out_name"],
             "tos",

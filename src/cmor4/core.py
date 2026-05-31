@@ -11,19 +11,6 @@ import xarray as xr
 
 from .tables import ProjectTables
 
-AXIS_ALIASES = {
-    "latitude": "lat",
-    "longitude": "lon",
-    "grid_latitude": "rlat",
-    "grid_longitude": "rlon",
-    "standard_hybrid_sigma": "lev",
-    "height2m": "height",
-    "h100m": "height",
-    "plev19": "plev",
-    "time1": "time",
-    "time3": "time",
-}
-
 INTERNAL_DATASET_KEYS = {
     "_history_template",
     "outpath",
@@ -306,7 +293,7 @@ def _add_axis(
     auxiliary_coord_names: list[str],
 ) -> None:
     name = str(axis["name"])
-    out_name = str(axis.get("out_name") or AXIS_ALIASES.get(name, name))
+    out_name = _axis_out_name(axis)
     values = _array(axis.get("values", []))
     coord_attrs = _axis_attrs(axis)
 
@@ -424,18 +411,13 @@ def _set_formula_terms(
             continue
         axis_name = axis.get("name")
         generic_level_name = axis.get("generic_level_name")
-        out_name = axis.get("out_name") or AXIS_ALIASES.get(
-            str(axis_name), axis_name
-        )
+        out_name = _axis_out_name(axis)
         if {
             str(value)
             for value in (axis_name, generic_level_name, out_name)
             if value
         } & variable_dims:
-            coord_name = str(
-                axis.get("out_name")
-                or AXIS_ALIASES.get(str(axis_name), axis_name)
-            )
+            coord_name = _axis_out_name(axis)
             if coord_name in ds.coords:
                 ds[coord_name].attrs["formula_terms"] = formula_terms
 
@@ -565,12 +547,16 @@ def _axis_attrs(
     return attrs
 
 
+def _axis_out_name(axis: Mapping[str, Any]) -> str:
+    return str(axis.get("out_name") or axis["name"])
+
+
 def _add_axis_dim_aliases(
     axis: Mapping[str, Any],
     axis_dims: dict[str, tuple[str, ...]],
     dims: tuple[str, ...],
 ) -> None:
-    for key in ("generic_level_name", "out_name"):
+    for key in ("table_entry", "generic_level_name", "out_name"):
         value = axis.get(key)
         if value:
             axis_dims.setdefault(str(value), dims)
@@ -597,7 +583,7 @@ def _named_dimensions(
         if resolved:
             dims.extend(resolved)
         else:
-            dims.append(AXIS_ALIASES.get(text, text))
+            dims.append(text)
     return tuple(dims)
 
 

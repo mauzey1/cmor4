@@ -56,6 +56,9 @@ class ProjectTables:
             self.coordinate_entries = self._read_entries(
                 self.coordinate_table_file, "axis_entry"
             )
+        self.coordinate_aliases = _coordinate_aliases(
+            self.coordinate_entries
+        )
         self.formula_entries: dict[str, Mapping[str, Any]] = {}
         if self.formula_table_file is not None:
             self.formula_entries = self._read_entries(
@@ -191,6 +194,13 @@ class ProjectTables:
         )
         if requested in self.coordinate_entries:
             return requested, self.coordinate_entries[requested]
+        matching_out_names = [
+            (name, entry)
+            for name, entry in self.coordinate_entries.items()
+            if str(entry.get("out_name", "")) == requested
+        ]
+        if len(matching_out_names) == 1:
+            return matching_out_names[0]
         matches = self._matching_coordinate_entries(axis)
         if len(matches) == 1:
             return matches[0]
@@ -518,6 +528,21 @@ def _table_dimensions(entry: Mapping[str, Any]) -> tuple[str, ...]:
     else:
         values = tuple(str(value) for value in dimensions)
     return tuple(reversed(values))
+
+
+def _coordinate_aliases(
+    entries: Mapping[str, Mapping[str, Any]]
+) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for name, entry in entries.items():
+        out_name = entry.get("out_name")
+        if not _is_table_value(out_name):
+            continue
+        aliases[str(name)] = str(out_name)
+        generic_level_name = entry.get("generic_level_name")
+        if _is_table_value(generic_level_name):
+            aliases[str(generic_level_name)] = str(out_name)
+    return aliases
 
 
 def _resolve_optional_table(
