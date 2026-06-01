@@ -1,4 +1,4 @@
-# cmor4
+# CMOR4  (WORK IN PROGRESS)
 
 `cmor4` is a small, dictionary-driven CMOR-like package for creating CF-style
 NetCDF datasets with `xarray`. It is designed for new drivers that can provide
