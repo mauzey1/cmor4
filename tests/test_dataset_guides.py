@@ -27,7 +27,6 @@ def guide_lat_axis(values=(-45.0, 45.0)):
         "name": "latitude",
         "values": values,
         "bounds": _regular_bounds(values),
-        "units": "degrees_north",
     }
 
 
@@ -37,7 +36,6 @@ def guide_lon_axis(values=(90.0, 180.0, 270.0)):
         "name": "longitude",
         "values": values,
         "bounds": _regular_bounds(values),
-        "units": "degrees_east",
     }
 
 
@@ -262,22 +260,10 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lat_axis((25.0, 26.0)),
                 guide_lon_axis((240.0, 241.0, 242.0)),
                 {
-                    "name": "height2m",
-                    "values": [2.0],
-                    "units": "m",
-                    "standard_name": "height",
-                    "long_name": "height",
-                    "axis": "Z",
-                    "positive": "up",
-                    "scalar": True,
-                },
-                {
                     "name": "latitude",
                     "out_name": "latitude",
                     "values": [[25.0, 25.1, 25.2], [26.0, 26.1, 26.2]],
                     "dimensions": ["latitude", "longitude"],
-                    "units": "degrees_north",
-                    "standard_name": "latitude",
                     "bounds": np.zeros((2, 3, 4)),
                     "bounds_name": "vertices_latitude",
                     "bounds_dim": "vertices",
@@ -288,8 +274,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     "out_name": "longitude",
                     "values": [[240.0, 241.0, 242.0], [240.0, 241.0, 242.0]],
                     "dimensions": ["latitude", "longitude"],
-                    "units": "degrees_east",
-                    "standard_name": "longitude",
                     "bounds": np.zeros((2, 3, 4)),
                     "bounds_name": "vertices_longitude",
                     "bounds_dim": "vertices",
@@ -317,6 +301,16 @@ class DatasetGuideProjectTest(unittest.TestCase):
             self.assertEqual(ds["tasmax"].dims, ("time", "lat", "lon"))
             self.assertEqual(
                 ds["tasmax"].attrs["coordinates"], "height latitude longitude"
+            )
+            self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
+            self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
+            self.assertEqual(ds["longitude"].attrs["standard_name"], "longitude")
+            self.assertEqual(ds["longitude"].attrs["units"], "degrees_east")
+            self.assertEqual(
+                ds["vertices_latitude"].attrs["units"], "degrees_north"
+            )
+            self.assertEqual(
+                ds["vertices_longitude"].attrs["units"], "degrees_east"
             )
             self.assertEqual(ds["tasmax"].attrs["grid_mapping"], "crs")
             self.assertEqual(
@@ -391,19 +385,11 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 ),
                 {
                     "name": "latitude1",
-                    "out_name": "lat",
                     "values": [36.605],
-                    "units": "degrees_north",
-                    "standard_name": "latitude",
-                    "axis": "Y",
                 },
                 {
                     "name": "longitude1",
-                    "out_name": "lon",
                     "values": [262.515],
-                    "units": "degrees_east",
-                    "standard_name": "longitude",
-                    "axis": "X",
                 },
             ]
 
@@ -451,11 +437,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 {
                     "name": "height",
                     "values": [1000.0, 5000.0, 10000.0],
-                    "units": "m",
-                    "standard_name": "height",
-                    "long_name": "height",
-                    "axis": "Z",
-                    "positive": "up",
                 },
                 guide_lat_axis((-60.0, -30.0)),
             ]

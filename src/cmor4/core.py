@@ -80,6 +80,7 @@ def create_dataset(
         dataset, variable = project.prepare_inputs(dataset, variable)
         axes = project.prepare_axes(axes, variable)
         zfactors = project.prepare_zfactors(zfactors)
+        grid = project.prepare_grid(grid)
 
     coords: dict[str, Any] = {}
     data_vars: dict[str, Any] = {}
@@ -190,6 +191,7 @@ def cmorize(
         dataset, variable = project.prepare_inputs(dataset, variable)
         axes = project.prepare_axes(axes, variable)
         zfactors = project.prepare_zfactors(zfactors)
+        grid = project.prepare_grid(grid)
     ds = create_dataset(
         dataset,
         variable,
@@ -560,7 +562,15 @@ def _axis_attrs(
     attrs = _attrs(axis.get("attrs", {}))
     if include_units and "units" in axis:
         attrs["units"] = axis["units"]
-    for key in ("standard_name", "long_name", "axis", "positive", "formula"):
+    for key in (
+        "standard_name",
+        "long_name",
+        "axis",
+        "positive",
+        "formula",
+        "valid_min",
+        "valid_max",
+    ):
         if key in axis:
             attrs[key] = axis[key]
     return attrs

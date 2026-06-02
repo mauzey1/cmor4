@@ -36,6 +36,7 @@ class ProjectTables:
         variable_tables: Sequence[str | Path],
         coordinate_table: str | Path | None = None,
         formula_table: str | Path | None = None,
+        grid_table: str | Path | None = None,
     ):
         self.cv_file = Path(cv_file)
         self.variable_table_files = tuple(
@@ -47,19 +48,34 @@ class ProjectTables:
         self.formula_table_file = (
             Path(formula_table) if formula_table is not None else None
         )
+        self.grid_table_file = Path(grid_table) if grid_table is not None else None
         self.cv = self._read_cv(self.cv_file)
         self.variable_entries: dict[str, VariableEntry] = {}
         self._variable_entries_by_name: dict[str, list[VariableEntry]] = {}
         self._variable_axis_entries: dict[str, Mapping[str, Any]] = {}
         for table_file in self.variable_table_files:
             self._load_variable_table(table_file)
+        self.grid_axis_entries: dict[str, Mapping[str, Any]] = {}
+        self.grid_coordinate_entries: dict[str, Mapping[str, Any]] = {}
+        self.grid_mapping_entries: dict[str, Mapping[str, Any]] = {}
+        if self.grid_table_file is not None:
+            self.grid_axis_entries = self._read_entries(
+                self.grid_table_file, "axis_entry"
+            )
+            self.grid_coordinate_entries = self._read_entries(
+                self.grid_table_file, "variable_entry"
+            )
+            self.grid_mapping_entries = self._read_entries(
+                self.grid_table_file, "mapping_entry"
+            )
         coordinate_entries: dict[str, Mapping[str, Any]] = {}
         if self.coordinate_table_file is not None:
             coordinate_entries = self._read_entries(
                 self.coordinate_table_file, "axis_entry"
             )
         self.coordinate_entries = _overlay_table_entries(
-            coordinate_entries, self._variable_axis_entries
+            _overlay_table_entries(coordinate_entries, self.grid_axis_entries),
+            self._variable_axis_entries,
         )
         self.coordinate_aliases = _coordinate_aliases(
             self.coordinate_entries
@@ -79,6 +95,7 @@ class ProjectTables:
         variable_tables: Sequence[str | Path],
         coordinate_table: str | Path | None = None,
         formula_table: str | Path | None = None,
+        grid_table: str | Path | None = None,
     ) -> "ProjectTables":
         """Load tables using paths relative to a project root."""
 
@@ -89,11 +106,15 @@ class ProjectTables:
         resolved_formula_table = _resolve_optional_table(
             root_path, formula_table, "formula_terms"
         )
+        resolved_grid_table = _resolve_optional_table(
+            root_path, grid_table, "grids"
+        )
         return cls(
             root_path / cv_file,
             [root_path / table_file for table_file in variable_tables],
             coordinate_table=resolved_coordinate_table,
             formula_table=resolved_formula_table,
+            grid_table=resolved_grid_table,
         )
 
     def prepare_inputs(
@@ -174,6 +195,45 @@ class ProjectTables:
             return None
         return tuple(self.merge_zfactor(zfactor) for zfactor in zfactors)
 
+    def prepare_grid(
+        self, grid: Mapping[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Merge grid-mapping metadata from the loaded grids table."""
+
+        if grid is None:
+            return None
+        merged = dict(grid)
+        entry_name, entry = self.resolve_grid_mapping(grid)
+        if entry is None:
+            return merged
+        merged.setdefault("table_entry", entry_name)
+        coordinates = entry.get("coordinates")
+        if "coordinates" not in merged and _is_table_value(coordinates):
+            merged["coordinates"] = str(coordinates).split()
+        params = dict(merged.get("params", {}))
+        for key, value in entry.items():
+            if not key.startswith("parameter") or not _is_table_value(value):
+                continue
+            params.setdefault(str(value), grid.get(str(value), 0.0))
+        if params:
+            merged["params"] = params
+        return merged
+
+    def resolve_grid_mapping(
+        self, grid: Mapping[str, Any]
+    ) -> tuple[str | None, Mapping[str, Any] | None]:
+        """Resolve a grid mapping entry from a user grid definition."""
+
+        requested = str(
+            grid.get("table_entry")
+            or grid.get("mapping_entry")
+            or grid.get("name")
+            or ""
+        )
+        if requested in self.grid_mapping_entries:
+            return requested, self.grid_mapping_entries[requested]
+        return None, None
+
     def merge_axis(self, axis: Mapping[str, Any]) -> dict[str, Any]:
         """Merge authoritative coordinate metadata into an axis definition."""
 
@@ -220,6 +280,7 @@ class ProjectTables:
             bounds = _entry_bounds(entry)
             if bounds is not None:
                 merged["bounds"] = bounds
+        self._merge_grid_coordinate_metadata(merged)
         return merged
 
     def resolve_axis(
@@ -555,6 +616,57 @@ class ProjectTables:
             if narrowed:
                 matches = narrowed
         return matches if len(matches) == 1 else []
+
+    def _merge_grid_coordinate_metadata(self, axis: dict[str, Any]) -> None:
+        entry_name, entry = self.resolve_grid_coordinate(axis)
+        if entry is None:
+            return
+        axis.setdefault("grid_table_entry", entry_name)
+        for key in (
+            "out_name",
+            "units",
+            "standard_name",
+            "long_name",
+            "valid_min",
+            "valid_max",
+        ):
+            value = entry.get(key)
+            if _is_table_value(value):
+                axis[key] = _parse_table_value(value)
+        bounds_name = axis.get("bounds_name")
+        if bounds_name:
+            bounds_entry = self.grid_coordinate_entries.get(str(bounds_name))
+            if bounds_entry:
+                bounds_attrs = dict(axis.get("bounds_attrs", {}))
+                for key in ("units", "standard_name", "long_name"):
+                    value = bounds_entry.get(key)
+                    if _is_table_value(value):
+                        bounds_attrs.setdefault(key, _parse_table_value(value))
+                if bounds_attrs:
+                    axis["bounds_attrs"] = bounds_attrs
+
+    def resolve_grid_coordinate(
+        self, axis: Mapping[str, Any]
+    ) -> tuple[str | None, Mapping[str, Any] | None]:
+        """Resolve a grid-coordinate variable entry from an axis definition."""
+
+        requested = str(
+            axis.get("grid_table_entry")
+            or axis.get("grid_coordinate")
+            or axis.get("out_name")
+            or axis.get("name")
+            or ""
+        )
+        if requested in self.grid_coordinate_entries:
+            return requested, self.grid_coordinate_entries[requested]
+        matches = [
+            (name, entry)
+            for name, entry in self.grid_coordinate_entries.items()
+            if str(entry.get("out_name", "")) == requested
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        return None, None
 
     def _missing_scalar_axes(
         self,

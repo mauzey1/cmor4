@@ -9,8 +9,10 @@ import numpy as np
 import cmor4
 from table_helpers import (
     CMIP7_TABLE_ROOT,
+    DRCDP_TABLE_ROOT,
     OBS4MIPS_TABLE_ROOT,
     cmip7_project,
+    drcdp_project,
     obs4mips_project,
 )
 
@@ -27,25 +29,79 @@ def lat_lon_axes():
             "values": [15.0, 45.0],
             "bounds": [[0.0, 30.0], [30.0, 60.0]],
             "units": "days since 2000-01-01",
-            "standard_name": "time",
-            "axis": "T",
         },
         {
             "name": "latitude",
             "values": [-45.0, 45.0],
             "bounds": [[-90.0, 0.0], [0.0, 90.0]],
-            "units": "degrees_north",
         },
         {
             "name": "longitude",
             "values": [90.0, 270.0],
             "bounds": [[0.0, 180.0], [180.0, 360.0]],
-            "units": "degrees_east",
         },
     ]
 
 
 class ProjectTablesTest(unittest.TestCase):
+    def assert_grid_table_metadata_is_used(self, project):
+        axes = project.prepare_axes(
+            [
+                {
+                    "name": "time",
+                    "values": [15.0],
+                    "units": "days since 2020-02-01",
+                },
+                {"name": "x", "values": [0.0, 1.0]},
+                {"name": "y", "values": [2.0, 3.0]},
+                {
+                    "name": "latitude",
+                    "out_name": "latitude",
+                    "values": [[10.0, 20.0], [30.0, 40.0]],
+                    "dimensions": ["x", "y"],
+                    "bounds": np.ones((2, 2, 4), dtype="f8"),
+                    "bounds_name": "vertices_latitude",
+                    "bounds_dim": "vertices",
+                    "auxiliary": True,
+                },
+                {
+                    "name": "longitude",
+                    "out_name": "longitude",
+                    "values": [[100.0, 110.0], [120.0, 130.0]],
+                    "dimensions": ["x", "y"],
+                    "bounds": np.ones((2, 2, 4), dtype="f8"),
+                    "bounds_name": "vertices_longitude",
+                    "bounds_dim": "vertices",
+                    "auxiliary": True,
+                },
+            ]
+        )
+
+        ds = cmor4.create_dataset(
+            {"frequency": "mon"},
+            {
+                "name": "sample",
+                "dimensions": ["time", "x", "y"],
+                "coordinates": ["latitude", "longitude"],
+            },
+            axes,
+            np.ones((1, 2, 2), dtype="f4"),
+        )
+
+        self.assertEqual(ds["x"].attrs["standard_name"], "projection_x_coordinate")
+        self.assertEqual(ds["x"].attrs["long_name"], "x coordinate of projection")
+        self.assertEqual(ds["x"].attrs["units"], "m")
+        self.assertEqual(ds["y"].attrs["standard_name"], "projection_y_coordinate")
+        self.assertEqual(ds["y"].attrs["long_name"], "y coordinate of projection")
+        self.assertEqual(ds["y"].attrs["units"], "m")
+        self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
+        self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
+        self.assertEqual(ds["longitude"].attrs["standard_name"], "longitude")
+        self.assertEqual(ds["longitude"].attrs["units"], "degrees_east")
+        self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
+        self.assertEqual(ds["vertices_longitude"].attrs["units"], "degrees_east")
+        self.assertEqual(ds["sample"].attrs["coordinates"], "latitude longitude")
+
     def test_loads_cv_and_variable_entries_from_submodule(self):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_ocean.json")
@@ -53,6 +109,9 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertIn("activity_id", project.cv)
         self.assertIn("tos_tavg-u-hxy-sea", project.variable_entries)
         self.assertIn("latitude", project.coordinate_entries)
+        self.assertIn("x", project.coordinate_entries)
+        self.assertIn("latitude", project.grid_coordinate_entries)
+        self.assertIn("vertices_latitude", project.grid_coordinate_entries)
         self.assertIn("ps", project.formula_entries)
         self.assertEqual(project.coordinate_aliases["latitude"], "lat")
         self.assertEqual(project.coordinate_aliases["height2m"], "height")
@@ -60,6 +119,77 @@ class ProjectTablesTest(unittest.TestCase):
             project.variable_entries["tos_tavg-u-hxy-sea"].entry["out_name"],
             "tos",
         )
+
+    def test_cmip7_grid_axes_and_aux_coords_come_from_grids_table(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_seaIce.json")
+        axes = project.prepare_axes(
+            [
+                {
+                    "name": "time",
+                    "values": [15.0],
+                    "units": "days since 2020-02-01",
+                },
+                {"name": "x", "values": [0.0, 1.0]},
+                {"name": "y", "values": [2.0, 3.0]},
+                {
+                    "name": "latitude",
+                    "out_name": "latitude",
+                    "values": [[10.0, 20.0], [30.0, 40.0]],
+                    "dimensions": ["x", "y"],
+                    "bounds": np.ones((2, 2, 4), dtype="f8"),
+                    "bounds_name": "vertices_latitude",
+                    "bounds_dim": "vertices",
+                    "auxiliary": True,
+                },
+                {
+                    "name": "longitude",
+                    "out_name": "longitude",
+                    "values": [[100.0, 110.0], [120.0, 130.0]],
+                    "dimensions": ["x", "y"],
+                    "bounds": np.ones((2, 2, 4), dtype="f8"),
+                    "bounds_name": "vertices_longitude",
+                    "bounds_dim": "vertices",
+                    "auxiliary": True,
+                },
+            ]
+        )
+
+        ds = cmor4.create_dataset(
+            {"frequency": "mon"},
+            {
+                "name": "sample",
+                "dimensions": ["time", "x", "y"],
+                "coordinates": ["latitude", "longitude"],
+            },
+            axes,
+            np.ones((1, 2, 2), dtype="f4"),
+        )
+
+        self.assertEqual(ds["x"].attrs["standard_name"], "projection_x_coordinate")
+        self.assertEqual(ds["x"].attrs["long_name"], "x coordinate of projection")
+        self.assertEqual(ds["x"].attrs["units"], "m")
+        self.assertEqual(ds["y"].attrs["standard_name"], "projection_y_coordinate")
+        self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
+        self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
+        self.assertEqual(
+            ds["vertices_latitude"].attrs["units"], "degrees_north"
+        )
+        self.assertEqual(
+            ds["sample"].attrs["coordinates"], "latitude longitude"
+        )
+
+    def test_drcdp_grid_axes_and_aux_coords_come_from_grids_table(self):
+        require_path(self, DRCDP_TABLE_ROOT)
+        project = drcdp_project("Tables/DRCDP_APday.json")
+
+        self.assert_grid_table_metadata_is_used(project)
+
+    def test_obs4mips_grid_axes_and_aux_coords_come_from_grids_table(self):
+        require_path(self, OBS4MIPS_TABLE_ROOT)
+        project = obs4mips_project("Tables/obs4MIPs_Amon.json")
+
+        self.assert_grid_table_metadata_is_used(project)
 
     def test_prepare_inputs_merges_authoritative_variable_metadata(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
@@ -454,10 +584,6 @@ class ProjectTablesTest(unittest.TestCase):
                 {
                     "name": "height",
                     "values": [1000.0, 5000.0],
-                    "units": "m",
-                    "standard_name": "height",
-                    "axis": "Z",
-                    "positive": "up",
                 },
                 lat_lon_axes()[1],
             ]
