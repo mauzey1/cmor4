@@ -12,10 +12,18 @@ axes, optional grids or z-factors, and data arrays; `cmor4` creates an
 ## Project Tables
 
 For table-backed validation, pass the project CV file and the variable table
-files that define the variables you want to write. Coordinate metadata and
-formula-term metadata are also read from the project coordinate and formula
-tables. These files come from the project table repositories, not from
-`cmor4`.
+files that define the variables you want to write. Coordinate metadata is read
+from the project coordinate table, with any `axis_entry` metadata in the loaded
+variable table files taking precedence for matching axes. Formula-term metadata
+is read from the project formula terms table. These files come from the project
+table repositories, not from `cmor4`.
+
+With `project=`, the caller normally supplies data values, bounds, source-time
+units, missing values, and non-table custom metadata. Standardized variable
+attributes (`units`, `standard_name`, `long_name`, `cell_methods`,
+`cell_measures`, and `comment`), axis attributes, and z-factor attributes come
+from the loaded project tables. Scalar axes such as `height2m` are added from
+the table when a variable requires them and the table provides a fixed value.
 
 Examples:
 
@@ -27,9 +35,10 @@ Examples:
   `Tables/DRCDP_AP1hr.json`, and `Tables/DRCDP_APday.json`
 
 When `project=` is provided, `cmor4` validates controlled values against the CV
-and variable names, dimensions, units, frequency, realm, and related metadata
-against the loaded variable table entries. A mismatch raises
-`cmor4.TableValidationError`.
+and validates variable names, dimensions, frequency, realm, and table identity
+against the loaded variable table entries. Table-backed variable attributes
+such as units, standard names, long names, cell methods, cell measures, and
+comments are applied from the variable table entries.
 
 The test suite uses project table repositories checked out as git submodules
 under `project_tables/`:
@@ -94,10 +103,6 @@ axes = [
         "values": [15.0, 45.0],
         "bounds": [[0.0, 30.0], [30.0, 60.0]],
         "units": "days since 2000-01-01",
-    },
-    {
-        "name": "height2m",
-        "scalar": True,
     },
     {
         "name": "latitude",

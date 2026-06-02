@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -84,6 +85,142 @@ class ProjectTablesTest(unittest.TestCase):
             prepared_variable["dimensions"], ("time", "height", "latitude")
         )
 
+    def test_variable_table_axis_entries_override_coordinate_table(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            cv_file = root / "CV.json"
+            variable_table = root / "test_table.json"
+            coordinate_table = root / "coordinate.json"
+            cv_file.write_text('{"CV": {}}\n')
+            coordinate_table.write_text(
+                """
+{
+  "axis_entry": {
+    "sample_height": {
+      "axis": "Z",
+      "long_name": "Coordinate Table Height",
+      "out_name": "height",
+      "positive": "up",
+      "standard_name": "height",
+      "units": "m"
+    },
+    "time": {
+      "axis": "T",
+      "long_name": "time",
+      "out_name": "time",
+      "standard_name": "time",
+      "units": "days since 2000-01-01"
+    }
+  }
+}
+""".strip()
+                + "\n"
+            )
+            variable_table.write_text(
+                """
+{
+  "Header": {"table_id": "test"},
+  "axis_entry": {
+    "sample_height": {
+      "long_name": "Variable Table Height",
+      "standard_name": "height_above_mean_sea_level"
+    }
+  },
+  "variable_entry": {
+    "sample": {
+      "cell_measures": "area: areacella",
+      "dimensions": ["sample_height", "time"],
+      "long_name": "Sample",
+      "out_name": "sample",
+      "standard_name": "sample_standard_name",
+      "units": "1"
+    }
+  }
+}
+""".strip()
+                + "\n"
+            )
+            project = cmor4.ProjectTables(
+                cv_file,
+                [variable_table],
+                coordinate_table=coordinate_table,
+            )
+
+            ds = cmor4.create_dataset(
+                {},
+                {"name": "sample"},
+                [
+                    {"name": "time", "values": [15.0, 45.0]},
+                    {"name": "sample_height", "values": [10.0, 20.0]},
+                ],
+                np.ones((2, 2), dtype="f4"),
+                project=project,
+            )
+
+            self.assertEqual(
+                ds["height"].attrs["long_name"], "Variable Table Height"
+            )
+            self.assertEqual(
+                ds["height"].attrs["standard_name"],
+                "height_above_mean_sea_level",
+            )
+            self.assertEqual(ds["height"].attrs["units"], "m")
+            self.assertEqual(
+                ds["sample"].attrs["cell_measures"], "area: areacella"
+            )
+
+    def test_axis_resolution_does_not_use_axis_letter_alone(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            cv_file = root / "CV.json"
+            variable_table = root / "test_table.json"
+            coordinate_table = root / "coordinate.json"
+            cv_file.write_text('{"CV": {}}\n')
+            variable_table.write_text(
+                """
+{
+  "Header": {"table_id": "test"},
+  "variable_entry": {
+    "sample": {
+      "dimensions": ["x"],
+      "out_name": "sample",
+      "units": "1"
+    }
+  }
+}
+""".strip()
+                + "\n"
+            )
+            coordinate_table.write_text(
+                """
+{
+  "axis_entry": {
+    "longitude": {
+      "axis": "X",
+      "long_name": "Longitude",
+      "out_name": "lon",
+      "standard_name": "longitude",
+      "units": "degrees_east"
+    }
+  }
+}
+""".strip()
+                + "\n"
+            )
+            project = cmor4.ProjectTables(
+                cv_file,
+                [variable_table],
+                coordinate_table=coordinate_table,
+            )
+
+            merged = project.merge_axis(
+                {"name": "x", "values": [0.0, 1.0], "axis": "X", "units": "m"}
+            )
+
+            self.assertEqual(merged["name"], "x")
+            self.assertNotIn("table_entry", merged)
+            self.assertNotEqual(merged.get("out_name"), "lon")
+
     def test_duplicate_variable_names_require_table_id(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project(
@@ -147,6 +284,74 @@ class ProjectTablesTest(unittest.TestCase):
             )
             self.assertEqual(result.dataset.attrs["source_id"], "DUMMY-MODEL")
 
+    def test_cmip7_global_attrs_follow_upstream_cmor_cmip7(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_ocean.json")
+        dataset = {
+            "activity_id": "CMIP",
+            "calendar": "360_day",
+            "experiment_id": "amip",
+            "forcing_index": "f3",
+            "frequency": "mon",
+            "grid_label": "g999",
+            "initialization_index": "i1",
+            "institution_id": "CCCma",
+            "license_id": "CC-BY-4.0",
+            "nominal_resolution": "100 km",
+            "physics_index": "p1",
+            "realization_index": "r9",
+            "region": "glb",
+            "source_id": "DUMMY-MODEL",
+            "host_collection": "CMIP7",
+            "archive_id": "WCRP",
+        }
+
+        ds = cmor4.create_dataset(
+            dataset,
+            {"name": "tos_tavg-u-hxy-sea"},
+            lat_lon_axes(),
+            np.ones((2, 2, 2), dtype="f4"),
+            project=project,
+        )
+
+        expected = {
+            "branded_variable": "tos_tavg-u-hxy-sea",
+            "branding_suffix": "tavg-u-hxy-sea",
+            "temporal_label": "tavg",
+            "vertical_label": "u",
+            "horizontal_label": "hxy",
+            "area_label": "sea",
+            "region": "glb",
+            "frequency": "mon",
+            "archive_id": "WCRP",
+            "mip_era": "CMIP7",
+            "data_specs_version": "MIP-DS7.1.0.0",
+            "host_collection": "CMIP7",
+            "drs_specs": "MIP-DRS7",
+            "license_id": "CC-BY-4.0",
+        }
+        for key, value in expected.items():
+            self.assertEqual(ds.attrs[key], value)
+        self.assertIn("Name: CMIP7_ocean.json;", ds.attrs["table_info"])
+        self.assertNotIn("license_type", ds.attrs)
+        self.assertNotIn("license_url", ds.attrs)
+        self.assertEqual(
+            ds.attrs["license"],
+            "CC-BY-4.0; CMIP7 data produced by CCCma is licensed under a "
+            "Creative Commons Attribution 4.0 International License "
+            "(https://creativecommons.org/licenses/by/4.0). Consult "
+            "https://wcrp-cmip.github.io/cmip7-guidance/docs/CMIP7/"
+            "Guidance_for_users/#2-terms-of-use-and-citations-requirements "
+            "for terms of use governing CMIP7 output, including citation "
+            "requirements and proper acknowledgment. The data producers and "
+            "data providers make no warranty, either express or implied, "
+            "including, but not limited to, warranties of merchantability and "
+            "fitness for a particular purpose. All liabilities arising from "
+            "the supply of the information (including any liability arising "
+            "in negligence) are excluded to the fullest extent permitted by "
+            "law.",
+        )
+
     def test_cmip7_rejects_values_not_in_cv(self):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_ocean.json")
@@ -173,7 +378,7 @@ class ProjectTablesTest(unittest.TestCase):
                 project=project,
             )
 
-    def test_cmip7_rejects_variable_metadata_not_in_table(self):
+    def test_cmip7_variable_attrs_come_from_variable_table(self):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_ocean.json")
         dataset = {
@@ -190,14 +395,33 @@ class ProjectTablesTest(unittest.TestCase):
             "source_id": "DUMMY-MODEL",
         }
 
-        with self.assertRaises(cmor4.TableValidationError):
-            cmor4.create_dataset(
-                dataset,
-                {"name": "tos_tavg-u-hxy-sea", "units": "K"},
-                lat_lon_axes(),
-                np.ones((2, 2, 2), dtype="f4"),
-                project=project,
-            )
+        ds = cmor4.create_dataset(
+            dataset,
+            {
+                "name": "tos_tavg-u-hxy-sea",
+                "units": "K",
+                "standard_name": "not_the_table_value",
+                "attrs": {
+                    "long_name": "Not the table value",
+                    "cell_methods": "not the table value",
+                },
+            },
+            lat_lon_axes(),
+            np.ones((2, 2, 2), dtype="f4"),
+            project=project,
+        )
+
+        self.assertEqual(ds["tos"].attrs["units"], "degC")
+        self.assertEqual(
+            ds["tos"].attrs["standard_name"], "sea_surface_temperature"
+        )
+        self.assertEqual(
+            ds["tos"].attrs["long_name"], "Sea Surface Temperature"
+        )
+        self.assertEqual(
+            ds["tos"].attrs["cell_methods"],
+            "area: mean where sea time: mean",
+        )
 
     def test_obs4mips_uses_project_cv_and_o3zm_table_entry(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)

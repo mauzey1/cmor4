@@ -8,7 +8,7 @@ import numpy as np
 import xarray as xr
 
 import cmor4
-from table_helpers import drcdp_project, obs4mips_project
+from table_helpers import cmip7_project, drcdp_project, obs4mips_project
 
 
 def guide_time_axis(values, bounds, units, calendar="standard"):
@@ -18,34 +18,37 @@ def guide_time_axis(values, bounds, units, calendar="standard"):
         "bounds": bounds,
         "units": units,
         "calendar": calendar,
-        "standard_name": "time",
-        "long_name": "time",
-        "axis": "T",
     }
 
 
 def guide_lat_axis(values=(-45.0, 45.0)):
+    values = list(values)
     return {
         "name": "latitude",
-        "values": list(values),
-        "bounds": [[-90.0, 0.0], [0.0, 90.0]],
+        "values": values,
+        "bounds": _regular_bounds(values),
         "units": "degrees_north",
-        "standard_name": "latitude",
-        "long_name": "Latitude",
-        "axis": "Y",
     }
 
 
 def guide_lon_axis(values=(90.0, 180.0, 270.0)):
+    values = list(values)
     return {
         "name": "longitude",
-        "values": list(values),
-        "bounds": [[45.0, 135.0], [135.0, 225.0], [225.0, 315.0]],
+        "values": values,
+        "bounds": _regular_bounds(values),
         "units": "degrees_east",
-        "standard_name": "longitude",
-        "long_name": "Longitude",
-        "axis": "X",
     }
+
+
+def _regular_bounds(values):
+    if len(values) == 1:
+        return [[values[0] - 0.5, values[0] + 0.5]]
+    edges = [(left + right) / 2.0 for left, right in zip(values[:-1], values[1:])]
+    first = values[0] - (edges[0] - values[0])
+    last = values[-1] + (values[-1] - edges[-1])
+    edges = [first, *edges, last]
+    return [[edges[index], edges[index + 1]] for index in range(len(values))]
 
 
 def drcdp_info(tmp_path: Path, source_id="EDDE2-0", institution_id="EPA"):
@@ -117,6 +120,7 @@ def obs4mips_info(
 class DatasetGuideProjectTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.cmip7_atmos_project = cmip7_project("tables/CMIP7_atmos.json")
         cls.drcdp_ap1hr_project = drcdp_project("Tables/DRCDP_AP1hr.json")
         cls.drcdp_apday_project = drcdp_project("Tables/DRCDP_APday.json")
         cls.obs4mips_amon_project = obs4mips_project(
@@ -166,6 +170,79 @@ class DatasetGuideProjectTest(unittest.TestCase):
             self.assertEqual(ds.attrs["activity_id"], "DRCDP")
             self.assertEqual(ds.attrs["frequency"], "1hr")
             self.assertEqual(ds["pr"].dims, ("time", "lat", "lon"))
+
+    def test_drcdp_tasmax_auto_adds_table_height2m_scalar(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = drcdp_info(Path(tmp_dir), source_id="LOCA2-1")
+            variable = {
+                "name": "tasmax",
+                "missing_value": np.float32(1.0e20),
+            }
+            axes = [
+                guide_time_axis(
+                    [39811.0, 39812.0],
+                    [[39810.5, 39811.5], [39811.5, 39812.5]],
+                    "days since 1900-01-01",
+                ),
+                guide_lat_axis((32.0, 33.0, 34.0)),
+                guide_lon_axis((240.0, 241.0, 242.0, 243.0)),
+            ]
+
+            ds = cmor4.create_dataset(
+                info,
+                variable,
+                axes,
+                np.ones((2, 3, 4), dtype="f4"),
+                project=self.drcdp_apday_project,
+            )
+
+            self.assertEqual(ds["tasmax"].dims, ("time", "lat", "lon"))
+            self.assertEqual(ds["height"].shape, ())
+            self.assertEqual(float(ds["height"].values), 2.0)
+            self.assertEqual(ds["height"].attrs["standard_name"], "height")
+            self.assertEqual(ds["tasmax"].attrs["coordinates"], "height")
+
+    def test_cmip7_tas_auto_adds_table_height2m_scalar(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = {
+                "activity_id": "CMIP",
+                "calendar": "360_day",
+                "experiment_id": "amip",
+                "forcing_index": "f3",
+                "frequency": "mon",
+                "grid_label": "g999",
+                "initialization_index": "i1",
+                "institution_id": "MOHC",
+                "license_id": "CC-BY-4.0",
+                "nominal_resolution": "100 km",
+                "outpath": str(tmp_dir),
+                "physics_index": "p1",
+                "realization_index": "r9",
+                "region": "glb",
+                "source_id": "DUMMY-MODEL",
+            }
+            axes = [
+                guide_time_axis(
+                    [15.0, 45.0],
+                    [[0.0, 30.0], [30.0, 60.0]],
+                    "days since 1979-01-01",
+                    calendar="360_day",
+                ),
+                guide_lat_axis((10.0, 20.0, 30.0)),
+                guide_lon_axis((0.0, 90.0, 180.0, 270.0)),
+            ]
+
+            ds = cmor4.create_dataset(
+                info,
+                {"name": "tas_tavg-h2m-hxy-u"},
+                axes,
+                np.ones((2, 3, 4), dtype="f4"),
+                project=self.cmip7_atmos_project,
+            )
+
+            self.assertEqual(ds["tas"].dims, ("time", "lat", "lon"))
+            self.assertEqual(float(ds["height"].values), 2.0)
+            self.assertEqual(ds["tas"].attrs["coordinates"], "height")
 
     def test_drcdp_tasmax_grid_crs_dataset_shape(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

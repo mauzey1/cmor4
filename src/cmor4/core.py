@@ -9,6 +9,11 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 import xarray as xr
 
+try:
+    import cftime
+except ImportError:  # pragma: no cover - cftime is provided by netCDF4 here.
+    cftime = None
+
 from .tables import ProjectTables
 
 INTERNAL_DATASET_KEYS = {
@@ -73,7 +78,7 @@ def create_dataset(
 
     if project is not None:
         dataset, variable = project.prepare_inputs(dataset, variable)
-        axes = project.prepare_axes(axes)
+        axes = project.prepare_axes(axes, variable)
         zfactors = project.prepare_zfactors(zfactors)
 
     coords: dict[str, Any] = {}
@@ -183,7 +188,7 @@ def cmorize(
 
     if project is not None:
         dataset, variable = project.prepare_inputs(dataset, variable)
-        axes = project.prepare_axes(axes)
+        axes = project.prepare_axes(axes, variable)
         zfactors = project.prepare_zfactors(zfactors)
     ds = create_dataset(
         dataset,
@@ -330,7 +335,11 @@ def _add_axis(
             axis_dims.setdefault(out_name, dims)
 
     if "bounds" in axis:
-        bounds_name = str(axis.get("bounds_name") or f"{out_name}_bnds")
+        climatology_axis = _is_climatology_axis(axis)
+        bounds_name = str(
+            axis.get("bounds_name")
+            or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
+        )
         bounds = _array(axis["bounds"])
         bounds_dims = tuple(coords[out_name][0]) + (
             str(axis.get("bounds_dim", "bnds")),
@@ -342,7 +351,7 @@ def _add_axis(
         )
         coord_data = coords[out_name]
         attrs = dict(coord_data[2])
-        attrs["bounds"] = bounds_name
+        attrs["climatology" if climatology_axis else "bounds"] = bounds_name
         coords[out_name] = (coord_data[0], coord_data[1], attrs)
 
 
@@ -470,6 +479,7 @@ def _variable_attrs(
         "standard_name",
         "long_name",
         "cell_methods",
+        "cell_measures",
         "comment",
     ):
         if key in variable:
@@ -521,11 +531,20 @@ def _global_attrs(
     var_name, labels = _variable_names(variable)
     attrs.setdefault("variable_id", var_name)
     attrs.setdefault("branded_variable", labels["branded_name"])
-    if "branding_suffix" in labels:
-        attrs.setdefault("branding_suffix", labels["branding_suffix"])
+    for key in (
+        "branding_suffix",
+        "temporal_label",
+        "vertical_label",
+        "horizontal_label",
+        "area_label",
+    ):
+        if key in labels:
+            attrs.setdefault(key, labels[key])
     for key in ("frequency", "realm", "table_id"):
         if key in variable:
             attrs.setdefault(key, variable[key])
+    if "table_info" in variable:
+        attrs.setdefault("table_info", variable["table_info"])
     attrs.setdefault("variant_label", _variant_label(dataset))
     attrs.setdefault(
         "creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -545,6 +564,10 @@ def _axis_attrs(
         if key in axis:
             attrs[key] = axis[key]
     return attrs
+
+
+def _is_climatology_axis(axis: Mapping[str, Any]) -> bool:
+    return str(axis.get("climatology", "")).lower() in {"1", "true", "yes"}
 
 
 def _axis_out_name(axis: Mapping[str, Any]) -> str:
@@ -614,6 +637,7 @@ def _path_tokens(
             "branded_variable": labels["branded_name"],
             "branding_suffix": labels.get("branding_suffix", ""),
             "frequency": frequency,
+            "member_id": dataset.get("member_id", variant_label),
             "time-range": (
                 _time_range(ds, frequency) if frequency != "fx" else ""
             ),
@@ -657,29 +681,85 @@ def _render_path_template(
 def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
     if ds is None or "time" not in ds.coords:
         return None
-    values = np.asarray(ds["time"].values)
-    if values.size == 0:
-        return None
-    first = _decode_time_value(values.flat[0], ds["time"].attrs.get("units"))
-    last = _decode_time_value(values.flat[-1], ds["time"].attrs.get("units"))
+    time = ds["time"]
+    units = time.attrs.get("units")
+    calendar = time.attrs.get("calendar", ds.attrs.get("calendar", "standard"))
+    climatology_bounds_name = time.attrs.get("climatology")
+    climatology = bool(climatology_bounds_name)
+    if climatology:
+        if str(climatology_bounds_name) not in ds:
+            return None
+        bounds = np.asarray(ds[str(climatology_bounds_name)].values)
+        if bounds.size == 0:
+            return None
+        bounds = bounds.reshape(-1, bounds.shape[-1])
+        first_value = bounds[0, 0]
+        last_value = bounds[-1, -1]
+    else:
+        values = np.asarray(time.values)
+        if values.size == 0:
+            return None
+        first_value = values.flat[0]
+        last_value = values.flat[-1]
+    first = _decode_time_value(first_value, units, calendar)
+    last = _decode_time_value(last_value, units, calendar)
     if first is None or last is None:
         return None
-    if frequency in {"1hr", "hr", "hour", "hourly", "3hr", "6hr"}:
-        return f"{first:%Y%m%d%H%M}-{last:%Y%m%d%H%M}"
-    if frequency in {"day", "daily"}:
-        return f"{first:%Y%m%d}-{last:%Y%m%d}"
-    return f"{first:%Y%m}-{last:%Y%m}"
+    if climatology:
+        first = _add_time_delta(first, timedelta(hours=1))
+        last = _add_time_delta(last, timedelta(hours=-1))
+    freq = frequency.lower()
+    clim_suffix = (
+        "-clim"
+        if climatology and str(ds.attrs.get("mip_era", "")).upper() != "CMIP7"
+        else ""
+    )
+    if "yr" in freq or "dec" in freq:
+        return f"{_date_part(first, 'year')}-{_date_part(last, 'year')}{clim_suffix}"
+    if "monc" in freq or "mon" in freq or climatology:
+        return (
+            f"{_date_part(first, 'month')}-{_date_part(last, 'month')}"
+            f"{clim_suffix}"
+        )
+    if "day" in freq:
+        return f"{_date_part(first, 'day')}-{_date_part(last, 'day')}{clim_suffix}"
+    if "subhr" in freq:
+        return (
+            f"{_date_part(first, 'second')}-{_date_part(last, 'second')}"
+            f"{clim_suffix}"
+        )
+    if "hr" in freq or freq in {"hour", "hourly"}:
+        return (
+            f"{_date_part(first, 'minute')}-{_date_part(last, 'minute')}"
+            f"{clim_suffix}"
+        )
+    return f"{_date_part(first, 'month')}-{_date_part(last, 'month')}{clim_suffix}"
 
 
-def _decode_time_value(value: Any, units: Any) -> datetime | None:
+def _decode_time_value(
+    value: Any, units: Any, calendar: Any = "standard"
+) -> Any | None:
     if np.issubdtype(np.asarray(value).dtype, np.datetime64):
-        text = np.datetime_as_string(value, unit="D")
-        return datetime.strptime(text, "%Y-%m-%d")
+        text = np.datetime_as_string(value, unit="s")
+        return datetime.fromisoformat(text)
     if not units:
         return None
+    units_text = _normalize_time_units(str(units))
+    if cftime is not None:
+        try:
+            return cftime.num2date(
+                float(value),
+                units_text,
+                calendar=str(calendar or "standard"),
+                only_use_cftime_datetimes=False,
+                only_use_python_datetimes=False,
+            )
+        except Exception:
+            pass
     match = re.match(
-        r"^(days|hours|seconds) since (\d{1,4})-(\d{1,2})-(\d{1,2})",
-        str(units),
+        r"^(days|hours|minutes|seconds) since "
+        r"(\d{1,4})-(\d{1,2})-(\d{1,2})",
+        units_text,
     )
     if not match:
         return None
@@ -690,7 +770,63 @@ def _decode_time_value(value: Any, units: Any) -> datetime | None:
         return base + timedelta(days=numeric)
     if unit == "hours":
         return base + timedelta(hours=numeric)
+    if unit == "minutes":
+        return base + timedelta(minutes=numeric)
     return base + timedelta(seconds=numeric)
+
+
+def _normalize_time_units(units: str) -> str:
+    match = re.match(
+        r"^(\w+) since (\d{1,4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?(.*)$",
+        units,
+    )
+    if not match:
+        return units
+    unit, year, month, day, suffix = match.groups()
+    return (
+        f"{unit} since {int(year):04d}-{int(month or 1):02d}-"
+        f"{int(day or 1):02d}{suffix or ''}"
+    )
+
+
+def _add_time_delta(value: Any, delta: timedelta) -> Any:
+    try:
+        return value + delta
+    except TypeError:
+        return _as_datetime(value) + delta
+
+
+def _date_part(value: Any, precision: str) -> str:
+    if precision == "minute":
+        value = _add_time_delta(value, timedelta(seconds=30))
+    else:
+        value = _add_time_delta(value, timedelta(seconds=0.5))
+    if precision == "year":
+        return f"{value.year:04d}"
+    if precision == "month":
+        return f"{value.year:04d}{value.month:02d}"
+    if precision == "day":
+        return f"{value.year:04d}{value.month:02d}{value.day:02d}"
+    if precision == "minute":
+        return (
+            f"{value.year:04d}{value.month:02d}{value.day:02d}"
+            f"{value.hour:02d}{value.minute:02d}"
+        )
+    return (
+        f"{value.year:04d}{value.month:02d}{value.day:02d}"
+        f"{value.hour:02d}{value.minute:02d}{value.second:02d}"
+    )
+
+
+def _as_datetime(value: Any) -> datetime:
+    return datetime(
+        value.year,
+        value.month,
+        value.day,
+        int(value.hour),
+        int(value.minute),
+        int(value.second),
+    )
 
 
 def _array(value: Any) -> np.ndarray:

@@ -354,6 +354,110 @@ class Cmor4Test(unittest.TestCase):
                 "lambert_azimuthal_equal_area",
             )
 
+    def test_filename_time_ranges_follow_cmor_frequency_formats(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_info = dataset_info(Path(tmp_dir))
+            base_info.update(
+                {
+                    "output_file_template": (
+                        "<variable_id>_<frequency>_<source_id>_"
+                        "<variant_label>"
+                    ),
+                    "output_path_template": "<activity_id>",
+                    "version": "v20200101",
+                }
+            )
+            variable = {"name": "sample", "dimensions": ["time"]}
+
+            cases = [
+                (
+                    "yr",
+                    [182.5, 547.5],
+                    "days since 2000-01-01 00:00:00",
+                    "sample_yr_DUMMY-MODEL_r9i1p1f3_2000-2001.nc",
+                ),
+                (
+                    "day",
+                    [0.9999999, 1.9999999],
+                    "days since 1960-01-01 00:00:00",
+                    "sample_day_DUMMY-MODEL_r9i1p1f3_19600102-19600103.nc",
+                ),
+                (
+                    "1hr",
+                    [12.6, 77.4],
+                    "minutes since 2000-01-01 00:00:00",
+                    "sample_1hr_DUMMY-MODEL_r9i1p1f3_"
+                    "200001010013-200001010117.nc",
+                ),
+                (
+                    "subhr",
+                    [750.4, 2250.6],
+                    "seconds since 2000-01-01 00:00:00",
+                    "sample_subhr_DUMMY-MODEL_r9i1p1f3_"
+                    "20000101001230-20000101003731.nc",
+                ),
+            ]
+            for frequency, values, units, expected_name in cases:
+                info = dict(base_info, frequency=frequency)
+                axes = [
+                    {
+                        "name": "time",
+                        "values": values,
+                        "units": units,
+                        "standard_name": "time",
+                        "axis": "T",
+                    }
+                ]
+                ds = cmor4.create_dataset(
+                    info, variable, axes, np.ones(2, dtype="f4")
+                )
+
+                self.assertEqual(
+                    cmor4.build_output_path(info, variable, ds).name,
+                    expected_name,
+                )
+
+    def test_climatology_time_axis_uses_cmor_bounds_and_name(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = dataset_info(Path(tmp_dir))
+            info.update(
+                {
+                    "calendar": "360_day",
+                    "frequency": "mon",
+                    "output_file_template": "<variable_id>_<frequency>",
+                    "output_path_template": "<activity_id>",
+                }
+            )
+            axes = [
+                {
+                    "name": "time2",
+                    "values": [15.0, 45.0],
+                    "bounds": [[0.0, 31.0], [31.0, 60.0]],
+                    "units": "days since 2018",
+                    "standard_name": "time",
+                    "axis": "T",
+                    "climatology": "yes",
+                    "out_name": "time",
+                }
+            ]
+            variable = {"name": "co2_tclm-u-hm-u", "dimensions": ["time2"]}
+
+            ds = cmor4.create_dataset(
+                info, variable, axes, np.ones(2, dtype="f4")
+            )
+
+            self.assertEqual(
+                ds["time"].attrs["climatology"], "climatology_bnds"
+            )
+            self.assertNotIn("bounds", ds["time"].attrs)
+            self.assertEqual(
+                ds["climatology_bnds"].dims, ("time", "bnds")
+            )
+            self.assertEqual(
+                cmor4.build_output_path(info, variable, ds).name,
+                "co2_mon_201801-201802.nc",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

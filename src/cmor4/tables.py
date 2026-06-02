@@ -18,6 +18,7 @@ class VariableEntry:
     name: str
     table_id: str
     entry: Mapping[str, Any]
+    table_file: Path | None = None
 
 
 class ProjectTables:
@@ -49,13 +50,17 @@ class ProjectTables:
         self.cv = self._read_cv(self.cv_file)
         self.variable_entries: dict[str, VariableEntry] = {}
         self._variable_entries_by_name: dict[str, list[VariableEntry]] = {}
+        self._variable_axis_entries: dict[str, Mapping[str, Any]] = {}
         for table_file in self.variable_table_files:
             self._load_variable_table(table_file)
-        self.coordinate_entries: dict[str, Mapping[str, Any]] = {}
+        coordinate_entries: dict[str, Mapping[str, Any]] = {}
         if self.coordinate_table_file is not None:
-            self.coordinate_entries = self._read_entries(
+            coordinate_entries = self._read_entries(
                 self.coordinate_table_file, "axis_entry"
             )
+        self.coordinate_entries = _overlay_table_entries(
+            coordinate_entries, self._variable_axis_entries
+        )
         self.coordinate_aliases = _coordinate_aliases(
             self.coordinate_entries
         )
@@ -100,6 +105,7 @@ class ProjectTables:
 
         normalized_dataset = dict(dataset)
         self.validate_dataset(normalized_dataset)
+        self._add_cv_defaults(normalized_dataset)
         variable_entry = self.resolve_variable(variable)
         normalized_variable = self.merge_variable(variable, variable_entry)
         self.validate_variable(normalized_variable, variable_entry)
@@ -117,12 +123,47 @@ class ProjectTables:
             )
         return normalized_dataset, normalized_variable
 
+    def _add_cv_defaults(self, dataset: dict[str, Any]) -> None:
+        """Fill scalar CV defaults and derived license text when available."""
+
+        for key, value in self.cv.items():
+            if key not in dataset and _is_scalar_cv_default(value):
+                dataset[key] = value
+        self._add_license_text(dataset)
+
+    def _add_license_text(self, dataset: dict[str, Any]) -> None:
+        license_cv = self.cv.get("license")
+        if "license" in dataset or not isinstance(license_cv, Mapping):
+            return
+        license_id = dataset.get("license_id")
+        if license_id in (None, ""):
+            return
+        license_entries = license_cv.get("license_id")
+        license_template = license_cv.get("license_template")
+        if not isinstance(license_entries, Mapping) or not isinstance(
+            license_template, str
+        ):
+            return
+        license_info = license_entries.get(str(license_id))
+        if not isinstance(license_info, Mapping):
+            return
+        tokens = {
+            **{str(key): value for key, value in dataset.items()},
+            **{str(key): value for key, value in license_info.items()},
+        }
+        dataset["license"] = _render_template(license_template, tokens)
+
     def prepare_axes(
-        self, axes: Sequence[Mapping[str, Any]]
+        self,
+        axes: Sequence[Mapping[str, Any]],
+        variable: Mapping[str, Any] | None = None,
     ) -> tuple[dict[str, Any], ...]:
         """Merge coordinate-axis metadata from the loaded coordinate table."""
 
-        return tuple(self.merge_axis(axis) for axis in axes)
+        merged_axes = [self.merge_axis(axis) for axis in axes]
+        if variable is not None:
+            merged_axes.extend(self._missing_scalar_axes(merged_axes, variable))
+        return tuple(merged_axes)
 
     def prepare_zfactors(
         self, zfactors: Sequence[Mapping[str, Any]] | None
@@ -163,6 +204,7 @@ class ProjectTables:
             "axis",
             "positive",
             "formula",
+            "climatology",
             "generic_level_name",
             "z_factors",
             "z_bounds_factors",
@@ -359,6 +401,10 @@ class ProjectTables:
         merged.setdefault(
             "table_id", entry.get("table_id", variable_entry.table_id)
         )
+        if variable_entry.table_file is not None:
+            merged.setdefault(
+                "table_info", f"Name: {variable_entry.table_file.name};"
+            )
         if "frequency" in entry:
             merged.setdefault("frequency", entry["frequency"])
         if "modeling_realm" in entry:
@@ -374,7 +420,7 @@ class ProjectTables:
             "comment",
         ):
             if entry.get(key) not in (None, ""):
-                merged.setdefault(key, entry[key])
+                merged[key] = entry[key]
         return merged
 
     def validate_variable(
@@ -465,12 +511,20 @@ class ProjectTables:
         )
         for name, entry in entries.items():
             variable_entry = VariableEntry(
-                name=name, table_id=str(table_id), entry=entry
+                name=name,
+                table_id=str(table_id),
+                entry=entry,
+                table_file=table_file,
             )
             self.variable_entries.setdefault(name, variable_entry)
             self._variable_entries_by_name.setdefault(name, []).append(
                 variable_entry
             )
+        axis_entries = data.get("axis_entry", {})
+        if isinstance(axis_entries, Mapping):
+            for name, entry in axis_entries.items():
+                if isinstance(entry, Mapping):
+                    self._variable_axis_entries[str(name)] = entry
 
     def _value_allowed(self, value: Any, allowed: Any) -> bool:
         if isinstance(allowed, Mapping):
@@ -486,8 +540,10 @@ class ProjectTables:
     def _matching_coordinate_entries(
         self, axis: Mapping[str, Any]
     ) -> list[tuple[str, Mapping[str, Any]]]:
+        if not axis.get("out_name") and not axis.get("standard_name"):
+            return []
         matches = list(self.coordinate_entries.items())
-        for key in ("out_name", "standard_name", "axis"):
+        for key in ("out_name", "standard_name"):
             value = axis.get(key)
             if value in (None, ""):
                 continue
@@ -499,6 +555,54 @@ class ProjectTables:
             if narrowed:
                 matches = narrowed
         return matches if len(matches) == 1 else []
+
+    def _missing_scalar_axes(
+        self,
+        axes: Sequence[Mapping[str, Any]],
+        variable: Mapping[str, Any],
+    ) -> list[dict[str, Any]]:
+        present = {
+            str(value)
+            for axis in axes
+            for value in (
+                axis.get("name"),
+                axis.get("table_entry"),
+                axis.get("axis_entry"),
+                axis.get("coordinate"),
+                axis.get("out_name"),
+                axis.get("generic_level_name"),
+            )
+            if value
+        }
+        missing_axes: list[dict[str, Any]] = []
+        for dimension in variable.get("dimensions", ()):
+            dimension_name = str(dimension)
+            if dimension_name in present:
+                continue
+            entry = self.coordinate_entries.get(dimension_name)
+            if entry is None:
+                continue
+            if not _is_table_value(entry.get("value")):
+                continue
+            axis = self.merge_axis(
+                {
+                    "name": dimension_name,
+                    "table_entry": dimension_name,
+                    "scalar": True,
+                }
+            )
+            missing_axes.append(axis)
+            present.update(
+                str(value)
+                for value in (
+                    axis.get("name"),
+                    axis.get("table_entry"),
+                    axis.get("out_name"),
+                    axis.get("generic_level_name"),
+                )
+                if value
+            )
+        return missing_axes
 
     def _validate_table_metadata(
         self,
@@ -545,6 +649,20 @@ def _coordinate_aliases(
     return aliases
 
 
+def _overlay_table_entries(
+    base_entries: Mapping[str, Mapping[str, Any]],
+    overlay_entries: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Mapping[str, Any]]:
+    entries = {name: dict(entry) for name, entry in base_entries.items()}
+    for name, overlay in overlay_entries.items():
+        entry = dict(entries.get(name, {}))
+        for key, value in overlay.items():
+            if _is_table_value(value) or key not in entry:
+                entry[key] = value
+        entries[name] = entry
+    return entries
+
+
 def _resolve_optional_table(
     root_path: Path, table: str | Path | None, suffix: str
 ) -> Path | None:
@@ -562,6 +680,20 @@ def _resolve_optional_table(
 
 def _is_table_value(value: Any) -> bool:
     return value not in (None, "")
+
+
+def _is_scalar_cv_default(value: Any) -> bool:
+    if isinstance(value, str) and ("<" in value or ">" in value):
+        return False
+    return isinstance(value, (str, int, float))
+
+
+def _render_template(template: str, tokens: Mapping[str, Any]) -> str:
+    return re.sub(
+        r"<([^>]+)>",
+        lambda match: str(tokens.get(match.group(1), "")),
+        template,
+    )
 
 
 def _entry_values(entry: Mapping[str, Any]) -> list[Any] | None:
