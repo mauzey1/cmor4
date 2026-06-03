@@ -49,8 +49,8 @@ def _regular_bounds(values):
     return [[edges[index], edges[index + 1]] for index in range(len(values))]
 
 
-def drcdp_info(tmp_path: Path, source_id="EDDE2-0", institution_id="EPA"):
-    return {
+def drcdp_info(tmp_path: Path, source_id="EDDE2-0", institution_id=None):
+    info = {
         "Conventions": "CF-1.7 CMIP-6.5",
         "activity_id": "DRCDP",
         "driving_activity_id": "CMIP",
@@ -59,7 +59,6 @@ def drcdp_info(tmp_path: Path, source_id="EDDE2-0", institution_id="EPA"):
         "driving_source_id": "ACCESS-CM2",
         "driving_variant_label": "r1i1p1f1",
         "grid_label": "gn",
-        "institution_id": institution_id,
         "outpath": str(tmp_path),
         "output_file_template": (
             "<variable_id><region_id><institution_id><source_id>"
@@ -76,6 +75,9 @@ def drcdp_info(tmp_path: Path, source_id="EDDE2-0", institution_id="EPA"):
         "source_id": source_id,
         "version": "v20260512",
     }
+    if institution_id is not None:
+        info["institution_id"] = institution_id
+    return info
 
 
 def obs4mips_info(

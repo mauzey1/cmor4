@@ -43,6 +43,26 @@ def lat_lon_axes():
     ]
 
 
+def cmip7_dataset(**overrides):
+    dataset = {
+        "activity_id": "CMIP",
+        "experiment_id": "amip",
+        "forcing_index": "f3",
+        "frequency": "mon",
+        "grid_label": "g999",
+        "initialization_index": "i1",
+        "institution_id": "CCCma",
+        "license_id": "CC-BY-4.0",
+        "nominal_resolution": "100 km",
+        "physics_index": "p1",
+        "realization_index": "r9",
+        "region": "glb",
+        "source_id": "DUMMY-MODEL",
+    }
+    dataset.update(overrides)
+    return dataset
+
+
 class ProjectTablesTest(unittest.TestCase):
     def assert_grid_table_metadata_is_used(self, project):
         axes = project.prepare_axes(
@@ -196,12 +216,21 @@ class ProjectTablesTest(unittest.TestCase):
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
         dataset = {
             "activity_id": "obs4MIPs",
+            "contact": "submissions-obs4mips@wcrp-cmip.org",
+            "grid": "5 degree latitude height zonal mean",
             "grid_label": "gnz",
+            "has_aux_unc": "FALSE",
             "institution_id": "DLR-BIRA",
             "license": project.cv["license"],
             "nominal_resolution": "500 km",
+            "processing_code_location": (
+                "dataset_guides/obs4mips/example-data-tools/example.py"
+            ),
             "product": "observations",
+            "references": "Example reference",
+            "source_data_url": "https://example.invalid/source",
             "source_id": "BSVertOzone-v1-0",
+            "variant_label": "CMORGuide",
         }
 
         prepared_dataset, prepared_variable = project.prepare_inputs(
@@ -214,6 +243,12 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertEqual(
             prepared_variable["dimensions"], ("time", "height", "latitude")
         )
+        self.assertEqual(
+            prepared_dataset["source"],
+            "BSVertOzone v1-0 (2018): Mole concentration of ozone in air",
+        )
+        self.assertEqual(prepared_dataset["source_type"], "satellite_retrieval")
+        self.assertEqual(prepared_dataset["source_version_number"], "v1-0")
 
     def test_variable_table_axis_entries_override_coordinate_table(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -380,6 +415,7 @@ class ProjectTablesTest(unittest.TestCase):
                 "grid_label": "g999",
                 "initialization_index": "i1",
                 "institution_id": "CCCma",
+                "license_id": "CC-BY-4.0",
                 "mip_era": "CMIP7",
                 "nominal_resolution": "100 km",
                 "outpath": tmp_dir,
@@ -462,6 +498,8 @@ class ProjectTablesTest(unittest.TestCase):
         }
         for key, value in expected.items():
             self.assertEqual(ds.attrs[key], value)
+        for key in project.required_global_attributes():
+            self.assertIn(key, ds.attrs)
         self.assertIn("Name: CMIP7_ocean.json;", ds.attrs["table_info"])
         self.assertNotIn("license_type", ds.attrs)
         self.assertNotIn("license_url", ds.attrs)
@@ -485,19 +523,7 @@ class ProjectTablesTest(unittest.TestCase):
     def test_cmip7_rejects_values_not_in_cv(self):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_ocean.json")
-        dataset = {
-            "activity_id": "not-a-real-activity",
-            "experiment_id": "amip",
-            "forcing_index": "f3",
-            "grid_label": "g999",
-            "initialization_index": "i1",
-            "institution_id": "CCCma",
-            "nominal_resolution": "100 km",
-            "physics_index": "p1",
-            "realization_index": "r9",
-            "region": "glb",
-            "source_id": "DUMMY-MODEL",
-        }
+        dataset = cmip7_dataset(activity_id="not-a-real-activity")
 
         with self.assertRaises(cmor4.TableValidationError):
             cmor4.create_dataset(
@@ -508,6 +534,194 @@ class ProjectTablesTest(unittest.TestCase):
                 project=project,
             )
 
+    def test_experiment_required_source_type_is_validated(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            cv_file = root / "CV.json"
+            variable_table = root / "test_table.json"
+            cv_file.write_text(
+                """
+{
+  "CV": {
+    "activity_id": ["CMIP"],
+    "experiment_id": {
+      "historical": {
+        "experiment_id": "historical",
+        "required_source_type": ["AOGCM"],
+        "additional_allowed_model_components": ["AER", "BGC"]
+      }
+    },
+    "source_type": {
+      "AER": "aerosols",
+      "AOGCM": "coupled atmosphere-ocean general circulation model",
+      "BGC": "biogeochemistry",
+      "LAND": "land-only model"
+    }
+  }
+}
+""".strip()
+                + "\n"
+            )
+            variable_table.write_text(
+                """
+{
+  "Header": {"table_id": "test"},
+  "variable_entry": {
+    "sample": {
+      "dimensions": ["time"],
+      "out_name": "sample",
+      "units": "1"
+    }
+  }
+}
+""".strip()
+                + "\n"
+            )
+            project = cmor4.ProjectTables(cv_file, [variable_table])
+            dataset = {
+                "activity_id": "CMIP",
+                "experiment_id": "historical",
+                "source_type": "AOGCM AER",
+            }
+
+            prepared, _ = project.prepare_inputs(dataset, {"name": "sample"})
+            self.assertEqual(prepared["source_type"], "AOGCM AER")
+
+            with self.assertRaisesRegex(
+                cmor4.TableValidationError, "missing required"
+            ):
+                project.prepare_inputs(
+                    {**dataset, "source_type": "AER"}, {"name": "sample"}
+                )
+            with self.assertRaisesRegex(
+                cmor4.TableValidationError, "not allowed"
+            ):
+                project.prepare_inputs(
+                    {**dataset, "source_type": "AOGCM LAND"},
+                    {"name": "sample"},
+                )
+
+    def test_required_global_attributes_are_enforced(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_ocean.json")
+        dataset = cmip7_dataset()
+        dataset.pop("license_id")
+
+        with self.assertRaisesRegex(
+            cmor4.TableValidationError, "license_id"
+        ):
+            cmor4.create_dataset(
+                dataset,
+                {"name": "tos_tavg-u-hxy-sea"},
+                lat_lon_axes(),
+                np.ones((2, 2, 2), dtype="f4"),
+                project=project,
+            )
+
+    def test_source_id_specific_attributes_are_validated(self):
+        require_path(self, DRCDP_TABLE_ROOT)
+        project = drcdp_project("Tables/DRCDP_APday.json")
+        dataset = {
+            "activity_id": "DRCDP",
+            "Conventions": "CF-1.7 CMIP-6.5",
+            "driving_activity_id": "CMIP",
+            "driving_experiment_id": "historical",
+            "driving_mip_era": "CMIP6",
+            "driving_source_id": "ACCESS-CM2",
+            "driving_variant_label": "r1i1p1f1",
+            "grid_label": "gn",
+            "institution_id": "EPA",
+            "source_id": "LOCA2-1",
+        }
+
+        with self.assertRaisesRegex(
+            cmor4.TableValidationError, "institution_id"
+        ):
+            cmor4.create_dataset(
+                dataset,
+                {"name": "tasmax"},
+                lat_lon_axes(),
+                np.ones((2, 2, 2), dtype="f4"),
+                project=project,
+            )
+
+    def test_parent_experiment_attributes_are_required_by_experiment_cv(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_ocean.json")
+        dataset = cmip7_dataset(experiment_id="historical")
+
+        with self.assertRaisesRegex(
+            cmor4.TableValidationError, "parent_experiment_id"
+        ):
+            cmor4.create_dataset(
+                dataset,
+                {"name": "tos_tavg-u-hxy-sea"},
+                lat_lon_axes(),
+                np.ones((2, 2, 2), dtype="f4"),
+                project=project,
+            )
+
+    def test_parent_experiment_attributes_follow_experiment_cv(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_ocean.json")
+        dataset = cmip7_dataset(
+            experiment_id="historical",
+            parent_activity_id="CMIP",
+            parent_experiment_id="piControl",
+            parent_mip_era="CMIP7",
+            parent_source_id="DUMMY-MODEL",
+            parent_time_units="days since 1850-01-01",
+            parent_variant_label="r1i1p1f3",
+            branch_time_in_child=0.0,
+            branch_time_in_parent=0.0,
+        )
+
+        ds = cmor4.create_dataset(
+            dataset,
+            {"name": "tos_tavg-u-hxy-sea"},
+            lat_lon_axes(),
+            np.ones((2, 2, 2), dtype="f4"),
+            project=project,
+        )
+
+        self.assertEqual(ds.attrs["parent_experiment_id"], "piControl")
+        self.assertEqual(ds.attrs["parent_activity_id"], "CMIP")
+
+    def test_parent_experiment_attributes_are_validated(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_ocean.json")
+        dataset = cmip7_dataset(
+            experiment_id="historical",
+            parent_activity_id="CMIP",
+            parent_experiment_id="piControl",
+            parent_mip_era="CMIP7",
+            parent_source_id="DUMMY-MODEL",
+            parent_time_units="days since 1850-01-01",
+            parent_variant_label="r1i1p1f3",
+            branch_time_in_child=0.0,
+            branch_time_in_parent=0.0,
+        )
+        cases = {
+            "parent_activity_id": "ScenarioMIP",
+            "parent_experiment_id": "amip",
+            "parent_mip_era": "CMIP6",
+            "parent_source_id": "not-a-source",
+            "parent_time_units": "seconds since 1850-01-01",
+            "parent_variant_label": "not-a-variant",
+            "branch_time_in_child": "not-a-number",
+        }
+
+        for key, value in cases.items():
+            with self.subTest(key=key):
+                with self.assertRaises(cmor4.TableValidationError):
+                    cmor4.create_dataset(
+                        {**dataset, key: value},
+                        {"name": "tos_tavg-u-hxy-sea"},
+                        lat_lon_axes(),
+                        np.ones((2, 2, 2), dtype="f4"),
+                        project=project,
+                    )
+
     def test_cmip7_variable_attrs_come_from_variable_table(self):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_ocean.json")
@@ -515,9 +729,11 @@ class ProjectTablesTest(unittest.TestCase):
             "activity_id": "CMIP",
             "experiment_id": "amip",
             "forcing_index": "f3",
+            "frequency": "mon",
             "grid_label": "g999",
             "initialization_index": "i1",
             "institution_id": "CCCma",
+            "license_id": "CC-BY-4.0",
             "nominal_resolution": "100 km",
             "physics_index": "p1",
             "realization_index": "r9",
@@ -562,6 +778,8 @@ class ProjectTablesTest(unittest.TestCase):
                 "activity_id": "obs4MIPs",
                 "contact": "submissions-obs4mips@wcrp-cmip.org",
                 "grid_label": "gnz",
+                "grid": "5 degree latitude height zonal mean",
+                "has_aux_unc": "FALSE",
                 "institution_id": "DLR-BIRA",
                 "license": cv_license,
                 "nominal_resolution": "500 km",
@@ -575,6 +793,11 @@ class ProjectTablesTest(unittest.TestCase):
                     "<variable_id><grid_label><version>"
                 ),
                 "product": "observations",
+                "processing_code_location": (
+                    "dataset_guides/obs4mips/example-data-tools/example.py"
+                ),
+                "references": "Example reference",
+                "source_data_url": "https://example.invalid/source",
                 "source_id": "BSVertOzone-v1-0",
                 "variant_label": "CMORGuide",
                 "version": "v20260512",
