@@ -14,6 +14,7 @@ from ._table_utils import (
 )
 from .axis import Axis
 from .exceptions import TableValidationError
+from .grid import Grid
 from .variable import Variable, VariableEntry
 from .zfactor import ZFactor
 
@@ -317,44 +318,12 @@ class ProjectTables:
             return None
         return tuple(zfactor.merge_table_entry(self) for zfactor in zfactors)
 
-    def prepare_grid(
-        self, grid: Mapping[str, Any] | None
-    ) -> dict[str, Any] | None:
+    def prepare_grid(self, grid: Grid | None) -> Grid | None:
         """Merge grid-mapping metadata from the loaded grids table."""
 
         if grid is None:
             return None
-        merged = dict(grid)
-        entry_name, entry = self.resolve_grid_mapping(grid)
-        if entry is None:
-            return merged
-        merged.setdefault("table_entry", entry_name)
-        coordinates = entry.get("coordinates")
-        if "coordinates" not in merged and _is_table_value(coordinates):
-            merged["coordinates"] = str(coordinates).split()
-        params = dict(merged.get("params", {}))
-        for key, value in entry.items():
-            if not key.startswith("parameter") or not _is_table_value(value):
-                continue
-            params.setdefault(str(value), grid.get(str(value), 0.0))
-        if params:
-            merged["params"] = params
-        return merged
-
-    def resolve_grid_mapping(
-        self, grid: Mapping[str, Any]
-    ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve a grid mapping entry from a user grid definition."""
-
-        requested = str(
-            grid.get("table_entry")
-            or grid.get("mapping_entry")
-            or grid.get("name")
-            or ""
-        )
-        if requested in self.grid_mapping_entries:
-            return requested, self.grid_mapping_entries[requested]
-        return None, None
+        return grid.merge_table_entry(self)
 
     def validate_dataset(self, dataset: Mapping[str, Any]) -> None:
         """Validate user-supplied controlled values against the project CV."""

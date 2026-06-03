@@ -282,14 +282,14 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     auxiliary=True,
                 ),
             ]
-            grid = {
-                "mapping_name": "latitude_longitude",
-                "params": {
+            grid = cmor4.Grid(
+                mapping_name="latitude_longitude",
+                params={
                     "longitude_of_prime_meridian": [0.0, "degrees_east"],
                     "semi_major_axis": [6378137.0, "m"],
                     "inverse_flattening": 298.257223563,
                 },
-            }
+            )
 
             ds = cmor4.create_dataset(
                 info,

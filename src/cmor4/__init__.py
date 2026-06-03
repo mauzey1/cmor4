@@ -10,6 +10,7 @@ from .core import (
 )
 from .axis import Axis
 from .exceptions import TableValidationError
+from .grid import Grid
 from .variable import Variable
 from .zfactor import ZFactor
 from .tables import ProjectTables
@@ -20,6 +21,7 @@ __all__ = [
     "build_output_path",
     "cmorize",
     "create_dataset",
+    "Grid",
     "open_dataset",
     "ProjectTables",
     "TableValidationError",

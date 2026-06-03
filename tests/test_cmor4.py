@@ -360,12 +360,12 @@ class Cmor4Test(unittest.TestCase):
                 name="siconc_tavg-u-hxy-u",
                 table_id="seaIce",
             )
-            grid = {
-                "mapping_name": "lambert_azimuthal_equal_area",
-                "params": {
+            grid = cmor4.Grid(
+                mapping_name="lambert_azimuthal_equal_area",
+                params={
                     "latitude_of_projection_origin": [90.0, "degrees_north"]
                 },
-            }
+            )
 
             grid_ds = cmor4.create_dataset(
                 info,
@@ -382,6 +382,40 @@ class Cmor4Test(unittest.TestCase):
                 grid_ds["crs"].attrs["grid_mapping_name"],
                 "lambert_azimuthal_equal_area",
             )
+
+    def test_grid_dimensions_override_table_variable_dimensions(self):
+        axes = [
+            cmor4.Axis(name="time", values=[15.0]),
+            cmor4.Axis(name="x", values=[0.0, 1.0]),
+            cmor4.Axis(name="y", values=[2.0, 3.0]),
+            cmor4.Axis(
+                name="latitude",
+                values=[[10.0, 20.0], [30.0, 40.0]],
+                dimensions=["x", "y"],
+                auxiliary=True,
+            ),
+            cmor4.Axis(
+                name="longitude",
+                values=[[100.0, 110.0], [120.0, 130.0]],
+                dimensions=["x", "y"],
+                auxiliary=True,
+            ),
+        ]
+        variable = cmor4.Variable(
+            name="sample",
+            dimensions=["time", "latitude", "longitude"],
+        )
+        grid = cmor4.Grid(dimensions=["time", "x", "y"])
+
+        ds = cmor4.create_dataset(
+            {"frequency": "mon"},
+            variable,
+            axes,
+            np.ones((1, 2, 2), dtype="f4"),
+            grid=grid,
+        )
+
+        self.assertEqual(ds["sample"].dims, ("time", "x", "y"))
 
     def test_filename_time_ranges_follow_cmor_frequency_formats(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

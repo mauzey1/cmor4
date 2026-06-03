@@ -15,6 +15,7 @@ except ImportError:  # pragma: no cover - cftime is provided by netCDF4 here.
     cftime = None
 
 from .axis import Axis
+from .grid import Grid
 from .tables import ProjectTables
 from .variable import Variable
 from .zfactor import ZFactor
@@ -49,7 +50,7 @@ def create_dataset(
     data: Any,
     *,
     zfactors: Sequence[ZFactor] | None = None,
-    grid: Mapping[str, Any] | None = None,
+    grid: Grid | None = None,
     attrs: Mapping[str, Any] | None = None,
     project: ProjectTables | None = None,
 ) -> xr.Dataset:
@@ -74,7 +75,7 @@ def create_dataset(
     zfactors:
         Optional hybrid-coordinate formula-term variables.
     grid:
-        Optional grid-mapping metadata and auxiliary projected-grid controls.
+        Optional runtime grid dimensions and grid-mapping metadata.
     attrs:
         Extra global attributes.
     """
@@ -101,7 +102,7 @@ def create_dataset(
             auxiliary_coord_names,
         )
 
-    if grid:
+    if grid and grid.has_mapping:
         _add_grid_mapping(grid, data_vars)
         auxiliary_coord_names.extend(
             str(name) for name in grid.get("coordinates", ()) if name
@@ -113,7 +114,7 @@ def create_dataset(
 
     data_array = np.asarray(data)
     var_name, var_labels = _variable_names(variable)
-    dim_names = _variable_dims(variable, axes)
+    dim_names = _variable_dims(variable, axes, grid)
     dims = tuple(dim for name in dim_names for dim in axis_dims.get(name, ()))
 
     if data_array.ndim != len(dims):
@@ -129,8 +130,8 @@ def create_dataset(
     )
     if coord_attr:
         var_attrs["coordinates"] = coord_attr
-    if grid and grid.get("mapping_var", "crs") in data_vars:
-        var_attrs["grid_mapping"] = str(grid.get("mapping_var", "crs"))
+    if grid and grid.variable_name in data_vars:
+        var_attrs["grid_mapping"] = grid.variable_name
 
     data_vars[var_name] = (dims, data_array, var_attrs)
     ds = xr.Dataset(
@@ -182,7 +183,7 @@ def cmorize(
     data: Any,
     *,
     zfactors: Sequence[ZFactor] | None = None,
-    grid: Mapping[str, Any] | None = None,
+    grid: Grid | None = None,
     path: str | Path | None = None,
     attrs: Mapping[str, Any] | None = None,
     project: ProjectTables | None = None,
@@ -391,21 +392,13 @@ def _add_zfactor(
 
 
 def _add_grid_mapping(
-    grid: Mapping[str, Any], data_vars: dict[str, Any]
+    grid: Grid, data_vars: dict[str, Any]
 ) -> None:
-    mapping_var = str(grid.get("mapping_var", "crs"))
-    mapping_name = grid.get("mapping_name", grid.get("grid_mapping_name"))
-    attrs = _attrs(grid.get("attrs", {}))
-    if mapping_name:
-        attrs["grid_mapping_name"] = mapping_name
-    for key, value in grid.get("params", {}).items():
-        if isinstance(value, (list, tuple)) and value:
-            attrs[key] = value[0]
-            if len(value) > 1 and value[1]:
-                attrs[f"{key}_units"] = value[1]
-        else:
-            attrs[key] = value
-    data_vars[mapping_var] = ((), np.int32(0), attrs)
+    data_vars[grid.variable_name] = (
+        (),
+        np.int32(0),
+        _attrs(grid.mapping_attributes()),
+    )
 
 
 def _set_formula_terms(
@@ -470,7 +463,12 @@ def _variable_names(
 def _variable_dims(
     variable: Variable,
     axes: Sequence[Axis],
+    grid: Grid | None = None,
 ) -> tuple[str, ...]:
+    if grid is not None:
+        dimensions = grid.variable_dimensions(variable)
+        if dimensions is not None:
+            return dimensions
     if "dimensions" in variable:
         return tuple(str(name) for name in variable["dimensions"])
     return tuple(
