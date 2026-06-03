@@ -70,7 +70,7 @@ class Cmor4Test(unittest.TestCase):
     def setUpClass(cls):
         cls.project = cmip7_project()
 
-    def test_metadata_classes_are_mapping_compatible(self):
+    def test_metadata_classes_own_table_preparation_behavior(self):
         variable = cmor4.Variable(
             name="sample",
             dimensions=["time"],
@@ -80,18 +80,20 @@ class Cmor4Test(unittest.TestCase):
         axis = cmor4.Axis(name="time", values=np.arange(2))
         zfactor = cmor4.ZFactor(name="p0", values=100000.0)
 
-        self.assertEqual(variable["name"], "sample")
-        self.assertEqual(variable.get("custom_key"), "custom_value")
-        self.assertEqual(dict(axis)["name"], "time")
-        self.assertEqual(dict(zfactor)["values"], 100000.0)
+        updated = variable.updated(dimensions=["time", "lat", "lon"])
+        self.assertEqual(updated.name, "sample")
+        self.assertEqual(updated.dimensions, ["time", "lat", "lon"])
+        self.assertEqual(updated.extra["custom_key"], "custom_value")
+        self.assertEqual(axis.name, "time")
+        self.assertEqual(zfactor.values, 100000.0)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             _, prepared_variable = self.project.prepare_inputs(
                 dataset_info(Path(tmp_dir)),
                 cmor4.Variable(name="tos_tavg-u-hxy-sea", table_id="ocean"),
             )
-        prepared_axis = self.project.merge_axis(axis)
-        prepared_zfactor = self.project.merge_zfactor(zfactor)
+        prepared_axis = axis.merge_table_entry(self.project)
+        prepared_zfactor = zfactor.merge_table_entry(self.project)
 
         self.assertIsInstance(prepared_variable, cmor4.Variable)
         self.assertIsInstance(prepared_axis, cmor4.Axis)

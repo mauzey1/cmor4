@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Mapping, Sequence
+
+from ._table_utils import (
+    is_table_value,
+    metadata_value_matches,
+    table_dimensions,
+)
+from .exceptions import TableValidationError
+from .metadata import _MetadataRecord
+
+
+@dataclass(frozen=True)
+class ZFactor(_MetadataRecord):
+    """Metadata and values for one hybrid-coordinate formula term."""
+
+    name: str
+    values: Any = None
+    data: Any = None
+    dimensions: tuple[str, ...] | list[str] | None = None
+    units: str | None = None
+    standard_name: str | None = None
+    long_name: str | None = None
+    out_name: str | None = None
+    table_entry: str | None = None
+    formula_entry: str | None = None
+    bounds: Any = None
+    bounds_name: str | None = None
+    bounds_dim: str | None = None
+    bounds_attrs: Mapping[str, Any] = field(default_factory=dict)
+    attrs: Mapping[str, Any] = field(default_factory=dict)
+    extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
+
+    def merge_table_entry(self, project: Any) -> "ZFactor":
+        """Merge authoritative formula-term metadata into this z-factor."""
+
+        merged = self.to_dict()
+        entry_name, entry = self.resolve_table_entry(project)
+        if entry is None:
+            return ZFactor.from_mapping(merged)
+        merged.setdefault("table_entry", entry_name)
+        self._validate_metadata(
+            "formula term",
+            entry_name,
+            entry,
+            ("units", "standard_name", "long_name"),
+        )
+        for key in ("out_name", "units", "standard_name", "long_name"):
+            value = entry.get(key)
+            if is_table_value(value):
+                merged.setdefault(key, value)
+        if "dimensions" not in merged and is_table_value(
+            entry.get("dimensions")
+        ):
+            merged["dimensions"] = table_dimensions(entry)
+        if "bounds" in merged:
+            bounds_name = str(
+                merged.get("bounds_name")
+                or f"{merged.get('out_name', self.name)}_bnds"
+            )
+            bounds_entry = project.formula_entries.get(bounds_name)
+            if bounds_entry:
+                merged.setdefault("bounds_name", bounds_name)
+                bounds_attrs = dict(merged.get("bounds_attrs", {}))
+                for key in ("units", "standard_name", "long_name"):
+                    value = bounds_entry.get(key)
+                    if is_table_value(value):
+                        bounds_attrs.setdefault(key, value)
+                if bounds_attrs:
+                    merged["bounds_attrs"] = bounds_attrs
+        return ZFactor.from_mapping(merged)
+
+    def resolve_table_entry(
+        self, project: Any
+    ) -> tuple[str | None, Mapping[str, Any] | None]:
+        """Resolve a formula-term table entry from this z-factor."""
+
+        requested = str(
+            self.table_entry or self.formula_entry or self.name or ""
+        )
+        if requested in project.formula_entries:
+            return requested, project.formula_entries[requested]
+        matches = [
+            (name, entry)
+            for name, entry in project.formula_entries.items()
+            if str(entry.get("out_name", "")) == requested
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        return None, None
+
+    def _validate_metadata(
+        self,
+        entry_type: str,
+        entry_name: str | None,
+        table_values: Mapping[str, Any],
+        keys: Sequence[str],
+    ) -> None:
+        user_values = self.to_dict()
+        for key in keys:
+            expected = table_values.get(key)
+            if (
+                is_table_value(expected)
+                and key in user_values
+                and not metadata_value_matches(user_values[key], expected)
+            ):
+                raise TableValidationError(
+                    f"{entry_type} {entry_name!r} {key}={user_values[key]!r} "
+                    f"does not match table value {expected!r}."
+                )

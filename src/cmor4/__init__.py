@@ -8,8 +8,11 @@ from .core import (
     open_dataset,
     write_netcdf,
 )
-from .metadata import Axis, Variable, ZFactor
-from .tables import ProjectTables, TableValidationError
+from .axis import Axis
+from .exceptions import TableValidationError
+from .variable import Variable
+from .zfactor import ZFactor
+from .tables import ProjectTables
 
 __all__ = [
     "Axis",
