@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cmor4"
 version = "0.1.0"
-description = "Dictionary-driven CMOR-like NetCDF writer built on xarray."
+description = "Class-driven CMOR-like NetCDF writer built on xarray."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

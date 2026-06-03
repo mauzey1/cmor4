@@ -14,6 +14,7 @@ try:
 except ImportError:  # pragma: no cover - cftime is provided by netCDF4 here.
     cftime = None
 
+from .metadata import Axis, Variable, ZFactor
 from .tables import ProjectTables
 
 INTERNAL_DATASET_KEYS = {
@@ -41,16 +42,16 @@ class Cmor4Result:
 
 def create_dataset(
     dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
-    axes: Sequence[Mapping[str, Any]],
+    variable: Variable | Mapping[str, Any],
+    axes: Sequence[Axis | Mapping[str, Any]],
     data: Any,
     *,
-    zfactors: Sequence[Mapping[str, Any]] | None = None,
+    zfactors: Sequence[ZFactor | Mapping[str, Any]] | None = None,
     grid: Mapping[str, Any] | None = None,
     attrs: Mapping[str, Any] | None = None,
     project: ProjectTables | None = None,
 ) -> xr.Dataset:
-    """Create an xarray dataset from dictionary inputs.
+    """Create an xarray dataset from metadata objects.
 
     Parameters
     ----------
@@ -63,7 +64,7 @@ def create_dataset(
         ``tas_tavg-h2m-hxy-u``; ``id`` can override the output variable name.
         ``dimensions`` names the axes used by the data array.
     axes:
-        Coordinate dictionaries with ``name``, ``values``, optional ``bounds``,
+        Coordinate axes with ``name``, ``values``, optional ``bounds``,
         optional ``dimensions`` for auxiliary coordinates, and optional
         ``scalar`` for scalar coordinates.
     data:
@@ -156,7 +157,7 @@ def create_dataset(
 def write_netcdf(
     ds: xr.Dataset,
     dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
+    variable: Variable | Mapping[str, Any],
     path: str | Path | None = None,
     **to_netcdf_kwargs: Any,
 ) -> Path:
@@ -174,18 +175,18 @@ def write_netcdf(
 
 def cmorize(
     dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
-    axes: Sequence[Mapping[str, Any]],
+    variable: Variable | Mapping[str, Any],
+    axes: Sequence[Axis | Mapping[str, Any]],
     data: Any,
     *,
-    zfactors: Sequence[Mapping[str, Any]] | None = None,
+    zfactors: Sequence[ZFactor | Mapping[str, Any]] | None = None,
     grid: Mapping[str, Any] | None = None,
     path: str | Path | None = None,
     attrs: Mapping[str, Any] | None = None,
     project: ProjectTables | None = None,
     **to_netcdf_kwargs: Any,
 ) -> Cmor4Result:
-    """Create and write a CMOR-like NetCDF file from dictionaries."""
+    """Create and write a CMOR-like NetCDF file from metadata objects."""
 
     if project is not None:
         dataset, variable = project.prepare_inputs(dataset, variable)
@@ -215,7 +216,7 @@ def open_dataset(path: str | Path, **kwargs: Any) -> xr.Dataset:
 
 def build_output_path(
     dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
+    variable: Variable | Mapping[str, Any],
     ds: xr.Dataset | None = None,
 ) -> Path:
     """Build a CMOR-like output path from dataset and variable metadata."""
@@ -292,7 +293,7 @@ def build_output_path(
 
 
 def _add_axis(
-    axis: Mapping[str, Any],
+    axis: Axis | Mapping[str, Any],
     coords: dict[str, Any],
     data_vars: dict[str, Any],
     axis_dims: dict[str, tuple[str, ...]],
@@ -358,7 +359,7 @@ def _add_axis(
 
 
 def _add_zfactor(
-    zfactor: Mapping[str, Any],
+    zfactor: ZFactor | Mapping[str, Any],
     data_vars: dict[str, Any],
     axis_dims: Mapping[str, tuple[str, ...]],
 ) -> str:
@@ -407,8 +408,8 @@ def _add_grid_mapping(
 
 def _set_formula_terms(
     ds: xr.Dataset,
-    axes: Sequence[Mapping[str, Any]],
-    variable: Mapping[str, Any],
+    axes: Sequence[Axis | Mapping[str, Any]],
+    variable: Variable | Mapping[str, Any],
     zfactor_names: Sequence[str],
 ) -> None:
     variable_dims = set(variable.get("dimensions", ()))
@@ -433,7 +434,9 @@ def _set_formula_terms(
                 ds[coord_name].attrs["formula_terms"] = formula_terms
 
 
-def _variable_names(variable: Mapping[str, Any]) -> tuple[str, dict[str, str]]:
+def _variable_names(
+    variable: Variable | Mapping[str, Any],
+) -> tuple[str, dict[str, str]]:
     branded_name = str(
         variable.get("name")
         or variable.get("id")
@@ -463,7 +466,8 @@ def _variable_names(variable: Mapping[str, Any]) -> tuple[str, dict[str, str]]:
 
 
 def _variable_dims(
-    variable: Mapping[str, Any], axes: Sequence[Mapping[str, Any]]
+    variable: Variable | Mapping[str, Any],
+    axes: Sequence[Axis | Mapping[str, Any]],
 ) -> tuple[str, ...]:
     if "dimensions" in variable:
         return tuple(str(name) for name in variable["dimensions"])
@@ -473,7 +477,7 @@ def _variable_dims(
 
 
 def _variable_attrs(
-    variable: Mapping[str, Any], labels: Mapping[str, str]
+    variable: Variable | Mapping[str, Any], labels: Mapping[str, str]
 ) -> dict[str, Any]:
     attrs = _attrs(variable.get("attrs", {}))
     for key in (
@@ -500,7 +504,7 @@ def _variable_attrs(
 
 
 def _coordinates_attr(
-    variable: Mapping[str, Any],
+    variable: Variable | Mapping[str, Any],
     scalar_coord_names: Sequence[str],
     auxiliary_coord_names: Sequence[str],
 ) -> str:
@@ -517,7 +521,7 @@ def _coordinates_attr(
 
 def _global_attrs(
     dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
+    variable: Variable | Mapping[str, Any],
     extra_attrs: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     attrs: dict[str, Any] = {
@@ -557,7 +561,7 @@ def _global_attrs(
 
 
 def _axis_attrs(
-    axis: Mapping[str, Any], *, include_units: bool = True
+    axis: Axis | Mapping[str, Any], *, include_units: bool = True
 ) -> dict[str, Any]:
     attrs = _attrs(axis.get("attrs", {}))
     if include_units and "units" in axis:
@@ -576,16 +580,16 @@ def _axis_attrs(
     return attrs
 
 
-def _is_climatology_axis(axis: Mapping[str, Any]) -> bool:
+def _is_climatology_axis(axis: Axis | Mapping[str, Any]) -> bool:
     return str(axis.get("climatology", "")).lower() in {"1", "true", "yes"}
 
 
-def _axis_out_name(axis: Mapping[str, Any]) -> str:
+def _axis_out_name(axis: Axis | Mapping[str, Any]) -> str:
     return str(axis.get("out_name") or axis["name"])
 
 
 def _add_axis_dim_aliases(
-    axis: Mapping[str, Any],
+    axis: Axis | Mapping[str, Any],
     axis_dims: dict[str, tuple[str, ...]],
     dims: tuple[str, ...],
 ) -> None:
@@ -596,7 +600,7 @@ def _add_axis_dim_aliases(
 
 
 def _axis_dimensions(
-    axis: Mapping[str, Any],
+    axis: Axis | Mapping[str, Any],
     axis_dims: Mapping[str, tuple[str, ...]],
     *,
     default: tuple[str, ...],
@@ -631,7 +635,7 @@ def _variant_label(dataset: Mapping[str, Any]) -> str:
 
 def _path_tokens(
     dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
+    variable: Variable | Mapping[str, Any],
     ds: xr.Dataset | None,
     labels: Mapping[str, str],
     version: str,

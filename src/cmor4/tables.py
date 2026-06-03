@@ -8,6 +8,8 @@ import re
 from typing import Any, Mapping, Sequence
 import uuid
 
+from .metadata import Axis, Variable, ZFactor
+
 
 class TableValidationError(ValueError):
     """Raised when user input is not allowed by project tables."""
@@ -123,8 +125,8 @@ class ProjectTables:
     def prepare_inputs(
         self,
         dataset: Mapping[str, Any],
-        variable: Mapping[str, Any],
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        variable: Variable | Mapping[str, Any],
+    ) -> tuple[dict[str, Any], Variable]:
         """Validate dataset and variable input, returning normalized copies."""
 
         normalized_dataset = dict(dataset)
@@ -176,7 +178,7 @@ class ProjectTables:
                 dataset.setdefault(key, value)
 
     def _add_variable_global_defaults(
-        self, dataset: dict[str, Any], variable: Mapping[str, Any]
+        self, dataset: dict[str, Any], variable: Variable | Mapping[str, Any]
     ) -> None:
         """Fill global attributes that are derived from the variable table."""
 
@@ -302,9 +304,9 @@ class ProjectTables:
 
     def prepare_axes(
         self,
-        axes: Sequence[Mapping[str, Any]],
-        variable: Mapping[str, Any] | None = None,
-    ) -> tuple[dict[str, Any], ...]:
+        axes: Sequence[Axis | Mapping[str, Any]],
+        variable: Variable | Mapping[str, Any] | None = None,
+    ) -> tuple[Axis, ...]:
         """Merge coordinate-axis metadata from the loaded coordinate table."""
 
         merged_axes = [self.merge_axis(axis) for axis in axes]
@@ -313,8 +315,8 @@ class ProjectTables:
         return tuple(merged_axes)
 
     def prepare_zfactors(
-        self, zfactors: Sequence[Mapping[str, Any]] | None
-    ) -> tuple[dict[str, Any], ...] | None:
+        self, zfactors: Sequence[ZFactor | Mapping[str, Any]] | None
+    ) -> tuple[ZFactor, ...] | None:
         """Merge z-factor metadata from the loaded formula-term table."""
 
         if zfactors is None:
@@ -360,13 +362,13 @@ class ProjectTables:
             return requested, self.grid_mapping_entries[requested]
         return None, None
 
-    def merge_axis(self, axis: Mapping[str, Any]) -> dict[str, Any]:
+    def merge_axis(self, axis: Axis | Mapping[str, Any]) -> Axis:
         """Merge authoritative coordinate metadata into an axis definition."""
 
         merged = dict(axis)
         entry_name, entry = self.resolve_axis(axis)
         if entry is None:
-            return merged
+            return Axis.from_mapping(merged)
         merged.setdefault("table_entry", entry_name)
         self._validate_table_metadata(
             "axis",
@@ -407,10 +409,10 @@ class ProjectTables:
             if bounds is not None:
                 merged["bounds"] = bounds
         self._merge_grid_coordinate_metadata(merged)
-        return merged
+        return Axis.from_mapping(merged)
 
     def resolve_axis(
-        self, axis: Mapping[str, Any]
+        self, axis: Axis | Mapping[str, Any]
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         """Resolve an axis table entry from a user axis definition."""
 
@@ -435,13 +437,13 @@ class ProjectTables:
             return matches[0]
         return None, None
 
-    def merge_zfactor(self, zfactor: Mapping[str, Any]) -> dict[str, Any]:
+    def merge_zfactor(self, zfactor: ZFactor | Mapping[str, Any]) -> ZFactor:
         """Merge authoritative formula-term metadata into a z-factor."""
 
         merged = dict(zfactor)
         entry_name, entry = self.resolve_zfactor(zfactor)
         if entry is None:
-            return merged
+            return ZFactor.from_mapping(merged)
         merged.setdefault("table_entry", entry_name)
         self._validate_table_metadata(
             "formula term",
@@ -473,10 +475,10 @@ class ProjectTables:
                         bounds_attrs.setdefault(key, value)
                 if bounds_attrs:
                     merged["bounds_attrs"] = bounds_attrs
-        return merged
+        return ZFactor.from_mapping(merged)
 
     def resolve_zfactor(
-        self, zfactor: Mapping[str, Any]
+        self, zfactor: ZFactor | Mapping[str, Any]
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         """Resolve a formula-term table entry from a user z-factor."""
 
@@ -722,7 +724,9 @@ class ProjectTables:
                     f"{key}={dataset[key]!r} must be numeric."
                 ) from exc
 
-    def resolve_variable(self, variable: Mapping[str, Any]) -> VariableEntry:
+    def resolve_variable(
+        self, variable: Variable | Mapping[str, Any]
+    ) -> VariableEntry:
         """Find a variable table entry by branded name or variable name."""
 
         requested = str(
@@ -781,9 +785,9 @@ class ProjectTables:
 
     def merge_variable(
         self,
-        variable: Mapping[str, Any],
+        variable: Variable | Mapping[str, Any],
         variable_entry: VariableEntry,
-    ) -> dict[str, Any]:
+    ) -> Variable:
         """Merge authoritative table metadata with user variable controls."""
 
         entry = variable_entry.entry
@@ -818,11 +822,11 @@ class ProjectTables:
         ):
             if entry.get(key) not in (None, ""):
                 merged[key] = entry[key]
-        return merged
+        return Variable.from_mapping(merged)
 
     def validate_variable(
         self,
-        variable: Mapping[str, Any],
+        variable: Variable | Mapping[str, Any],
         variable_entry: VariableEntry,
     ) -> None:
         """Validate user variable metadata against a variable table entry."""
@@ -1014,7 +1018,7 @@ class ProjectTables:
             )
 
     def _matching_coordinate_entries(
-        self, axis: Mapping[str, Any]
+        self, axis: Axis | Mapping[str, Any]
     ) -> list[tuple[str, Mapping[str, Any]]]:
         if not axis.get("out_name") and not axis.get("standard_name"):
             return []
@@ -1061,7 +1065,7 @@ class ProjectTables:
                     axis["bounds_attrs"] = bounds_attrs
 
     def resolve_grid_coordinate(
-        self, axis: Mapping[str, Any]
+        self, axis: Axis | Mapping[str, Any]
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         """Resolve a grid-coordinate variable entry from an axis definition."""
 
@@ -1085,9 +1089,9 @@ class ProjectTables:
 
     def _missing_scalar_axes(
         self,
-        axes: Sequence[Mapping[str, Any]],
-        variable: Mapping[str, Any],
-    ) -> list[dict[str, Any]]:
+        axes: Sequence[Axis | Mapping[str, Any]],
+        variable: Variable | Mapping[str, Any],
+    ) -> list[Axis]:
         present = {
             str(value)
             for axis in axes
@@ -1101,7 +1105,7 @@ class ProjectTables:
             )
             if value
         }
-        missing_axes: list[dict[str, Any]] = []
+        missing_axes: list[Axis] = []
         for dimension in variable.get("dimensions", ()):
             dimension_name = str(dimension)
             if dimension_name in present:

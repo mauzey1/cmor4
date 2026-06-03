@@ -35,34 +35,34 @@ def dataset_info(tmp_path: Path):
 
 def horizontal_axes():
     return [
-        {
-            "name": "latitude",
-            "values": [-45.0, 45.0],
-            "bounds": [[-90.0, 0.0], [0.0, 90.0]],
-            "units": "degrees_north",
-            "standard_name": "latitude",
-            "axis": "Y",
-        },
-        {
-            "name": "longitude",
-            "values": [90.0, 270.0],
-            "bounds": [[0.0, 180.0], [180.0, 360.0]],
-            "units": "degrees_east",
-            "standard_name": "longitude",
-            "axis": "X",
-        },
+        cmor4.Axis(
+            name="latitude",
+            values=[-45.0, 45.0],
+            bounds=[[-90.0, 0.0], [0.0, 90.0]],
+            units="degrees_north",
+            standard_name="latitude",
+            axis="Y",
+        ),
+        cmor4.Axis(
+            name="longitude",
+            values=[90.0, 270.0],
+            bounds=[[0.0, 180.0], [180.0, 360.0]],
+            units="degrees_east",
+            standard_name="longitude",
+            axis="X",
+        ),
     ]
 
 
 def time_axis():
-    return {
-        "name": "time",
-        "values": [15.0, 45.0],
-        "bounds": [[0.0, 30.0], [30.0, 60.0]],
-        "units": "days since 2000-01-01",
-        "standard_name": "time",
-        "axis": "T",
-    }
+    return cmor4.Axis(
+        name="time",
+        values=[15.0, 45.0],
+        bounds=[[0.0, 30.0], [30.0, 60.0]],
+        units="days since 2000-01-01",
+        standard_name="time",
+        axis="T",
+    )
 
 
 class Cmor4Test(unittest.TestCase):
@@ -70,14 +70,41 @@ class Cmor4Test(unittest.TestCase):
     def setUpClass(cls):
         cls.project = cmip7_project()
 
+    def test_metadata_classes_are_mapping_compatible(self):
+        variable = cmor4.Variable(
+            name="sample",
+            dimensions=["time"],
+            attrs={"units": "1"},
+            extra={"custom_key": "custom_value"},
+        )
+        axis = cmor4.Axis(name="time", values=np.arange(2))
+        zfactor = cmor4.ZFactor(name="p0", values=100000.0)
+
+        self.assertEqual(variable["name"], "sample")
+        self.assertEqual(variable.get("custom_key"), "custom_value")
+        self.assertEqual(dict(axis)["name"], "time")
+        self.assertEqual(dict(zfactor)["values"], 100000.0)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _, prepared_variable = self.project.prepare_inputs(
+                dataset_info(Path(tmp_dir)),
+                cmor4.Variable(name="tos_tavg-u-hxy-sea", table_id="ocean"),
+            )
+        prepared_axis = self.project.merge_axis(axis)
+        prepared_zfactor = self.project.merge_zfactor(zfactor)
+
+        self.assertIsInstance(prepared_variable, cmor4.Variable)
+        self.assertIsInstance(prepared_axis, cmor4.Axis)
+        self.assertIsInstance(prepared_zfactor, cmor4.ZFactor)
+
     def test_writes_basic_ocean_surface_temperature(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             info = dataset_info(Path(tmp_dir))
-            variable = {
-                "name": "tos_tavg-u-hxy-sea",
-                "table_id": "ocean",
-                "missing_value": np.float32(1.0e20),
-            }
+            variable = cmor4.Variable(
+                name="tos_tavg-u-hxy-sea",
+                table_id="ocean",
+                missing_value=np.float32(1.0e20),
+            )
             axes = [time_axis(), *horizontal_axes()]
             data = np.arange(8, dtype="f4").reshape(2, 2, 2)
 
@@ -112,20 +139,20 @@ class Cmor4Test(unittest.TestCase):
             info = dataset_info(Path(tmp_dir))
             axes = [
                 time_axis(),
-                {
-                    "name": "height2m",
-                    "values": [2.0],
-                    "units": "m",
-                    "standard_name": "height",
-                    "positive": "up",
-                    "scalar": True,
-                },
+                cmor4.Axis(
+                    name="height2m",
+                    values=[2.0],
+                    units="m",
+                    standard_name="height",
+                    positive="up",
+                    scalar=True,
+                ),
                 *horizontal_axes(),
             ]
-            variable = {
-                "name": "tas_tavg-h2m-hxy-u",
-                "table_id": "atmos",
-            }
+            variable = cmor4.Variable(
+                name="tas_tavg-h2m-hxy-u",
+                table_id="atmos",
+            )
 
             ds = cmor4.create_dataset(
                 info,
@@ -142,18 +169,18 @@ class Cmor4Test(unittest.TestCase):
 
             plev_axes = [
                 time_axis(),
-                {
-                    "name": "plev19",
-                    "values": [100000.0, 50000.0],
-                    "units": "Pa",
-                    "positive": "down",
-                },
+                cmor4.Axis(
+                    name="plev19",
+                    values=[100000.0, 50000.0],
+                    units="Pa",
+                    positive="down",
+                ),
                 *horizontal_axes(),
             ]
-            plev_variable = {
-                "name": "ta_tavg-p19-hxy-air",
-                "table_id": "atmos",
-            }
+            plev_variable = cmor4.Variable(
+                name="ta_tavg-p19-hxy-air",
+                table_id="atmos",
+            )
             plev_ds = cmor4.create_dataset(
                 info,
                 plev_variable,
@@ -172,33 +199,33 @@ class Cmor4Test(unittest.TestCase):
             info = dataset_info(Path(tmp_dir))
             axes = [
                 time_axis(),
-                {
-                    "name": "standard_hybrid_sigma",
-                    "values": [0.1, 0.9],
-                    "bounds": [[0.0, 0.5], [0.5, 1.0]],
-                },
+                cmor4.Axis(
+                    name="standard_hybrid_sigma",
+                    values=[0.1, 0.9],
+                    bounds=[[0.0, 0.5], [0.5, 1.0]],
+                ),
                 *horizontal_axes(),
             ]
-            variable = {
-                "name": "tnhusscpbl_tavg-al-hxy-u",
-                "table_id": "atmos",
-            }
+            variable = cmor4.Variable(
+                name="tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
             zfactors = [
-                {
-                    "name": "a",
-                    "values": [0.1, 0.9],
-                    "bounds": [[0.0, 0.5], [0.5, 1.0]],
-                },
-                {
-                    "name": "b",
-                    "values": [0.9, 0.1],
-                    "bounds": [[1.0, 0.5], [0.5, 0.0]],
-                },
-                {"name": "p0", "values": 100000.0},
-                {
-                    "name": "ps",
-                    "values": np.ones((2, 2, 2), dtype="f4") * 99000.0,
-                },
+                cmor4.ZFactor(
+                    name="a",
+                    values=[0.1, 0.9],
+                    bounds=[[0.0, 0.5], [0.5, 1.0]],
+                ),
+                cmor4.ZFactor(
+                    name="b",
+                    values=[0.9, 0.1],
+                    bounds=[[1.0, 0.5], [0.5, 0.0]],
+                ),
+                cmor4.ZFactor(name="p0", values=100000.0),
+                cmor4.ZFactor(
+                    name="ps",
+                    values=np.ones((2, 2, 2), dtype="f4") * 99000.0,
+                ),
             ]
 
             ds = cmor4.create_dataset(
@@ -232,29 +259,29 @@ class Cmor4Test(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             info = dataset_info(Path(tmp_dir))
             axes = [
-                {
-                    "name": "time1",
-                    "values": [15.0, 45.0],
-                    "units": "days since 2000-01-01",
-                    "standard_name": "time",
-                    "axis": "T",
-                },
-                {
-                    "name": "landuse",
-                    "values": [
+                cmor4.Axis(
+                    name="time1",
+                    values=[15.0, 45.0],
+                    units="days since 2000-01-01",
+                    standard_name="time",
+                    axis="T",
+                ),
+                cmor4.Axis(
+                    name="landuse",
+                    values=[
                         "primary_and_secondary_land",
                         "pastures",
                         "crops",
                         "urban",
                     ],
-                    "units": "1",
-                },
+                    units="1",
+                ),
                 *horizontal_axes(),
             ]
-            variable = {
-                "name": "fracLut_tpt-u-hxy-u",
-                "table_id": "land",
-            }
+            variable = cmor4.Variable(
+                name="fracLut_tpt-u-hxy-u",
+                table_id="land",
+            )
 
             ds = cmor4.create_dataset(
                 info,
@@ -278,27 +305,27 @@ class Cmor4Test(unittest.TestCase):
             info = dataset_info(Path(tmp_dir))
             basin_axes = [
                 time_axis(),
-                {
-                    "name": "basin",
-                    "values": [
+                cmor4.Axis(
+                    name="basin",
+                    values=[
                         "atlantic_arctic_ocean",
                         "indian_pacific_ocean",
                         "global_ocean",
                     ],
-                    "auxiliary_name": "sector",
-                    "auxiliary_attrs": {"long_name": "ocean basin"},
-                },
-                {
-                    "name": "latitude",
-                    "values": [-30.0, 30.0],
-                    "bounds": [[-60.0, 0.0], [0.0, 60.0]],
-                    "units": "degrees_north",
-                },
+                    auxiliary_name="sector",
+                    auxiliary_attrs={"long_name": "ocean basin"},
+                ),
+                cmor4.Axis(
+                    name="latitude",
+                    values=[-30.0, 30.0],
+                    bounds=[[-60.0, 0.0], [0.0, 60.0]],
+                    units="degrees_north",
+                ),
             ]
-            basin_variable = {
-                "name": "htovgyre_tavg-u-hyb-sea",
-                "table_id": "ocean",
-            }
+            basin_variable = cmor4.Variable(
+                name="htovgyre_tavg-u-hyb-sea",
+                table_id="ocean",
+            )
 
             basin_ds = cmor4.create_dataset(
                 info,
@@ -327,10 +354,10 @@ class Cmor4Test(unittest.TestCase):
                 time_axis(),
                 *horizontal_axes(),
             ]
-            grid_variable = {
-                "name": "siconc_tavg-u-hxy-u",
-                "table_id": "seaIce",
-            }
+            grid_variable = cmor4.Variable(
+                name="siconc_tavg-u-hxy-u",
+                table_id="seaIce",
+            )
             grid = {
                 "mapping_name": "lambert_azimuthal_equal_area",
                 "params": {
@@ -367,7 +394,7 @@ class Cmor4Test(unittest.TestCase):
                     "version": "v20200101",
                 }
             )
-            variable = {"name": "sample", "dimensions": ["time"]}
+            variable = cmor4.Variable(name="sample", dimensions=["time"])
 
             cases = [
                 (
@@ -400,13 +427,13 @@ class Cmor4Test(unittest.TestCase):
             for frequency, values, units, expected_name in cases:
                 info = dict(base_info, frequency=frequency)
                 axes = [
-                    {
-                        "name": "time",
-                        "values": values,
-                        "units": units,
-                        "standard_name": "time",
-                        "axis": "T",
-                    }
+                    cmor4.Axis(
+                        name="time",
+                        values=values,
+                        units=units,
+                        standard_name="time",
+                        axis="T",
+                    )
                 ]
                 ds = cmor4.create_dataset(
                     info, variable, axes, np.ones(2, dtype="f4")
@@ -429,18 +456,20 @@ class Cmor4Test(unittest.TestCase):
                 }
             )
             axes = [
-                {
-                    "name": "time2",
-                    "values": [15.0, 45.0],
-                    "bounds": [[0.0, 31.0], [31.0, 60.0]],
-                    "units": "days since 2018",
-                    "standard_name": "time",
-                    "axis": "T",
-                    "climatology": "yes",
-                    "out_name": "time",
-                }
+                cmor4.Axis(
+                    name="time2",
+                    values=[15.0, 45.0],
+                    bounds=[[0.0, 31.0], [31.0, 60.0]],
+                    units="days since 2018",
+                    standard_name="time",
+                    axis="T",
+                    climatology="yes",
+                    out_name="time",
+                )
             ]
-            variable = {"name": "co2_tclm-u-hm-u", "dimensions": ["time2"]}
+            variable = cmor4.Variable(
+                name="co2_tclm-u-hm-u", dimensions=["time2"]
+            )
 
             ds = cmor4.create_dataset(
                 info, variable, axes, np.ones(2, dtype="f4")

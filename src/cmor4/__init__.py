@@ -1,4 +1,4 @@
-"""Dictionary-driven CMOR-like NetCDF creation with xarray."""
+"""CMOR-like NetCDF creation with xarray."""
 
 from .core import (
     Cmor4Result,
@@ -8,9 +8,11 @@ from .core import (
     open_dataset,
     write_netcdf,
 )
+from .metadata import Axis, Variable, ZFactor
 from .tables import ProjectTables, TableValidationError
 
 __all__ = [
+    "Axis",
     "Cmor4Result",
     "build_output_path",
     "cmorize",
@@ -18,7 +20,9 @@ __all__ = [
     "open_dataset",
     "ProjectTables",
     "TableValidationError",
+    "Variable",
     "write_netcdf",
+    "ZFactor",
 ]
 
 __version__ = "0.1.0"

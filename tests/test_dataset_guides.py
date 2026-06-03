@@ -12,31 +12,31 @@ from table_helpers import cmip7_project, drcdp_project, obs4mips_project
 
 
 def guide_time_axis(values, bounds, units, calendar="standard"):
-    return {
-        "name": "time",
-        "values": values,
-        "bounds": bounds,
-        "units": units,
-        "calendar": calendar,
-    }
+    return cmor4.Axis(
+        name="time",
+        values=values,
+        bounds=bounds,
+        units=units,
+        extra={"calendar": calendar},
+    )
 
 
 def guide_lat_axis(values=(-45.0, 45.0)):
     values = list(values)
-    return {
-        "name": "latitude",
-        "values": values,
-        "bounds": _regular_bounds(values),
-    }
+    return cmor4.Axis(
+        name="latitude",
+        values=values,
+        bounds=_regular_bounds(values),
+    )
 
 
 def guide_lon_axis(values=(90.0, 180.0, 270.0)):
     values = list(values)
-    return {
-        "name": "longitude",
-        "values": values,
-        "bounds": _regular_bounds(values),
-    }
+    return cmor4.Axis(
+        name="longitude",
+        values=values,
+        bounds=_regular_bounds(values),
+    )
 
 
 def _regular_bounds(values):
@@ -133,10 +133,10 @@ class DatasetGuideProjectTest(unittest.TestCase):
     def test_drcdp_hourly_precipitation_uses_project_drs_template(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             info = drcdp_info(Path(tmp_dir))
-            variable = {
-                "name": "pr",
-                "missing_value": np.float32(1.0e20),
-            }
+            variable = cmor4.Variable(
+                name="pr",
+                missing_value=np.float32(1.0e20),
+            )
             axes = [
                 guide_time_axis(
                     [23.5, 24.5],
@@ -174,10 +174,10 @@ class DatasetGuideProjectTest(unittest.TestCase):
     def test_drcdp_tasmax_auto_adds_table_height2m_scalar(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             info = drcdp_info(Path(tmp_dir), source_id="LOCA2-1")
-            variable = {
-                "name": "tasmax",
-                "missing_value": np.float32(1.0e20),
-            }
+            variable = cmor4.Variable(
+                name="tasmax",
+                missing_value=np.float32(1.0e20),
+            )
             axes = [
                 guide_time_axis(
                     [39811.0, 39812.0],
@@ -234,7 +234,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
             ds = cmor4.create_dataset(
                 info,
-                {"name": "tas_tavg-h2m-hxy-u"},
+                cmor4.Variable(name="tas_tavg-h2m-hxy-u"),
                 axes,
                 np.ones((2, 3, 4), dtype="f4"),
                 project=self.cmip7_atmos_project,
@@ -249,10 +249,10 @@ class DatasetGuideProjectTest(unittest.TestCase):
             info = drcdp_info(
                 Path(tmp_dir), source_id="MACA3-0", institution_id="UCM-ACSL"
             )
-            variable = {
-                "name": "tasmax",
-                "missing_value": np.float32(1.0e20),
-            }
+            variable = cmor4.Variable(
+                name="tasmax",
+                missing_value=np.float32(1.0e20),
+            )
             axes = [
                 guide_time_axis(
                     [39813.0, 39814.0],
@@ -261,26 +261,26 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 ),
                 guide_lat_axis((25.0, 26.0)),
                 guide_lon_axis((240.0, 241.0, 242.0)),
-                {
-                    "name": "latitude",
-                    "out_name": "latitude",
-                    "values": [[25.0, 25.1, 25.2], [26.0, 26.1, 26.2]],
-                    "dimensions": ["latitude", "longitude"],
-                    "bounds": np.zeros((2, 3, 4)),
-                    "bounds_name": "vertices_latitude",
-                    "bounds_dim": "vertices",
-                    "auxiliary": True,
-                },
-                {
-                    "name": "longitude",
-                    "out_name": "longitude",
-                    "values": [[240.0, 241.0, 242.0], [240.0, 241.0, 242.0]],
-                    "dimensions": ["latitude", "longitude"],
-                    "bounds": np.zeros((2, 3, 4)),
-                    "bounds_name": "vertices_longitude",
-                    "bounds_dim": "vertices",
-                    "auxiliary": True,
-                },
+                cmor4.Axis(
+                    name="latitude",
+                    out_name="latitude",
+                    values=[[25.0, 25.1, 25.2], [26.0, 26.1, 26.2]],
+                    dimensions=["latitude", "longitude"],
+                    bounds=np.zeros((2, 3, 4)),
+                    bounds_name="vertices_latitude",
+                    bounds_dim="vertices",
+                    auxiliary=True,
+                ),
+                cmor4.Axis(
+                    name="longitude",
+                    out_name="longitude",
+                    values=[[240.0, 241.0, 242.0], [240.0, 241.0, 242.0]],
+                    dimensions=["latitude", "longitude"],
+                    bounds=np.zeros((2, 3, 4)),
+                    bounds_name="vertices_longitude",
+                    bounds_dim="vertices",
+                    auxiliary=True,
+                ),
             ]
             grid = {
                 "mapping_name": "latitude_longitude",
@@ -328,10 +328,10 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 self.obs4mips_amon_project.cv["license"],
             )
             info["grid"] = "1x1 degree latitude x longitude"
-            variable = {
-                "name": "pr",
-                "missing_value": np.float32(1.0e20),
-            }
+            variable = cmor4.Variable(
+                name="pr",
+                missing_value=np.float32(1.0e20),
+            )
             axes = [
                 guide_time_axis(
                     [15.0, 45.0],
@@ -376,23 +376,15 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     "site_location": "San Luis",
                 }
             )
-            variable = {
-                "name": "pr",
-            }
+            variable = cmor4.Variable(name="pr")
             axes = [
                 guide_time_axis(
                     [0.5, 1.5],
                     [[0.0, 1.0], [1.0, 2.0]],
                     "hours since 2018-01-01",
                 ),
-                {
-                    "name": "latitude1",
-                    "values": [36.605],
-                },
-                {
-                    "name": "longitude1",
-                    "values": [262.515],
-                },
+                cmor4.Axis(name="latitude1", values=[36.605]),
+                cmor4.Axis(name="longitude1", values=[262.515]),
             ]
 
             result = cmor4.cmorize(
@@ -426,20 +418,20 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     "nominal_resolution": "500 km",
                 }
             )
-            variable = {
-                "name": "o3zm",
-                "missing_value": np.float32(1.0e20),
-            }
+            variable = cmor4.Variable(
+                name="o3zm",
+                missing_value=np.float32(1.0e20),
+            )
             axes = [
                 guide_time_axis(
                     [15.0, 45.0],
                     [[0.0, 30.0], [30.0, 60.0]],
                     "days since 1979-01-01",
                 ),
-                {
-                    "name": "height",
-                    "values": [1000.0, 5000.0, 10000.0],
-                },
+                cmor4.Axis(
+                    name="height",
+                    values=[1000.0, 5000.0, 10000.0],
+                ),
                 guide_lat_axis((-60.0, -30.0)),
             ]
 

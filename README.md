@@ -1,8 +1,8 @@
 # CMOR4  (WORK IN PROGRESS)
 
-`cmor4` is a small, dictionary-driven CMOR-like package for creating CF-style
+`cmor4` is a small, class-driven CMOR-like package for creating CF-style
 NetCDF datasets with `xarray`. It is designed for new drivers that can provide
-Python dictionaries directly instead of writing CMOR JSON input files.
+Python metadata objects directly instead of writing CMOR JSON input files.
 
 The package does not try to preserve older CMOR or CMIP6-specific setup
 parameters. A driver provides dataset metadata, variable metadata, coordinate
@@ -95,25 +95,28 @@ dataset = {
     "outpath": "cmor_output",
 }
 
-variable = {"name": "tas_tavg-h2m-hxy-u", "missing_value": np.float32(1.0e20)}
+variable = cmor4.Variable(
+    name="tas_tavg-h2m-hxy-u",
+    missing_value=np.float32(1.0e20),
+)
 
 axes = [
-    {
-        "name": "time",
-        "values": [15.0, 45.0],
-        "bounds": [[0.0, 30.0], [30.0, 60.0]],
-        "units": "days since 2000-01-01",
-    },
-    {
-        "name": "latitude",
-        "values": [-45.0, 45.0],
-        "bounds": [[-90.0, 0.0], [0.0, 90.0]],
-    },
-    {
-        "name": "longitude",
-        "values": [90.0, 270.0],
-        "bounds": [[0.0, 180.0], [180.0, 360.0]],
-    },
+    cmor4.Axis(
+        name="time",
+        values=[15.0, 45.0],
+        bounds=[[0.0, 30.0], [30.0, 60.0]],
+        units="days since 2000-01-01",
+    ),
+    cmor4.Axis(
+        name="latitude",
+        values=[-45.0, 45.0],
+        bounds=[[-90.0, 0.0], [0.0, 90.0]],
+    ),
+    cmor4.Axis(
+        name="longitude",
+        values=[90.0, 270.0],
+        bounds=[[0.0, 180.0], [180.0, 360.0]],
+    ),
 ]
 
 data = np.ones((2, 2, 2), dtype="f4") * 288.0
