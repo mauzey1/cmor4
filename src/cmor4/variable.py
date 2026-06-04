@@ -57,8 +57,28 @@ class Variable(_MetadataRecord):
         requested = str(self.name or self.variable_id or self.id or "")
         entries_by_name = project._variable_entries_by_name
         if requested in entries_by_name:
-            return self._select_entry(
-                requested, entries_by_name[requested], self.table_id
+            entries = entries_by_name[requested]
+            if self.table_id:
+                matches = [
+                    entry
+                    for entry in entries
+                    if entry.table_id == str(self.table_id)
+                ]
+                if len(matches) == 1:
+                    return matches[0]
+                raise TableValidationError(
+                    f"Variable {requested!r} was not found in table "
+                    f"{self.table_id!r}."
+                )
+            if len(entries) == 1:
+                return entries[0]
+            choices = ", ".join(
+                f"{entry.table_id}:{entry.name}" for entry in entries
+            )
+            raise TableValidationError(
+                f"Variable {requested!r} is ambiguous across loaded tables; "
+                "specify table_id. "
+                f"Choices: {choices}."
             )
         matches = [
             entry
@@ -112,6 +132,32 @@ class Variable(_MetadataRecord):
             if entry.get(key) not in (None, ""):
                 merged[key] = entry[key]
         return Variable.from_mapping(merged)
+
+    def attributes(self, labels: Mapping[str, str]) -> dict[str, Any]:
+        """Return NetCDF attributes for this data variable."""
+
+        attrs = self.netcdf_attrs(self.attrs)
+        for key in (
+            "units",
+            "standard_name",
+            "long_name",
+            "cell_methods",
+            "cell_measures",
+            "comment",
+        ):
+            if key in self:
+                attrs[key] = self[key]
+        attrs.setdefault("branded_variable_name", labels["branded_name"])
+        for key in (
+            "branding_suffix",
+            "temporal_label",
+            "vertical_label",
+            "horizontal_label",
+            "area_label",
+        ):
+            if key in labels:
+                attrs.setdefault(key, labels[key])
+        return attrs
 
     def validate_against_entry(self, variable_entry: VariableEntry) -> None:
         """Validate variable metadata against a variable table entry."""
@@ -169,29 +215,3 @@ class Variable(_MetadataRecord):
                     f"{variable_entry.table_id}:{variable_entry.name} "
                     f"value {expected!r}."
                 )
-
-    @staticmethod
-    def _select_entry(
-        requested: str,
-        entries: tuple[VariableEntry, ...] | list[VariableEntry],
-        table_id: Any,
-    ) -> VariableEntry:
-        if table_id:
-            matches = [
-                entry for entry in entries if entry.table_id == str(table_id)
-            ]
-            if len(matches) == 1:
-                return matches[0]
-            raise TableValidationError(
-                f"Variable {requested!r} was not found in table {table_id!r}."
-            )
-        if len(entries) == 1:
-            return entries[0]
-        choices = ", ".join(
-            f"{entry.table_id}:{entry.name}" for entry in entries
-        )
-        raise TableValidationError(
-            f"Variable {requested!r} is ambiguous across loaded tables; "
-            "specify table_id. "
-            f"Choices: {choices}."
-        )

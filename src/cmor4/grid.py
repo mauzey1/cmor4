@@ -80,7 +80,7 @@ class Grid(_MetadataRecord):
         )
 
     def mapping_attributes(self) -> dict[str, Any]:
-        attrs = dict(self.attrs)
+        attrs = self.netcdf_attrs(self.attrs)
         mapping_name = self.mapping_name or self.grid_mapping_name
         if mapping_name:
             attrs["grid_mapping_name"] = mapping_name
@@ -91,4 +91,4 @@ class Grid(_MetadataRecord):
                     attrs[f"{key}_units"] = value[1]
             else:
                 attrs[key] = value
-        return attrs
+        return self.netcdf_attrs(attrs)

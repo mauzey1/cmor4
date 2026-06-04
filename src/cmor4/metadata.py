@@ -4,6 +4,8 @@ from collections.abc import Iterator, Mapping
 from dataclasses import fields
 from typing import Any, TypeVar
 
+import numpy as np
+
 
 MetadataRecordT = TypeVar("MetadataRecordT", bound="_MetadataRecord")
 
@@ -50,6 +52,25 @@ class _MetadataRecord(Mapping[str, Any]):
 
     def updated(self: MetadataRecordT, **updates: Any) -> MetadataRecordT:
         return type(self).from_mapping({**self.to_dict(), **updates})
+
+    @staticmethod
+    def is_netcdf_attr_value(value: Any) -> bool:
+        return isinstance(value, (str, bytes, int, float, np.integer, np.floating))
+
+    @staticmethod
+    def netcdf_attrs(values: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            str(key): value
+            for key, value in values.items()
+            if _MetadataRecord.is_netcdf_attr_value(value)
+        }
+
+    @staticmethod
+    def netcdf_array(value: Any) -> np.ndarray:
+        array = np.asarray(value)
+        if array.dtype.kind in {"U", "S", "O"}:
+            return array.astype(str)
+        return array
 
     def __getitem__(self, key: str) -> Any:
         return self.to_dict()[key]

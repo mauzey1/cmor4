@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - cftime is provided by netCDF4 here.
 
 from .axis import Axis
 from .grid import Grid
+from .metadata import _MetadataRecord
 from .tables import ProjectTables
 from .variable import Variable
 from .zfactor import ZFactor
@@ -103,7 +104,11 @@ def create_dataset(
         )
 
     if grid and grid.has_mapping:
-        _add_grid_mapping(grid, data_vars)
+        data_vars[grid.variable_name] = (
+            (),
+            np.int32(0),
+            grid.mapping_attributes(),
+        )
         auxiliary_coord_names.extend(
             str(name) for name in grid.get("coordinates", ()) if name
         )
@@ -124,7 +129,7 @@ def create_dataset(
             f"but variable dimensions resolve to {expected!r}."
         )
 
-    var_attrs = _variable_attrs(variable, var_labels)
+    var_attrs = variable.attributes(var_labels)
     coord_attr = _coordinates_attr(
         variable, scalar_coord_names, auxiliary_coord_names
     )
@@ -230,11 +235,11 @@ def build_output_path(
     branding_suffix = labels.get("branding_suffix", "")
     version = str(dataset.get("version") or f"v{date.today():%Y%m%d}")
     variant_label = _variant_label(dataset)
-    frequency = _as_text(
+    frequency = str(
         dataset.get("frequency", variable.get("frequency", "fx"))
     )
-    region = _as_text(dataset.get("region", "glb"))
-    grid_label = _as_text(dataset.get("grid_label", "gn"))
+    region = str(dataset.get("region", "glb"))
+    grid_label = str(dataset.get("grid_label", "gn"))
 
     tokens = _path_tokens(
         dataset, variable, ds, labels, version, variant_label, frequency
@@ -263,7 +268,7 @@ def build_output_path(
             version,
         ]
         directory = root.joinpath(
-            *[_as_text(part) for part in parts if part not in (None, "")]
+            *[str(part) for part in parts if part not in (None, "")]
         )
 
     time_range = _time_range(ds, frequency) if frequency != "fx" else None
@@ -288,7 +293,7 @@ def build_output_path(
 
     filename = (
         "_".join(
-            _as_text(token) for token in file_tokens if token not in (None, "")
+            str(token) for token in file_tokens if token not in (None, "")
         )
         + ".nc"
     )
@@ -304,12 +309,18 @@ def _add_axis(
     auxiliary_coord_names: list[str],
 ) -> None:
     name = str(axis["name"])
-    out_name = _axis_out_name(axis)
-    values = _array(axis.get("values", []))
-    coord_attrs = _axis_attrs(axis)
+    out_name = str(axis.get("out_name") or axis["name"])
+    values = axis.values_array()
+    coord_attrs = axis.attributes()
 
     if axis.get("scalar", False):
-        coords[out_name] = ((), _scalar(values), coord_attrs)
+        if values.shape == ():
+            scalar_value = values.item()
+        elif values.size == 1:
+            scalar_value = values.reshape(()).item()
+        else:
+            raise ValueError("Scalar coordinates must contain exactly one value.")
+        coords[out_name] = ((), scalar_value, coord_attrs)
         axis_dims[name] = ()
         _add_axis_dim_aliases(axis, axis_dims, ())
         scalar_coord_names.append(out_name)
@@ -319,17 +330,21 @@ def _add_axis(
         coords[out_name] = (
             out_name,
             np.arange(len(values), dtype="i4"),
-            _axis_attrs(axis, include_units=False),
+            axis.attributes(include_units=False),
         )
         aux_name = str(axis["auxiliary_name"])
         data_vars[aux_name] = (
             (out_name,),
             values.astype(str),
-            _attrs(axis.get("auxiliary_attrs", {})),
+            axis.auxiliary_attributes(),
         )
         auxiliary_coord_names.append(aux_name)
     else:
-        dims = _axis_dimensions(axis, axis_dims, default=(out_name,))
+        dims = (
+            _named_dimensions(axis["dimensions"], axis_dims)
+            if "dimensions" in axis
+            else (out_name,)
+        )
         coords[out_name] = (dims, values, coord_attrs)
         if len(dims) == 1:
             axis_dims[name] = dims
@@ -341,19 +356,21 @@ def _add_axis(
             axis_dims.setdefault(out_name, dims)
 
     if "bounds" in axis:
-        climatology_axis = _is_climatology_axis(axis)
+        climatology_axis = str(
+            axis.get("climatology", "")
+        ).lower() in {"1", "true", "yes"}
         bounds_name = str(
             axis.get("bounds_name")
             or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
         )
-        bounds = _array(axis["bounds"])
+        bounds = axis.bounds_array()
         bounds_dims = tuple(coords[out_name][0]) + (
             str(axis.get("bounds_dim", "bnds")),
         )
         data_vars[bounds_name] = (
             bounds_dims,
             bounds,
-            _attrs(axis.get("bounds_attrs", {})),
+            axis.bounds_attributes(),
         )
         coord_data = coords[out_name]
         attrs = dict(coord_data[2])
@@ -368,37 +385,24 @@ def _add_zfactor(
 ) -> str:
     name = str(zfactor["name"])
     out_name = str(zfactor.get("out_name") or name)
-    values = _array(zfactor.get("values", zfactor.get("data", [])))
+    values = zfactor.values_array()
     dims = _named_dimensions(zfactor.get("dimensions", ()), axis_dims)
     if not dims and values.ndim > 0:
         dims = (out_name,)
-    attrs = _attrs(zfactor.get("attrs", {}))
-    for key in ("units", "standard_name", "long_name"):
-        if key in zfactor:
-            attrs[key] = zfactor[key]
+    attrs = zfactor.attributes()
     data_vars[out_name] = (dims, values, attrs)
 
     if "bounds" in zfactor:
         bounds_name = str(zfactor.get("bounds_name") or f"{out_name}_bnds")
         data_vars[bounds_name] = (
             dims + (str(zfactor.get("bounds_dim", "bnds")),),
-            _array(zfactor["bounds"]),
-            _attrs(zfactor.get("bounds_attrs", {})),
+            zfactor.bounds_array(),
+            zfactor.bounds_attributes(),
         )
         attrs = dict(data_vars[out_name][2])
         attrs["bounds"] = bounds_name
         data_vars[out_name] = (dims, values, attrs)
     return out_name
-
-
-def _add_grid_mapping(
-    grid: Grid, data_vars: dict[str, Any]
-) -> None:
-    data_vars[grid.variable_name] = (
-        (),
-        np.int32(0),
-        _attrs(grid.mapping_attributes()),
-    )
 
 
 def _set_formula_terms(
@@ -418,13 +422,13 @@ def _set_formula_terms(
             continue
         axis_name = axis.get("name")
         generic_level_name = axis.get("generic_level_name")
-        out_name = _axis_out_name(axis)
+        out_name = str(axis.get("out_name") or axis["name"])
         if {
             str(value)
             for value in (axis_name, generic_level_name, out_name)
             if value
         } & variable_dims:
-            coord_name = _axis_out_name(axis)
+            coord_name = str(axis.get("out_name") or axis["name"])
             if coord_name in ds.coords:
                 ds[coord_name].attrs["formula_terms"] = formula_terms
 
@@ -476,33 +480,6 @@ def _variable_dims(
     )
 
 
-def _variable_attrs(
-    variable: Variable, labels: Mapping[str, str]
-) -> dict[str, Any]:
-    attrs = _attrs(variable.get("attrs", {}))
-    for key in (
-        "units",
-        "standard_name",
-        "long_name",
-        "cell_methods",
-        "cell_measures",
-        "comment",
-    ):
-        if key in variable:
-            attrs[key] = variable[key]
-    attrs.setdefault("branded_variable_name", labels["branded_name"])
-    for key in (
-        "branding_suffix",
-        "temporal_label",
-        "vertical_label",
-        "horizontal_label",
-        "area_label",
-    ):
-        if key in labels:
-            attrs.setdefault(key, labels[key])
-    return attrs
-
-
 def _coordinates_attr(
     variable: Variable,
     scalar_coord_names: Sequence[str],
@@ -531,7 +508,7 @@ def _global_attrs(
     for key, value in dataset.items():
         if key in INTERNAL_DATASET_KEYS or key.startswith("_"):
             continue
-        if _is_attr_value(value):
+        if _MetadataRecord.is_netcdf_attr_value(value):
             attrs[key] = value
 
     var_name, labels = _variable_names(variable)
@@ -556,36 +533,8 @@ def _global_attrs(
         "creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     )
     if extra_attrs:
-        attrs.update(_attrs(extra_attrs))
+        attrs.update(_MetadataRecord.netcdf_attrs(extra_attrs))
     return attrs
-
-
-def _axis_attrs(
-    axis: Axis, *, include_units: bool = True
-) -> dict[str, Any]:
-    attrs = _attrs(axis.get("attrs", {}))
-    if include_units and "units" in axis:
-        attrs["units"] = axis["units"]
-    for key in (
-        "standard_name",
-        "long_name",
-        "axis",
-        "positive",
-        "formula",
-        "valid_min",
-        "valid_max",
-    ):
-        if key in axis:
-            attrs[key] = axis[key]
-    return attrs
-
-
-def _is_climatology_axis(axis: Axis) -> bool:
-    return str(axis.get("climatology", "")).lower() in {"1", "true", "yes"}
-
-
-def _axis_out_name(axis: Axis) -> str:
-    return str(axis.get("out_name") or axis["name"])
 
 
 def _add_axis_dim_aliases(
@@ -597,17 +546,6 @@ def _add_axis_dim_aliases(
         value = axis.get(key)
         if value:
             axis_dims.setdefault(str(value), dims)
-
-
-def _axis_dimensions(
-    axis: Axis,
-    axis_dims: Mapping[str, tuple[str, ...]],
-    *,
-    default: tuple[str, ...],
-) -> tuple[str, ...]:
-    if "dimensions" not in axis:
-        return default
-    return _named_dimensions(axis["dimensions"], axis_dims)
 
 
 def _named_dimensions(
@@ -677,14 +615,14 @@ def _render_path_template(
             and "".join(f"<{name}>" for name in token_names) == section
         ):
             parts.extend(
-                _as_text(tokens.get(name, ""))
+                str(tokens.get(name, ""))
                 for name in token_names
                 if tokens.get(name, "") not in (None, "")
             )
         else:
             rendered = re.sub(
                 r"<([^>]+)>",
-                lambda match: _as_text(tokens.get(match.group(1), "")),
+                lambda match: str(tokens.get(match.group(1), "")),
                 section,
             )
             if rendered:
@@ -807,7 +745,17 @@ def _add_time_delta(value: Any, delta: timedelta) -> Any:
     try:
         return value + delta
     except TypeError:
-        return _as_datetime(value) + delta
+        return (
+            datetime(
+                value.year,
+                value.month,
+                value.day,
+                int(value.hour),
+                int(value.minute),
+                int(value.second),
+            )
+            + delta
+        )
 
 
 def _date_part(value: Any, precision: str) -> str:
@@ -831,44 +779,3 @@ def _date_part(value: Any, precision: str) -> str:
         f"{value.hour:02d}{value.minute:02d}{value.second:02d}"
     )
 
-
-def _as_datetime(value: Any) -> datetime:
-    return datetime(
-        value.year,
-        value.month,
-        value.day,
-        int(value.hour),
-        int(value.minute),
-        int(value.second),
-    )
-
-
-def _array(value: Any) -> np.ndarray:
-    array = np.asarray(value)
-    if array.dtype.kind in {"U", "S", "O"}:
-        return array.astype(str)
-    return array
-
-
-def _scalar(value: np.ndarray) -> Any:
-    if value.shape == ():
-        return value.item()
-    if value.size != 1:
-        raise ValueError("Scalar coordinates must contain exactly one value.")
-    return value.reshape(()).item()
-
-
-def _attrs(values: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        str(key): value
-        for key, value in values.items()
-        if _is_attr_value(value)
-    }
-
-
-def _is_attr_value(value: Any) -> bool:
-    return isinstance(value, (str, bytes, int, float, np.integer, np.floating))
-
-
-def _as_text(value: Any) -> str:
-    return str(value)

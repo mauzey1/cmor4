@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
+import numpy as np
+
 from ._table_utils import (
     is_table_value,
     metadata_value_matches,
@@ -90,6 +92,30 @@ class ZFactor(_MetadataRecord):
         if len(matches) == 1:
             return matches[0]
         return None, None
+
+    def attributes(self) -> dict[str, Any]:
+        """Return NetCDF attributes for this formula-term variable."""
+
+        attrs = self.netcdf_attrs(self.attrs)
+        for key in ("units", "standard_name", "long_name"):
+            if key in self:
+                attrs[key] = self[key]
+        return attrs
+
+    def bounds_attributes(self) -> dict[str, Any]:
+        """Return NetCDF attributes for this formula-term bounds variable."""
+
+        return self.netcdf_attrs(self.bounds_attrs)
+
+    def values_array(self) -> np.ndarray:
+        """Return this formula term's values as a NetCDF-ready array."""
+
+        return self.netcdf_array(self.get("values", self.get("data", [])))
+
+    def bounds_array(self) -> np.ndarray:
+        """Return this formula term's bounds as a NetCDF-ready array."""
+
+        return self.netcdf_array(self["bounds"])
 
     def _validate_metadata(
         self,

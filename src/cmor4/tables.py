@@ -47,7 +47,9 @@ class ProjectTables:
             Path(formula_table) if formula_table is not None else None
         )
         self.grid_table_file = Path(grid_table) if grid_table is not None else None
-        self.cv = self._read_cv(self.cv_file)
+        with self.cv_file.open() as handle:
+            data = json.load(handle)
+        self.cv = data.get("CV", data)
         self.variable_entries: dict[str, VariableEntry] = {}
         self._variable_entries_by_name: dict[str, list[VariableEntry]] = {}
         self._variable_axis_entries: dict[str, Mapping[str, Any]] = {}
@@ -156,7 +158,12 @@ class ProjectTables:
         """Fill scalar CV defaults and derived license text when available."""
 
         for key, value in self.cv.items():
-            if key not in dataset and _is_scalar_cv_default(value):
+            templated = isinstance(value, str) and (
+                "<" in value or ">" in value
+            )
+            if key not in dataset and not templated and isinstance(
+                value, (str, int, float)
+            ):
                 dataset[key] = value
 
     def _add_table_header_defaults(
@@ -255,7 +262,14 @@ class ProjectTables:
 
         required = self.required_global_attributes()
         if "Conventions" in required:
-            dataset.setdefault("Conventions", self._default_conventions())
+            conventions = self.cv.get("Conventions")
+            if isinstance(conventions, list) and conventions:
+                default_conventions = str(conventions[0])
+            elif isinstance(conventions, str) and conventions:
+                default_conventions = conventions
+            else:
+                default_conventions = "CF-1.11"
+            dataset.setdefault("Conventions", default_conventions)
         if "creation_date" in required:
             dataset.setdefault(
                 "creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -269,7 +283,14 @@ class ProjectTables:
         for key in required:
             if key in dataset:
                 continue
-            default = _single_required_default(self._cv_definition_for(key))
+            value = self._cv_definition_for(key)
+            if not _is_table_value(value):
+                default = None
+            elif isinstance(value, Mapping):
+                keys = list(value)
+                default = keys[0] if len(keys) == 1 else None
+            else:
+                default = _single_cv_default(value)
             if default is not None:
                 dataset[key] = default
 
@@ -329,7 +350,11 @@ class ProjectTables:
         """Validate user-supplied controlled values against the project CV."""
 
         for key, value in dataset.items():
-            if _is_internal_dataset_key(key):
+            if key.startswith("_") or key in {
+                "outpath",
+                "output_file_template",
+                "output_path_template",
+            }:
                 continue
             allowed = self._cv_definition_for(str(key))
             if allowed is not None and not self._value_allowed(
@@ -551,12 +576,6 @@ class ProjectTables:
                 ) from exc
 
     @staticmethod
-    def _read_cv(cv_file: Path) -> Mapping[str, Any]:
-        with cv_file.open() as handle:
-            data = json.load(handle)
-        return data.get("CV", data)
-
-    @staticmethod
     def _read_entries(table_file: Path, key: str) -> dict[str, Mapping[str, Any]]:
         with table_file.open() as handle:
             data = json.load(handle)
@@ -570,9 +589,9 @@ class ProjectTables:
         with table_file.open() as handle:
             data = json.load(handle)
         entries = data.get("variable_entry", {})
-        table_id = _normalize_table_id(
-            data.get("Header", {}).get("table_id") or table_file.stem
-        )
+        table_id = str(data.get("Header", {}).get("table_id") or table_file.stem)
+        if table_id.startswith("Table "):
+            table_id = table_id.removeprefix("Table ")
         for name, entry in entries.items():
             variable_entry = VariableEntry(
                 name=name,
@@ -598,14 +617,29 @@ class ProjectTables:
         allowed: Any,
         dataset: Mapping[str, Any],
     ) -> bool:
-        if key == "license" and _is_license_template_cv(allowed):
+        if (
+            key == "license"
+            and isinstance(allowed, Mapping)
+            and isinstance(allowed.get("license_template"), str)
+        ):
             return True
         if isinstance(allowed, str) and str(value) == allowed:
             return True
         if isinstance(allowed, str) and "<" in allowed and ">" in allowed:
             return _template_value_matches(str(value), allowed, dataset)
         if key in {"license_url", "license_type"}:
-            license_info = self._license_info(dataset)
+            license_info = None
+            license_cv = self.cv.get("license")
+            if isinstance(license_cv, Mapping):
+                license_entries = license_cv.get("license_id")
+                license_id = dataset.get("license_id")
+                if isinstance(license_entries, Mapping) and license_id not in (
+                    None,
+                    "",
+                ):
+                    candidate = license_entries.get(str(license_id))
+                    if isinstance(candidate, Mapping):
+                        license_info = candidate
             if license_info is not None and key in license_info:
                 return _metadata_value_matches(value, license_info[key])
             return True
@@ -631,19 +665,6 @@ class ProjectTables:
             return license_cv.get("license_id")
         return None
 
-    def _license_info(self, dataset: Mapping[str, Any]) -> Mapping[str, Any] | None:
-        license_cv = self.cv.get("license")
-        if not isinstance(license_cv, Mapping):
-            return None
-        license_entries = license_cv.get("license_id")
-        if not isinstance(license_entries, Mapping):
-            return None
-        license_id = dataset.get("license_id")
-        if license_id in (None, ""):
-            return None
-        license_info = license_entries.get(str(license_id))
-        return license_info if isinstance(license_info, Mapping) else None
-
     def _experiment_entry(
         self, dataset: Mapping[str, Any]
     ) -> Mapping[str, Any] | None:
@@ -656,14 +677,6 @@ class ProjectTables:
             return None
         entry = experiment_entries.get(str(experiment_id))
         return entry if isinstance(entry, Mapping) else None
-
-    def _default_conventions(self) -> str:
-        conventions = self.cv.get("Conventions")
-        if isinstance(conventions, list) and conventions:
-            return str(conventions[0])
-        if isinstance(conventions, str) and conventions:
-            return conventions
-        return "CF-1.11"
 
     def _validate_required_parent_value(
         self,
@@ -724,20 +737,6 @@ def _resolve_optional_table(
     return None
 
 
-def _is_internal_dataset_key(key: str) -> bool:
-    return key.startswith("_") or key in {
-        "outpath",
-        "output_file_template",
-        "output_path_template",
-    }
-
-
-def _is_scalar_cv_default(value: Any) -> bool:
-    if isinstance(value, str) and ("<" in value or ">" in value):
-        return False
-    return isinstance(value, (str, int, float))
-
-
 def _single_cv_default(value: Any) -> Any:
     if not _is_table_value(value):
         return None
@@ -750,27 +749,12 @@ def _single_cv_default(value: Any) -> Any:
     return value
 
 
-def _single_required_default(value: Any) -> Any:
-    if not _is_table_value(value):
-        return None
-    if isinstance(value, Mapping):
-        keys = list(value)
-        return keys[0] if len(keys) == 1 else None
-    return _single_cv_default(value)
-
-
 def _cv_values(value: Any) -> tuple[Any, ...]:
     if not _is_table_value(value):
         return ()
     if isinstance(value, list):
         return tuple(item for item in value if _is_table_value(item))
     return (value,)
-
-
-def _is_license_template_cv(value: Any) -> bool:
-    return isinstance(value, Mapping) and isinstance(
-        value.get("license_template"), str
-    )
 
 
 def _variant_label(dataset: Mapping[str, Any]) -> str | None:
@@ -842,13 +826,6 @@ def _posix_regex_to_python(pattern: str) -> str:
         .replace("\\{", "{")
         .replace("\\}", "}")
     )
-
-
-def _normalize_table_id(value: Any) -> str:
-    text = str(value)
-    if text.startswith("Table "):
-        return text.removeprefix("Table ")
-    return text
 
 
 def _source_type_pattern_matches(value: str, pattern: Any) -> bool:

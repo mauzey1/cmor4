@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
+import numpy as np
+
 from ._table_utils import (
     entry_bounds,
     entry_values,
@@ -195,6 +197,45 @@ class Axis(_MetadataRecord):
                 if value
             )
         return missing_axes
+
+    def attributes(self, *, include_units: bool = True) -> dict[str, Any]:
+        """Return NetCDF attributes for this coordinate axis."""
+
+        attrs = self.netcdf_attrs(self.attrs)
+        if include_units and "units" in self:
+            attrs["units"] = self["units"]
+        for key in (
+            "standard_name",
+            "long_name",
+            "axis",
+            "positive",
+            "formula",
+            "valid_min",
+            "valid_max",
+        ):
+            if key in self:
+                attrs[key] = self[key]
+        return attrs
+
+    def auxiliary_attributes(self) -> dict[str, Any]:
+        """Return NetCDF attributes for this axis' auxiliary variable."""
+
+        return self.netcdf_attrs(self.auxiliary_attrs)
+
+    def bounds_attributes(self) -> dict[str, Any]:
+        """Return NetCDF attributes for this axis' bounds variable."""
+
+        return self.netcdf_attrs(self.bounds_attrs)
+
+    def values_array(self) -> np.ndarray:
+        """Return this axis' values as a NetCDF-ready array."""
+
+        return self.netcdf_array(self.get("values", []))
+
+    def bounds_array(self) -> np.ndarray:
+        """Return this axis' bounds as a NetCDF-ready array."""
+
+        return self.netcdf_array(self["bounds"])
 
     def _matching_coordinate_entries(
         self, project: Any
