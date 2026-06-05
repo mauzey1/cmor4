@@ -51,6 +51,34 @@ class Variable(_MetadataRecord):
     attrs: Mapping[str, Any] = field(default_factory=dict)
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
+    def names(self) -> tuple[str, dict[str, str]]:
+        """Return the output variable id and branded-label metadata."""
+
+        branded_name = str(
+            self.get("name") or self.get("id") or self.get("variable_id")
+        )
+        variable_id = str(
+            self.get("id")
+            or self.get("variable_id")
+            or branded_name.split("_", 1)[0]
+        )
+        labels = {"branded_name": branded_name, "variable_id": variable_id}
+        if "_" in branded_name:
+            suffix = branded_name.split("_", 1)[1]
+            labels["branding_suffix"] = suffix
+            parts = suffix.split("-")
+            for key, value in zip(
+                (
+                    "temporal_label",
+                    "vertical_label",
+                    "horizontal_label",
+                    "area_label",
+                ),
+                parts,
+            ):
+                labels[key] = value
+        return variable_id, labels
+
     def resolve_table_entry(self, project: Any) -> VariableEntry:
         """Find a variable table entry by branded name or variable name."""
 

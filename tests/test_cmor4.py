@@ -86,6 +86,12 @@ class Cmor4Test(unittest.TestCase):
         self.assertEqual(updated.extra["custom_key"], "custom_value")
         self.assertEqual(axis.name, "time")
         self.assertEqual(zfactor.values, 100000.0)
+        variable_id, labels = cmor4.Variable(
+            name="tas_tavg-h2m-hxy-u"
+        ).names()
+        self.assertEqual(variable_id, "tas")
+        self.assertEqual(labels["branded_name"], "tas_tavg-h2m-hxy-u")
+        self.assertEqual(labels["vertical_label"], "h2m")
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             _, prepared_variable = self.project.prepare_inputs(

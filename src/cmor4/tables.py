@@ -182,23 +182,18 @@ class ProjectTables:
     ) -> None:
         """Fill global attributes that are derived from the variable table."""
 
-        variable_id = str(variable.get("id") or variable.get("variable_id"))
-        branded_name = str(variable.get("name") or variable_id)
+        variable_id, labels = variable.names()
         dataset.setdefault("variable_id", variable_id)
-        dataset.setdefault("branded_variable", branded_name)
-        if "_" in branded_name:
-            suffix = branded_name.split("_", 1)[1]
-            dataset.setdefault("branding_suffix", suffix)
-            for key, value in zip(
-                (
-                    "temporal_label",
-                    "vertical_label",
-                    "horizontal_label",
-                    "area_label",
-                ),
-                suffix.split("-"),
-            ):
-                dataset.setdefault(key, value)
+        dataset.setdefault("branded_variable", labels["branded_name"])
+        for key in (
+            "branding_suffix",
+            "temporal_label",
+            "vertical_label",
+            "horizontal_label",
+            "area_label",
+        ):
+            if key in labels:
+                dataset.setdefault(key, labels[key])
         for key in ("frequency", "realm", "table_id"):
             value = variable.get(key)
             if _is_table_value(value):

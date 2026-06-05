@@ -118,8 +118,20 @@ def create_dataset(
         zfactor_names.append(_add_zfactor(zfactor, data_vars, axis_dims))
 
     data_array = np.asarray(data)
-    var_name, var_labels = _variable_names(variable)
-    dim_names = _variable_dims(variable, axes, grid)
+    var_name, var_labels = variable.names()
+    if grid is not None:
+        dim_names = grid.variable_dimensions(variable)
+    else:
+        dim_names = None
+    if dim_names is None:
+        if "dimensions" in variable:
+            dim_names = tuple(str(name) for name in variable["dimensions"])
+        else:
+            dim_names = tuple(
+                str(axis["name"])
+                for axis in axes
+                if not axis.get("auxiliary", False)
+            )
     dims = tuple(dim for name in dim_names for dim in axis_dims.get(name, ()))
 
     if data_array.ndim != len(dims):
@@ -130,9 +142,16 @@ def create_dataset(
         )
 
     var_attrs = variable.attributes(var_labels)
-    coord_attr = _coordinates_attr(
-        variable, scalar_coord_names, auxiliary_coord_names
-    )
+    explicit_coordinates = variable.get("coordinates")
+    if explicit_coordinates:
+        coord_attr = (
+            " ".join(str(value) for value in explicit_coordinates)
+            if isinstance(explicit_coordinates, (list, tuple))
+            else str(explicit_coordinates)
+        )
+    else:
+        coord_names = [*scalar_coord_names, *auxiliary_coord_names]
+        coord_attr = " ".join(dict.fromkeys(coord_names))
     if coord_attr:
         var_attrs["coordinates"] = coord_attr
     if grid and grid.variable_name in data_vars:
@@ -230,7 +249,7 @@ def build_output_path(
     """Build a CMOR-like output path from dataset and variable metadata."""
 
     root = Path(str(dataset.get("outpath", "."))).expanduser()
-    var_name, labels = _variable_names(variable)
+    var_name, labels = variable.names()
     branded_name = labels["branded_name"]
     branding_suffix = labels.get("branding_suffix", "")
     version = str(dataset.get("version") or f"v{date.today():%Y%m%d}")
@@ -433,69 +452,6 @@ def _set_formula_terms(
                 ds[coord_name].attrs["formula_terms"] = formula_terms
 
 
-def _variable_names(
-    variable: Variable,
-) -> tuple[str, dict[str, str]]:
-    branded_name = str(
-        variable.get("name")
-        or variable.get("id")
-        or variable.get("variable_id")
-    )
-    variable_id = str(
-        variable.get("id")
-        or variable.get("variable_id")
-        or branded_name.split("_", 1)[0]
-    )
-    labels = {"branded_name": branded_name, "variable_id": variable_id}
-    if "_" in branded_name:
-        suffix = branded_name.split("_", 1)[1]
-        labels["branding_suffix"] = suffix
-        parts = suffix.split("-")
-        for key, value in zip(
-            (
-                "temporal_label",
-                "vertical_label",
-                "horizontal_label",
-                "area_label",
-            ),
-            parts,
-        ):
-            labels[key] = value
-    return variable_id, labels
-
-
-def _variable_dims(
-    variable: Variable,
-    axes: Sequence[Axis],
-    grid: Grid | None = None,
-) -> tuple[str, ...]:
-    if grid is not None:
-        dimensions = grid.variable_dimensions(variable)
-        if dimensions is not None:
-            return dimensions
-    if "dimensions" in variable:
-        return tuple(str(name) for name in variable["dimensions"])
-    return tuple(
-        str(axis["name"]) for axis in axes if not axis.get("auxiliary", False)
-    )
-
-
-def _coordinates_attr(
-    variable: Variable,
-    scalar_coord_names: Sequence[str],
-    auxiliary_coord_names: Sequence[str],
-) -> str:
-    explicit = variable.get("coordinates")
-    if explicit:
-        return (
-            " ".join(str(value) for value in explicit)
-            if isinstance(explicit, (list, tuple))
-            else str(explicit)
-        )
-    names = [*scalar_coord_names, *auxiliary_coord_names]
-    return " ".join(dict.fromkeys(names))
-
-
 def _global_attrs(
     dataset: Mapping[str, Any],
     variable: Variable,
@@ -511,7 +467,7 @@ def _global_attrs(
         if _MetadataRecord.is_netcdf_attr_value(value):
             attrs[key] = value
 
-    var_name, labels = _variable_names(variable)
+    var_name, labels = variable.names()
     attrs.setdefault("variable_id", var_name)
     attrs.setdefault("branded_variable", labels["branded_name"])
     for key in (
@@ -778,4 +734,3 @@ def _date_part(value: Any, precision: str) -> str:
         f"{value.year:04d}{value.month:02d}{value.day:02d}"
         f"{value.hour:02d}{value.minute:02d}{value.second:02d}"
     )
-
