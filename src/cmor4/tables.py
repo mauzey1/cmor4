@@ -15,6 +15,7 @@ from ._table_utils import (
 from .axis import Axis
 from .exceptions import TableValidationError
 from .grid import Grid
+from ._templates import render_template as _render_template
 from .variable import Variable, VariableEntry
 from .zfactor import ZFactor
 
@@ -776,14 +777,6 @@ def _new_tracking_id(dataset: Mapping[str, Any], cv: Mapping[str, Any]) -> str:
         elif isinstance(tracking_prefix, str):
             prefix = tracking_prefix
     return f"{prefix}/{identifier}" if prefix not in (None, "") else identifier
-
-
-def _render_template(template: str, tokens: Mapping[str, Any]) -> str:
-    return re.sub(
-        r"<([^>]+)>",
-        lambda match: str(tokens.get(match.group(1), "")),
-        template,
-    )
 
 
 def _template_value_matches(

@@ -142,6 +142,33 @@ class Cmor4Test(unittest.TestCase):
             self.assertEqual(ds["lat"].attrs["bounds"], "lat_bnds")
             self.assertEqual(ds.attrs["variant_label"], "r9i1p1f3")
 
+    def test_render_template_uses_global_attrs_and_special_values(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = dataset_info(Path(tmp_dir))
+            variable = cmor4.Variable(name="sample", dimensions=["time"])
+            ds = cmor4.create_dataset(
+                info, variable, [time_axis()], np.ones(2, dtype="f4")
+            )
+
+            self.assertEqual(
+                cmor4.render_template(
+                    "<variable_id>_<source_id>_<time_range>_<version>",
+                    info,
+                    variable,
+                    ds,
+                ),
+                "sample_DUMMY-MODEL_200001-200002_v20200101",
+            )
+
+            info["output_path_template"] = "<activity_id>"
+            info["output_file_template"] = (
+                "<variable_id>_<frequency>_<time_range>"
+            )
+            self.assertEqual(
+                cmor4.build_output_path(info, variable, ds).name,
+                "sample_mon_200001-200002.nc",
+            )
+
     def test_scalar_height_and_pressure_level_patterns(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             info = dataset_info(Path(tmp_dir))

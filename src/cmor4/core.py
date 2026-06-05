@@ -18,6 +18,7 @@ from .axis import Axis
 from .grid import Grid
 from .metadata import _MetadataRecord
 from .tables import ProjectTables
+from ._templates import render_template as _render_template
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -33,6 +34,17 @@ RIPF_KEYS = (
     "initialization_index",
     "physics_index",
     "forcing_index",
+)
+
+DEFAULT_OUTPUT_PATH_TEMPLATE = (
+    "<drs_specs>/<mip_era>/<activity_id>/<institution_id>/<source_id>/"
+    "<experiment_id>/<variant_label>/<region>/<frequency>/<variable_id>/"
+    "<branding_suffix>/<grid_label>/<version>"
+)
+
+DEFAULT_OUTPUT_FILE_TEMPLATE = (
+    "<branded_variable><frequency><region><grid_label><source_id>"
+    "<experiment_id><variant_label><time_range>"
 )
 
 
@@ -249,74 +261,41 @@ def build_output_path(
     """Build a CMOR-like output path from dataset and variable metadata."""
 
     root = Path(str(dataset.get("outpath", "."))).expanduser()
-    var_name, labels = variable.names()
-    branded_name = labels["branded_name"]
-    branding_suffix = labels.get("branding_suffix", "")
-    version = str(dataset.get("version") or f"v{date.today():%Y%m%d}")
-    variant_label = _variant_label(dataset)
-    frequency = str(
-        dataset.get("frequency", variable.get("frequency", "fx"))
+    tokens = _template_tokens(dataset, variable, ds)
+    path_template = str(
+        dataset.get("output_path_template") or DEFAULT_OUTPUT_PATH_TEMPLATE
     )
-    region = str(dataset.get("region", "glb"))
-    grid_label = str(dataset.get("grid_label", "gn"))
-
-    tokens = _path_tokens(
-        dataset, variable, ds, labels, version, variant_label, frequency
+    file_template = str(
+        dataset.get("output_file_template") or DEFAULT_OUTPUT_FILE_TEMPLATE
     )
-    path_template = dataset.get("output_path_template")
-    file_template = dataset.get("output_file_template")
 
-    if path_template:
-        directory = root.joinpath(
-            *_render_path_template(str(path_template), tokens)
-        )
-    else:
-        parts = [
-            dataset.get("drs_specs"),
-            dataset.get("mip_era"),
-            dataset.get("activity_id"),
-            dataset.get("institution_id"),
-            dataset.get("source_id"),
-            dataset.get("experiment_id"),
-            variant_label,
-            region,
-            frequency,
-            var_name,
-            branding_suffix,
-            grid_label,
-            version,
-        ]
-        directory = root.joinpath(
-            *[str(part) for part in parts if part not in (None, "")]
-        )
+    directory = root.joinpath(*_render_path_template(path_template, tokens))
+    rendered_tokens = _render_path_template(file_template, tokens)
 
-    time_range = _time_range(ds, frequency) if frequency != "fx" else None
-    if file_template:
-        rendered_tokens = _render_path_template(str(file_template), tokens)
-        if time_range:
-            rendered_tokens.append(time_range)
-        filename = "_".join(rendered_tokens) + ".nc"
-        return directory / filename
+    if (
+        dataset.get("output_file_template")
+        and tokens.get("time_range")
+        and "<time_range>" not in file_template
+        and "<time-range>" not in file_template
+    ):
+        rendered_tokens.append(str(tokens["time_range"]))
 
-    file_tokens = [
-        branded_name,
-        frequency,
-        region,
-        grid_label,
-        dataset.get("source_id"),
-        dataset.get("experiment_id"),
-        variant_label,
-    ]
-    if time_range:
-        file_tokens.append(time_range)
-
-    filename = (
-        "_".join(
-            str(token) for token in file_tokens if token not in (None, "")
-        )
-        + ".nc"
-    )
+    filename = "_".join(rendered_tokens) + ".nc"
     return directory / filename
+
+
+def render_template(
+    template: str,
+    dataset: Mapping[str, Any],
+    variable: Variable,
+    ds: xr.Dataset | None = None,
+) -> str:
+    """Render a template from global attributes and computed path tokens."""
+
+    return _render_template(
+        template,
+        _template_tokens(dataset, variable, ds),
+    )
 
 
 def _add_axis(
@@ -527,36 +506,56 @@ def _variant_label(dataset: Mapping[str, Any]) -> str:
     return "r1i1p1f1"
 
 
-def _path_tokens(
+def _template_tokens(
     dataset: Mapping[str, Any],
     variable: Variable,
     ds: xr.Dataset | None,
-    labels: Mapping[str, str],
-    version: str,
-    variant_label: str,
-    frequency: str,
 ) -> dict[str, Any]:
-    var_name = labels["variable_id"]
+    var_name, labels = variable.names()
+    frequency = str(
+        dataset.get("frequency", variable.get("frequency", "fx"))
+    )
+    variant_label = _variant_label(dataset)
+    version = str(dataset.get("version") or f"v{date.today():%Y%m%d}")
+    time_range = _time_range(ds, frequency) if frequency != "fx" else None
+
     tokens = {
-        key: value for key, value in dataset.items() if not key.startswith("_")
+        str(key): value
+        for key, value in (ds.attrs.items() if ds is not None else ())
+        if not str(key).startswith("_")
     }
     tokens.update(
         {
+            str(key): value
+            for key, value in dataset.items()
+            if key not in INTERNAL_DATASET_KEYS and not str(key).startswith("_")
+        }
+    )
+    tokens.update(
+        {
+            "branded_name": labels["branded_name"],
             "branded_variable": labels["branded_name"],
+            "branded_variable_name": labels["branded_name"],
             "branding_suffix": labels.get("branding_suffix", ""),
             "frequency": frequency,
+            "grid_label": dataset.get("grid_label", tokens.get("grid_label", "gn")),
             "member_id": dataset.get("member_id", variant_label),
-            "time-range": (
-                _time_range(ds, frequency) if frequency != "fx" else ""
-            ),
-            "time_range": (
-                _time_range(ds, frequency) if frequency != "fx" else ""
-            ),
+            "region": dataset.get("region", tokens.get("region", "glb")),
+            "time-range": time_range or "",
+            "time_range": time_range or "",
             "variable_id": var_name,
             "variant_label": variant_label,
             "version": version,
         }
     )
+    for key in (
+        "temporal_label",
+        "vertical_label",
+        "horizontal_label",
+        "area_label",
+    ):
+        if key in labels:
+            tokens[key] = labels[key]
     return tokens
 
 
@@ -576,11 +575,7 @@ def _render_path_template(
                 if tokens.get(name, "") not in (None, "")
             )
         else:
-            rendered = re.sub(
-                r"<([^>]+)>",
-                lambda match: str(tokens.get(match.group(1), "")),
-                section,
-            )
+            rendered = _render_template(section, tokens)
             if rendered:
                 parts.append(rendered)
     return parts
