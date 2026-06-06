@@ -425,7 +425,13 @@ class ControlledVocabulary(Mapping[str, Any]):
         if isinstance(allowed, str) and str(value) == allowed:
             return True
         if isinstance(allowed, str) and "<" in allowed and ">" in allowed:
-            return _template_value_matches(str(value), allowed, dataset)
+            separator: str | None
+            match key:
+                case "branding_suffix":
+                    separator = "-"
+                case _:
+                    separator = None
+            return value == _render_template(allowed, dataset, separator)
         if key in {"license_url", "license_type"}:
             license_info = None
             license_cv = self.get("license")
@@ -539,24 +545,6 @@ def _new_tracking_id(dataset: Mapping[str, Any], cv: Mapping[str, Any]) -> str:
         elif isinstance(tracking_prefix, str):
             prefix = tracking_prefix
     return f"{prefix}/{identifier}" if prefix not in (None, "") else identifier
-
-
-def _template_value_matches(
-    value: str, template: str, tokens: Mapping[str, Any]
-) -> bool:
-    rendered = _render_template(template, tokens)
-    if value == rendered:
-        return True
-    token_names = re.findall(r"<([^>]+)>", template)
-    if token_names:
-        joined = "-".join(
-            str(tokens.get(name, ""))
-            for name in token_names
-            if tokens.get(name, "")
-        )
-        if value == joined:
-            return True
-    return False
 
 
 def _allowed_list_item(value: str, item: Any) -> bool:

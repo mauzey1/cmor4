@@ -269,18 +269,15 @@ def build_output_path(
         dataset.get("output_file_template", DEFAULT_OUTPUT_FILE_TEMPLATE)
     )
 
-    path_template = re.sub("><", ">/<", path_template)
-    file_template = re.sub("><", ">_<", file_template)
-
     if (
         tokens.get("time_range")
         and "<time_range>" not in file_template
         and "<time-range>" not in file_template
     ):
-        file_template += "_<time_range>"
+        file_template += "<time_range>"
 
-    directory = render_template(path_template, tokens)
-    filename = render_template(file_template, tokens) + ".nc"
+    directory = render_template(path_template, tokens, "/")
+    filename = render_template(file_template, tokens, "_") + ".nc"
 
     return root / directory / filename
 
@@ -290,12 +287,14 @@ def string_from_template(
     dataset: Mapping[str, Any],
     variable: Variable,
     ds: xr.Dataset | None = None,
+    separator: str | None = None,
 ) -> str:
     """Render a template from global attributes and computed path tokens."""
 
     return render_template(
         template,
         _template_tokens(dataset, variable, ds),
+        separator
     )
 
 
