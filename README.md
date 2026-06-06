@@ -13,10 +13,9 @@ axes, optional grids or z-factors, and data arrays; `cmor4` creates an
 
 For table-backed validation, pass the project CV file and the variable table
 files that define the variables you want to write. Coordinate metadata is read
-from the project coordinate table, with any `axis_entry` metadata in the loaded
-variable table files taking precedence for matching axes. Formula-term metadata
-is read from the project formula terms table. These files come from the project
-table repositories, not from `cmor4`.
+from the project coordinate and grid tables. Formula-term metadata is read from
+the project formula terms table. These files come from the project table
+repositories, not from `cmor4`.
 
 With `project=`, the caller normally supplies data values, bounds, source-time
 units, missing values, and non-table custom metadata. Standardized variable

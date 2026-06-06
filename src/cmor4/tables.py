@@ -53,7 +53,6 @@ class ProjectTables:
         self.cv = data.get("CV", data)
         self.variable_entries: dict[str, VariableEntry] = {}
         self._variable_entries_by_name: dict[str, list[VariableEntry]] = {}
-        self._variable_axis_entries: dict[str, Mapping[str, Any]] = {}
         for table_file in self.variable_table_files:
             self._load_variable_table(table_file)
         self.grid_axis_entries: dict[str, Mapping[str, Any]] = {}
@@ -75,8 +74,7 @@ class ProjectTables:
                 self.coordinate_table_file, "axis_entry"
             )
         self.coordinate_entries = _overlay_table_entries(
-            _overlay_table_entries(coordinate_entries, self.grid_axis_entries),
-            self._variable_axis_entries,
+            coordinate_entries, self.grid_axis_entries
         )
         self.coordinate_aliases = _coordinate_aliases(
             self.coordinate_entries
@@ -600,12 +598,6 @@ class ProjectTables:
             self._variable_entries_by_name.setdefault(name, []).append(
                 variable_entry
             )
-        axis_entries = data.get("axis_entry", {})
-        if isinstance(axis_entries, Mapping):
-            for name, entry in axis_entries.items():
-                if isinstance(entry, Mapping):
-                    self._variable_axis_entries[str(name)] = entry
-
     def _value_allowed(
         self,
         key: str,

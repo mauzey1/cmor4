@@ -4,7 +4,7 @@ These notebooks demonstrate how to use `cmor4` to create CMIP7-style dataset fil
 
 The examples use table-backed metadata: variable attributes come from the
 loaded CMIP7 variable table, coordinate attributes come from the coordinate
-table or variable-table `axis_entry` entries, and hybrid-coordinate z-factor
+and grid tables, and hybrid-coordinate z-factor
 attributes come from the formula terms table. The notebook dictionaries focus
 on dataset and custom grid metadata. `cmor4.Axis`, `cmor4.Variable`, and
 `cmor4.ZFactor` objects carry source values, bounds, calendars, and missing
