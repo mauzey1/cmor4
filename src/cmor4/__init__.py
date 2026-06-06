@@ -6,7 +6,7 @@ from .core import (
     cmorize,
     create_dataset,
     open_dataset,
-    render_template,
+    string_from_template,
     write_netcdf,
 )
 from .axis import Axis
@@ -25,7 +25,7 @@ __all__ = [
     "Grid",
     "open_dataset",
     "ProjectTables",
-    "render_template",
+    "string_from_template",
     "TableValidationError",
     "Variable",
     "write_netcdf",

@@ -9,12 +9,16 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 import xarray as xr
 
+from ._templates import render_template
+from ._time_utils import (
+    decode_time_value,
+    add_time_delta,
+    date_part
+)
 from .axis import Axis
 from .grid import Grid
 from .metadata import _MetadataRecord
 from .tables import ProjectTables
-from ._templates import render_template as _render_template
-from ._time_utils import decode_time_value, add_time_delta, date_part
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -33,9 +37,9 @@ RIPF_KEYS = (
 )
 
 DEFAULT_OUTPUT_PATH_TEMPLATE = (
-    "<drs_specs>/<mip_era>/<activity_id>/<institution_id>/<source_id>/"
-    "<experiment_id>/<variant_label>/<region>/<frequency>/<variable_id>/"
-    "<branding_suffix>/<grid_label>/<version>"
+    "<drs_specs><mip_era><activity_id><institution_id><source_id>"
+    "<experiment_id><variant_label><region><frequency><variable_id>"
+    "<branding_suffix><grid_label><version>"
 )
 
 DEFAULT_OUTPUT_FILE_TEMPLATE = (
@@ -259,28 +263,29 @@ def build_output_path(
     root = Path(str(dataset.get("outpath", "."))).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
     path_template = str(
-        dataset.get("output_path_template") or DEFAULT_OUTPUT_PATH_TEMPLATE
+        dataset.get("output_path_template", DEFAULT_OUTPUT_PATH_TEMPLATE)
     )
     file_template = str(
-        dataset.get("output_file_template") or DEFAULT_OUTPUT_FILE_TEMPLATE
+        dataset.get("output_file_template", DEFAULT_OUTPUT_FILE_TEMPLATE)
     )
 
-    directory = root.joinpath(*_render_path_template(path_template, tokens))
-    rendered_tokens = _render_path_template(file_template, tokens)
+    path_template = re.sub("><", ">/<", path_template)
+    file_template = re.sub("><", ">_<", file_template)
 
     if (
-        dataset.get("output_file_template")
-        and tokens.get("time_range")
+        tokens.get("time_range")
         and "<time_range>" not in file_template
         and "<time-range>" not in file_template
     ):
-        rendered_tokens.append(str(tokens["time_range"]))
+        file_template += "_<time_range>"
 
-    filename = "_".join(rendered_tokens) + ".nc"
-    return directory / filename
+    directory = render_template(path_template, tokens)
+    filename = render_template(file_template, tokens) + ".nc"
+
+    return root / directory / filename
 
 
-def render_template(
+def string_from_template(
     template: str,
     dataset: Mapping[str, Any],
     variable: Variable,
@@ -288,7 +293,7 @@ def render_template(
 ) -> str:
     """Render a template from global attributes and computed path tokens."""
 
-    return _render_template(
+    return render_template(
         template,
         _template_tokens(dataset, variable, ds),
     )
@@ -553,28 +558,6 @@ def _template_tokens(
         if key in labels:
             tokens[key] = labels[key]
     return tokens
-
-
-def _render_path_template(
-    template: str, tokens: Mapping[str, Any]
-) -> list[str]:
-    parts: list[str] = []
-    for section in template.split("/"):
-        token_names = re.findall(r"<([^>]+)>", section)
-        if (
-            token_names
-            and "".join(f"<{name}>" for name in token_names) == section
-        ):
-            parts.extend(
-                str(tokens.get(name, ""))
-                for name in token_names
-                if tokens.get(name, "") not in (None, "")
-            )
-        else:
-            rendered = _render_template(section, tokens)
-            if rendered:
-                parts.append(rendered)
-    return parts
 
 
 def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
