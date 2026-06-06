@@ -10,6 +10,7 @@ from .core import (
     write_netcdf,
 )
 from .axis import Axis
+from .cv import ControlledVocabulary
 from .exceptions import TableValidationError
 from .grid import Grid
 from .variable import Variable
@@ -22,6 +23,7 @@ __all__ = [
     "build_output_path",
     "cmorize",
     "create_dataset",
+    "ControlledVocabulary",
     "Grid",
     "open_dataset",
     "ProjectTables",

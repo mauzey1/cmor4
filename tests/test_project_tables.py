@@ -140,6 +140,7 @@ class ProjectTablesTest(unittest.TestCase):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_ocean.json")
 
+        self.assertIsInstance(project.cv, cmor4.ControlledVocabulary)
         self.assertIn("activity_id", project.cv)
         self.assertIn("tos_tavg-u-hxy-sea", project.variable_entries)
         self.assertIn("latitude", project.coordinate_entries)
@@ -155,6 +156,29 @@ class ProjectTablesTest(unittest.TestCase):
             project.variable_entries["tos_tavg-u-hxy-sea"].entry["out_name"],
             "tos",
         )
+
+    def test_controlled_vocabulary_loads_project_cv_wrapper(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cv_file = Path(tmp_dir) / "CV.json"
+            cv_file.write_text(
+                """
+{
+  "CV": {
+    "activity_id": ["CMIP"],
+    "required_global_attributes": ["activity_id"]
+  }
+}
+""".strip()
+                + "\n"
+            )
+
+            cv = cmor4.ControlledVocabulary.from_file(cv_file)
+
+            self.assertEqual(cv["activity_id"], ["CMIP"])
+            self.assertEqual(cv.required_global_attributes(), ("activity_id",))
+            cv.validate_dataset({"activity_id": "CMIP"})
+            with self.assertRaises(cmor4.TableValidationError):
+                cv.validate_dataset({"activity_id": "not-a-real-activity"})
 
     def test_cmip7_generic_level_resolves_concrete_coordinate(self):
         require_path(self, CMIP7_TABLE_ROOT)
