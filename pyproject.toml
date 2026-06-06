@@ -25,6 +25,7 @@ notebook = [
   "matplotlib>=3.8",
   "basemap>=2",
   "pyproj>=3.7",
+  "nbstripout>=0.9",
 ]
 dev = [
   "pycodestyle>=2.14",
