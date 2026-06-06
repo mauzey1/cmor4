@@ -76,7 +76,7 @@ class ProjectTables:
         self.coordinate_entries = _overlay_table_entries(
             coordinate_entries, self.grid_axis_entries
         )
-        self.coordinate_aliases = _coordinate_aliases(
+        self.generic_level_entries = _generic_level_entries(
             self.coordinate_entries
         )
         self.formula_entries: dict[str, Mapping[str, Any]] = {}
@@ -681,19 +681,17 @@ class ProjectTables:
                 f"{dataset.get('experiment_id')!r} CV value {expected!r}."
             )
 
-def _coordinate_aliases(
+def _generic_level_entries(
     entries: Mapping[str, Mapping[str, Any]]
-) -> dict[str, str]:
-    aliases: dict[str, str] = {}
+) -> dict[str, dict[str, Mapping[str, Any]]]:
+    generic_entries: dict[str, dict[str, Mapping[str, Any]]] = {}
     for name, entry in entries.items():
-        out_name = entry.get("out_name")
-        if not _is_table_value(out_name):
-            continue
-        aliases[str(name)] = str(out_name)
         generic_level_name = entry.get("generic_level_name")
         if _is_table_value(generic_level_name):
-            aliases[str(generic_level_name)] = str(out_name)
-    return aliases
+            generic_entries.setdefault(str(generic_level_name), {})[
+                str(name)
+            ] = entry
+    return generic_entries
 
 
 def _overlay_table_entries(

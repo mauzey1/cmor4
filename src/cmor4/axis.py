@@ -90,6 +90,7 @@ class Axis(_MetadataRecord):
             value = entry.get(key)
             if is_table_value(value):
                 merged.setdefault(key, value)
+        merged.setdefault("out_name", entry_name)
         if "values" not in merged:
             values = entry_values(entry)
             if values is not None:
@@ -117,6 +118,18 @@ class Axis(_MetadataRecord):
         )
         if requested in project.coordinate_entries:
             return requested, project.coordinate_entries[requested]
+        generic_matches = self._matching_generic_level_entries(
+            project, requested
+        )
+        if len(generic_matches) == 1:
+            return generic_matches[0]
+        if len(generic_matches) > 1:
+            choices = ", ".join(name for name, _ in generic_matches)
+            raise TableValidationError(
+                f"Generic level {requested!r} matches multiple coordinate "
+                "entries; specify table_entry or axis_entry. "
+                f"Choices: {choices}."
+            )
         matching_out_names = [
             (name, entry)
             for name, entry in project.coordinate_entries.items()
@@ -257,6 +270,36 @@ class Axis(_MetadataRecord):
             if narrowed:
                 matches = narrowed
         return matches if len(matches) == 1 else []
+
+    def _matching_generic_level_entries(
+        self,
+        project: Any,
+        generic_level_name: str,
+    ) -> list[tuple[str, Mapping[str, Any]]]:
+        generic_entries = getattr(project, "generic_level_entries", {})
+        matches = list(generic_entries.get(generic_level_name, {}).items())
+        if not matches:
+            return []
+        for key, value in (
+            ("standard_name", self.standard_name),
+            ("formula", self.formula),
+            ("z_factors", self.z_factors),
+            ("z_bounds_factors", self.z_bounds_factors),
+            ("positive", self.positive),
+            ("units", self.units),
+            ("long_name", self.long_name),
+        ):
+            if value in (None, ""):
+                continue
+            narrowed = [
+                (name, entry)
+                for name, entry in matches
+                if is_table_value(entry.get(key))
+                and metadata_value_matches(value, entry[key])
+            ]
+            if narrowed:
+                matches = narrowed
+        return matches
 
     def _merge_grid_coordinate_metadata(
         self, project: Any, axis: dict[str, Any]

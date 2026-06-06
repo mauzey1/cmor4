@@ -23,6 +23,10 @@ attributes (`units`, `standard_name`, `long_name`, `cell_methods`,
 `cell_measures`, and `comment`), axis attributes, and z-factor attributes come
 from the loaded project tables. Scalar axes such as `height2m` are added from
 the table when a variable requires them and the table provides a fixed value.
+Coordinate entries tagged with `generic_level_name` satisfy matching generic
+vertical dimensions such as `alevel` or `olevel`; when multiple concrete
+coordinate entries advertise the same generic level, select one with
+`table_entry` or `axis_entry`.
 
 Examples:
 

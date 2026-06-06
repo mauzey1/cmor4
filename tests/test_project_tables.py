@@ -133,12 +133,126 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertIn("latitude", project.grid_coordinate_entries)
         self.assertIn("vertices_latitude", project.grid_coordinate_entries)
         self.assertIn("ps", project.formula_entries)
-        self.assertEqual(project.coordinate_aliases["latitude"], "lat")
-        self.assertEqual(project.coordinate_aliases["height2m"], "height")
+        self.assertIn(
+            "alternate_hybrid_sigma", project.generic_level_entries["alevel"]
+        )
+        self.assertIn("depth_coord", project.generic_level_entries["olevel"])
         self.assertEqual(
             project.variable_entries["tos_tavg-u-hxy-sea"].entry["out_name"],
             "tos",
         )
+
+    def test_cmip7_generic_level_resolves_concrete_coordinate(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_ocean.json")
+        dataset = cmip7_dataset()
+
+        ds = cmor4.create_dataset(
+            dataset,
+            cmor4.Variable(name="agessc_tavg-ol-hxy-sea"),
+            [
+                cmor4.Axis(
+                    name="time",
+                    values=[15.0, 45.0],
+                    units="days since 2000-01-01",
+                ),
+                cmor4.Axis(
+                    name="olevel",
+                    values=[5.0, 50.0],
+                    bounds=[[0.0, 10.0], [10.0, 100.0]],
+                    standard_name="depth",
+                ),
+                cmor4.Axis(name="latitude", values=[-45.0, 45.0]),
+                cmor4.Axis(name="longitude", values=[90.0, 270.0]),
+            ],
+            np.ones((2, 2, 2, 2), dtype="f4"),
+            project=project,
+        )
+
+        self.assertEqual(
+            ds["agessc"].dims, ("time", "lev", "lat", "lon")
+        )
+        self.assertIn("lev", ds.coords)
+        self.assertNotIn("olevel", ds.coords)
+        self.assertNotIn("out_name", ds["lev"].attrs)
+        self.assertEqual(ds["lev"].attrs["standard_name"], "depth")
+        self.assertEqual(ds["lev"].attrs["positive"], "down")
+        self.assertEqual(ds["lev"].attrs["bounds"], "lev_bnds")
+
+    def test_axis_empty_out_name_falls_back_to_coordinate_entry_name(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            cv_file = root / "CV.json"
+            variable_table = root / "test_table.json"
+            coordinate_table = root / "coordinate.json"
+            cv_file.write_text('{"CV": {}}\n')
+            variable_table.write_text(
+                """
+{
+  "Header": {"table_id": "test"},
+  "variable_entry": {
+    "sample": {
+      "dimensions": ["runtime_axis"],
+      "out_name": "sample",
+      "units": "1"
+    }
+  }
+}
+""".strip()
+                + "\n"
+            )
+            coordinate_table.write_text(
+                """
+{
+  "axis_entry": {
+    "runtime_axis": {
+      "axis": "X",
+      "long_name": "Runtime axis",
+      "out_name": "",
+      "standard_name": "projection_x_coordinate",
+      "units": "m"
+    }
+  }
+}
+""".strip()
+                + "\n"
+            )
+            project = cmor4.ProjectTables(
+                cv_file,
+                [variable_table],
+                coordinate_table=coordinate_table,
+            )
+
+            ds = cmor4.create_dataset(
+                {},
+                cmor4.Variable(name="sample"),
+                [
+                    cmor4.Axis(
+                        name="source_x",
+                        table_entry="runtime_axis",
+                        values=[0.0, 1.0],
+                    )
+                ],
+                np.ones((2,), dtype="f4"),
+                project=project,
+            )
+
+            self.assertEqual(ds["sample"].dims, ("runtime_axis",))
+            self.assertIn("runtime_axis", ds.coords)
+            self.assertNotIn("source_x", ds.coords)
+            self.assertNotIn("out_name", ds["runtime_axis"].attrs)
+
+    def test_cmip7_generic_level_requires_concrete_coordinate_choice(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_ocean.json")
+
+        with self.assertRaisesRegex(
+            cmor4.TableValidationError,
+            "Generic level 'olevel' matches multiple coordinate entries",
+        ):
+            cmor4.Axis(name="olevel", values=[5.0, 50.0]).merge_table_entry(
+                project
+            )
 
     def test_cmip7_grid_axes_and_aux_coords_come_from_grids_table(self):
         require_path(self, CMIP7_TABLE_ROOT)
