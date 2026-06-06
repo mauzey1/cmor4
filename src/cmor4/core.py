@@ -9,16 +9,12 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 import xarray as xr
 
-try:
-    import cftime
-except ImportError:  # pragma: no cover - cftime is provided by netCDF4 here.
-    cftime = None
-
 from .axis import Axis
 from .grid import Grid
 from .metadata import _MetadataRecord
 from .tables import ProjectTables
 from ._templates import render_template as _render_template
+from ._time_utils import decode_time_value, add_time_delta, date_part
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -604,13 +600,13 @@ def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
             return None
         first_value = values.flat[0]
         last_value = values.flat[-1]
-    first = _decode_time_value(first_value, units, calendar)
-    last = _decode_time_value(last_value, units, calendar)
+    first = decode_time_value(first_value, units, calendar)
+    last = decode_time_value(last_value, units, calendar)
     if first is None or last is None:
         return None
     if climatology:
-        first = _add_time_delta(first, timedelta(hours=1))
-        last = _add_time_delta(last, timedelta(hours=-1))
+        first = add_time_delta(first, timedelta(hours=1))
+        last = add_time_delta(last, timedelta(hours=-1))
     freq = frequency.lower()
     clim_suffix = (
         "-clim"
@@ -618,114 +614,22 @@ def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
         else ""
     )
     if "yr" in freq or "dec" in freq:
-        return f"{_date_part(first, 'year')}-{_date_part(last, 'year')}{clim_suffix}"
+        return f"{date_part(first, 'year')}-{date_part(last, 'year')}{clim_suffix}"
     if "monc" in freq or "mon" in freq or climatology:
         return (
-            f"{_date_part(first, 'month')}-{_date_part(last, 'month')}"
+            f"{date_part(first, 'month')}-{date_part(last, 'month')}"
             f"{clim_suffix}"
         )
     if "day" in freq:
-        return f"{_date_part(first, 'day')}-{_date_part(last, 'day')}{clim_suffix}"
+        return f"{date_part(first, 'day')}-{date_part(last, 'day')}{clim_suffix}"
     if "subhr" in freq:
         return (
-            f"{_date_part(first, 'second')}-{_date_part(last, 'second')}"
+            f"{date_part(first, 'second')}-{date_part(last, 'second')}"
             f"{clim_suffix}"
         )
     if "hr" in freq or freq in {"hour", "hourly"}:
         return (
-            f"{_date_part(first, 'minute')}-{_date_part(last, 'minute')}"
+            f"{date_part(first, 'minute')}-{date_part(last, 'minute')}"
             f"{clim_suffix}"
         )
-    return f"{_date_part(first, 'month')}-{_date_part(last, 'month')}{clim_suffix}"
-
-
-def _decode_time_value(
-    value: Any, units: Any, calendar: Any = "standard"
-) -> Any | None:
-    if np.issubdtype(np.asarray(value).dtype, np.datetime64):
-        text = np.datetime_as_string(value, unit="s")
-        return datetime.fromisoformat(text)
-    if not units:
-        return None
-    units_text = _normalize_time_units(str(units))
-    if cftime is not None:
-        try:
-            return cftime.num2date(
-                float(value),
-                units_text,
-                calendar=str(calendar or "standard"),
-                only_use_cftime_datetimes=False,
-                only_use_python_datetimes=False,
-            )
-        except Exception:
-            pass
-    match = re.match(
-        r"^(days|hours|minutes|seconds) since "
-        r"(\d{1,4})-(\d{1,2})-(\d{1,2})",
-        units_text,
-    )
-    if not match:
-        return None
-    unit, year, month, day = match.groups()
-    base = datetime(int(year), int(month), int(day))
-    numeric = float(value)
-    if unit == "days":
-        return base + timedelta(days=numeric)
-    if unit == "hours":
-        return base + timedelta(hours=numeric)
-    if unit == "minutes":
-        return base + timedelta(minutes=numeric)
-    return base + timedelta(seconds=numeric)
-
-
-def _normalize_time_units(units: str) -> str:
-    match = re.match(
-        r"^(\w+) since (\d{1,4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?(.*)$",
-        units,
-    )
-    if not match:
-        return units
-    unit, year, month, day, suffix = match.groups()
-    return (
-        f"{unit} since {int(year):04d}-{int(month or 1):02d}-"
-        f"{int(day or 1):02d}{suffix or ''}"
-    )
-
-
-def _add_time_delta(value: Any, delta: timedelta) -> Any:
-    try:
-        return value + delta
-    except TypeError:
-        return (
-            datetime(
-                value.year,
-                value.month,
-                value.day,
-                int(value.hour),
-                int(value.minute),
-                int(value.second),
-            )
-            + delta
-        )
-
-
-def _date_part(value: Any, precision: str) -> str:
-    if precision == "minute":
-        value = _add_time_delta(value, timedelta(seconds=30))
-    else:
-        value = _add_time_delta(value, timedelta(seconds=0.5))
-    if precision == "year":
-        return f"{value.year:04d}"
-    if precision == "month":
-        return f"{value.year:04d}{value.month:02d}"
-    if precision == "day":
-        return f"{value.year:04d}{value.month:02d}{value.day:02d}"
-    if precision == "minute":
-        return (
-            f"{value.year:04d}{value.month:02d}{value.day:02d}"
-            f"{value.hour:02d}{value.minute:02d}"
-        )
-    return (
-        f"{value.year:04d}{value.month:02d}{value.day:02d}"
-        f"{value.hour:02d}{value.minute:02d}{value.second:02d}"
-    )
+    return f"{date_part(first, 'month')}-{date_part(last, 'month')}{clim_suffix}"
