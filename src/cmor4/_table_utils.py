@@ -43,7 +43,7 @@ def entry_bounds(entry: Mapping[str, Any]) -> list[list[Any]] | None:
     parsed = [parse_table_value(value) for value in values]
     if len(parsed) % 2:
         return None
-    return [parsed[index : index + 2] for index in range(0, len(parsed), 2)]
+    return [parsed[index:index + 2] for index in range(0, len(parsed), 2)]
 
 
 def parse_table_value(value: Any) -> Any:

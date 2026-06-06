@@ -55,7 +55,9 @@ class _MetadataRecord(Mapping[str, Any]):
 
     @staticmethod
     def is_netcdf_attr_value(value: Any) -> bool:
-        return isinstance(value, (str, bytes, int, float, np.integer, np.floating))
+        return isinstance(
+            value, (str, bytes, int, float, np.integer, np.floating)
+        )
 
     @staticmethod
     def netcdf_attrs(values: Mapping[str, Any]) -> dict[str, Any]:

@@ -202,7 +202,10 @@ class Variable(_MetadataRecord):
                     f"out_name {out_name!r}."
                 )
         expected_dims = table_dimensions(entry)
-        if self.dimensions is not None and tuple(self.dimensions) != expected_dims:
+        if (
+            self.dimensions is not None
+            and tuple(self.dimensions) != expected_dims
+        ):
             raise TableValidationError(
                 f"dimensions={tuple(self.dimensions)!r} does not match "
                 f"{variable_entry.table_id}:{variable_entry.name} "

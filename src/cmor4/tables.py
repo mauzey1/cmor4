@@ -47,7 +47,9 @@ class ProjectTables:
         self.formula_table_file = (
             Path(formula_table) if formula_table is not None else None
         )
-        self.grid_table_file = Path(grid_table) if grid_table is not None else None
+        self.grid_table_file = (
+            Path(grid_table) if grid_table is not None else None
+        )
         with self.cv_file.open() as handle:
             data = json.load(handle)
         self.cv = data.get("CV", data)
@@ -128,7 +130,9 @@ class ProjectTables:
         variable_entry = variable.resolve_table_entry(self)
         self._add_table_header_defaults(normalized_dataset, variable_entry)
         normalized_variable = variable.merge_table_entry(variable_entry)
-        self._add_variable_global_defaults(normalized_dataset, normalized_variable)
+        self._add_variable_global_defaults(
+            normalized_dataset, normalized_variable
+        )
         self._add_source_defaults(normalized_dataset)
         self._add_institution_default(normalized_dataset)
         self._add_experiment_defaults(normalized_dataset)
@@ -168,7 +172,7 @@ class ProjectTables:
     def _add_table_header_defaults(
         self, dataset: dict[str, Any], variable_entry: VariableEntry
     ) -> None:
-        """Fill global defaults available from the loaded variable table header."""
+        """Fill defaults from the loaded variable table header."""
 
         header = variable_entry.table_header or {}
         for key in ("Conventions", "data_specs_version"):
@@ -216,7 +220,7 @@ class ProjectTables:
                 dataset.setdefault(key, default)
 
     def _add_institution_default(self, dataset: dict[str, Any]) -> None:
-        """Fill institution text from institution_id when the CV provides it."""
+        """Fill institution text from institution_id."""
 
         if "institution" in dataset:
             return
@@ -409,7 +413,9 @@ class ProjectTables:
                 )
         expected_activity = experiment_entry.get("activity_id")
         if _is_table_value(expected_activity) and "activity_id" in dataset:
-            if not _metadata_value_matches(dataset["activity_id"], expected_activity):
+            if not _metadata_value_matches(
+                dataset["activity_id"], expected_activity
+            ):
                 raise TableValidationError(
                     f"activity_id={dataset['activity_id']!r} does not match "
                     f"experiment_id={dataset.get('experiment_id')!r} "
@@ -442,7 +448,10 @@ class ProjectTables:
                 )
         allowed = (*required, *additional)
         for token in tokens:
-            if not any(_source_type_pattern_matches(token, item) for item in allowed):
+            if not any(
+                _source_type_pattern_matches(token, item)
+                for item in allowed
+            ):
                 raise TableValidationError(
                     f"source_type={source_type!r} contains source type "
                     f"{token!r} that is not allowed by experiment_id="
@@ -512,7 +521,8 @@ class ProjectTables:
             str(value) for value in expected_parent_experiments
         }:
             raise TableValidationError(
-                f"parent_experiment_id={parent_experiment_id!r} does not match "
+                f"parent_experiment_id={parent_experiment_id!r} "
+                "does not match "
                 f"experiment_id={dataset.get('experiment_id')!r} CV values "
                 f"{expected_parent_experiments!r}."
             )
@@ -542,7 +552,11 @@ class ProjectTables:
                 f"parent_mip_era={dataset.get('parent_mip_era')!r} does not "
                 f"match {expected_parent_mip_era!r}."
             )
-        for key in ("parent_mip_era", "parent_time_units", "parent_variant_label"):
+        for key in (
+            "parent_mip_era",
+            "parent_time_units",
+            "parent_variant_label",
+        ):
             if dataset.get(key) in (None, ""):
                 raise TableValidationError(f"{key} is required.")
         if not re.fullmatch(
@@ -550,7 +564,8 @@ class ProjectTables:
             str(dataset["parent_time_units"]),
         ):
             raise TableValidationError(
-                f"parent_time_units={dataset['parent_time_units']!r} is invalid."
+                f"parent_time_units={dataset['parent_time_units']!r} "
+                "is invalid."
             )
         if not re.fullmatch(
             r"r\d+i\d+p\d+f\d+", str(dataset["parent_variant_label"])
@@ -570,7 +585,9 @@ class ProjectTables:
                 ) from exc
 
     @staticmethod
-    def _read_entries(table_file: Path, key: str) -> dict[str, Mapping[str, Any]]:
+    def _read_entries(
+        table_file: Path, key: str
+    ) -> dict[str, Mapping[str, Any]]:
         with table_file.open() as handle:
             data = json.load(handle)
         return {
@@ -583,7 +600,9 @@ class ProjectTables:
         with table_file.open() as handle:
             data = json.load(handle)
         entries = data.get("variable_entry", {})
-        table_id = str(data.get("Header", {}).get("table_id") or table_file.stem)
+        table_id = str(
+            data.get("Header", {}).get("table_id") or table_file.stem
+        )
         if table_id.startswith("Table "):
             table_id = table_id.removeprefix("Table ")
         for name, entry in entries.items():
@@ -598,6 +617,7 @@ class ProjectTables:
             self._variable_entries_by_name.setdefault(name, []).append(
                 variable_entry
             )
+
     def _value_allowed(
         self,
         key: str,
@@ -675,11 +695,14 @@ class ProjectTables:
         value = dataset.get(key)
         if value in (None, ""):
             raise TableValidationError(f"{key} is required.")
-        if _is_table_value(expected) and not _metadata_value_matches(value, expected):
+        if _is_table_value(expected) and not _metadata_value_matches(
+            value, expected
+        ):
             raise TableValidationError(
                 f"{key}={value!r} does not match experiment_id="
                 f"{dataset.get('experiment_id')!r} CV value {expected!r}."
             )
+
 
 def _generic_level_entries(
     entries: Mapping[str, Mapping[str, Any]]
@@ -778,7 +801,9 @@ def _template_value_matches(
     token_names = re.findall(r"<([^>]+)>", template)
     if token_names:
         joined = "-".join(
-            str(tokens.get(name, "")) for name in token_names if tokens.get(name, "")
+            str(tokens.get(name, ""))
+            for name in token_names
+            if tokens.get(name, "")
         )
         if value == joined:
             return True

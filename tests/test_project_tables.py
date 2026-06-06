@@ -108,19 +108,33 @@ class ProjectTablesTest(unittest.TestCase):
             np.ones((1, 2, 2), dtype="f4"),
         )
 
-        self.assertEqual(ds["x"].attrs["standard_name"], "projection_x_coordinate")
-        self.assertEqual(ds["x"].attrs["long_name"], "x coordinate of projection")
+        self.assertEqual(
+            ds["x"].attrs["standard_name"], "projection_x_coordinate"
+        )
+        self.assertEqual(
+            ds["x"].attrs["long_name"], "x coordinate of projection"
+        )
         self.assertEqual(ds["x"].attrs["units"], "m")
-        self.assertEqual(ds["y"].attrs["standard_name"], "projection_y_coordinate")
-        self.assertEqual(ds["y"].attrs["long_name"], "y coordinate of projection")
+        self.assertEqual(
+            ds["y"].attrs["standard_name"], "projection_y_coordinate"
+        )
+        self.assertEqual(
+            ds["y"].attrs["long_name"], "y coordinate of projection"
+        )
         self.assertEqual(ds["y"].attrs["units"], "m")
         self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
         self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
         self.assertEqual(ds["longitude"].attrs["standard_name"], "longitude")
         self.assertEqual(ds["longitude"].attrs["units"], "degrees_east")
-        self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
-        self.assertEqual(ds["vertices_longitude"].attrs["units"], "degrees_east")
-        self.assertEqual(ds["sample"].attrs["coordinates"], "latitude longitude")
+        self.assertEqual(
+            ds["vertices_latitude"].attrs["units"], "degrees_north"
+        )
+        self.assertEqual(
+            ds["vertices_longitude"].attrs["units"], "degrees_east"
+        )
+        self.assertEqual(
+            ds["sample"].attrs["coordinates"], "latitude longitude"
+        )
 
     def test_loads_cv_and_variable_entries_from_submodule(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -300,10 +314,16 @@ class ProjectTablesTest(unittest.TestCase):
             np.ones((1, 2, 2), dtype="f4"),
         )
 
-        self.assertEqual(ds["x"].attrs["standard_name"], "projection_x_coordinate")
-        self.assertEqual(ds["x"].attrs["long_name"], "x coordinate of projection")
+        self.assertEqual(
+            ds["x"].attrs["standard_name"], "projection_x_coordinate"
+        )
+        self.assertEqual(
+            ds["x"].attrs["long_name"], "x coordinate of projection"
+        )
         self.assertEqual(ds["x"].attrs["units"], "m")
-        self.assertEqual(ds["y"].attrs["standard_name"], "projection_y_coordinate")
+        self.assertEqual(
+            ds["y"].attrs["standard_name"], "projection_y_coordinate"
+        )
         self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
         self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
         self.assertEqual(
@@ -361,7 +381,9 @@ class ProjectTablesTest(unittest.TestCase):
             prepared_dataset["source"],
             "BSVertOzone v1-0 (2018): Mole concentration of ozone in air",
         )
-        self.assertEqual(prepared_dataset["source_type"], "satellite_retrieval")
+        self.assertEqual(
+            prepared_dataset["source_type"], "satellite_retrieval"
+        )
         self.assertEqual(prepared_dataset["source_version_number"], "v1-0")
 
     def test_axis_resolution_does_not_use_axis_letter_alone(self):

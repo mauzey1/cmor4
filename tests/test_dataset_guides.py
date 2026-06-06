@@ -42,7 +42,10 @@ def guide_lon_axis(values=(90.0, 180.0, 270.0)):
 def _regular_bounds(values):
     if len(values) == 1:
         return [[values[0] - 0.5, values[0] + 0.5]]
-    edges = [(left + right) / 2.0 for left, right in zip(values[:-1], values[1:])]
+    edges = [
+        (left + right) / 2.0
+        for left, right in zip(values[:-1], values[1:])
+    ]
     first = values[0] - (edges[0] - values[0])
     last = values[-1] + (values[-1] - edges[-1])
     edges = [first, *edges, last]
@@ -306,7 +309,9 @@ class DatasetGuideProjectTest(unittest.TestCase):
             )
             self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
             self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
-            self.assertEqual(ds["longitude"].attrs["standard_name"], "longitude")
+            self.assertEqual(
+                ds["longitude"].attrs["standard_name"], "longitude"
+            )
             self.assertEqual(ds["longitude"].attrs["units"], "degrees_east")
             self.assertEqual(
                 ds["vertices_latitude"].attrs["units"], "degrees_north"

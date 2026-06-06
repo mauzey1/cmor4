@@ -26,6 +26,9 @@ notebook = [
   "basemap>=2",
   "pyproj>=3.7",
 ]
+dev = [
+  "pycodestyle>=2.14",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

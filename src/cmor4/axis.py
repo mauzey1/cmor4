@@ -321,7 +321,9 @@ class Axis(_MetadataRecord):
                 axis[key] = parse_table_value(value)
         bounds_name = axis.get("bounds_name")
         if bounds_name:
-            bounds_entry = project.grid_coordinate_entries.get(str(bounds_name))
+            bounds_entry = project.grid_coordinate_entries.get(
+                str(bounds_name)
+            )
             if bounds_entry:
                 bounds_attrs = dict(axis.get("bounds_attrs", {}))
                 for key in ("units", "standard_name", "long_name"):

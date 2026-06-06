@@ -63,8 +63,9 @@ pip install -e .
 For development in this checkout, use the included environment:
 
 ```bash
-./venv/bin/python -m pip install -e .
+./venv/bin/python -m pip install -e ".[dev]"
 git submodule update --init --recursive
+./venv/bin/python -m pycodestyle src tests
 ./venv/bin/python -m unittest discover -s tests
 ```
 

@@ -318,7 +318,9 @@ def _add_axis(
         elif values.size == 1:
             scalar_value = values.reshape(()).item()
         else:
-            raise ValueError("Scalar coordinates must contain exactly one value.")
+            raise ValueError(
+                "Scalar coordinates must contain exactly one value."
+            )
         coords[out_name] = ((), scalar_value, coord_attrs)
         axis_dims[name] = ()
         _add_axis_dim_aliases(axis, axis_dims, ())
@@ -529,7 +531,10 @@ def _template_tokens(
         {
             str(key): value
             for key, value in dataset.items()
-            if key not in INTERNAL_DATASET_KEYS and not str(key).startswith("_")
+            if (
+                key not in INTERNAL_DATASET_KEYS
+                and not str(key).startswith("_")
+            )
         }
     )
     tokens.update(
@@ -539,7 +544,9 @@ def _template_tokens(
             "branded_variable_name": labels["branded_name"],
             "branding_suffix": labels.get("branding_suffix", ""),
             "frequency": frequency,
-            "grid_label": dataset.get("grid_label", tokens.get("grid_label", "gn")),
+            "grid_label": dataset.get(
+                "grid_label", tokens.get("grid_label", "gn")
+            ),
             "member_id": dataset.get("member_id", variant_label),
             "region": dataset.get("region", tokens.get("region", "glb")),
             "time-range": time_range or "",
@@ -597,14 +604,20 @@ def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
         else ""
     )
     if "yr" in freq or "dec" in freq:
-        return f"{date_part(first, 'year')}-{date_part(last, 'year')}{clim_suffix}"
+        return (
+            f"{date_part(first, 'year')}-{date_part(last, 'year')}"
+            f"{clim_suffix}"
+        )
     if "monc" in freq or "mon" in freq or climatology:
         return (
             f"{date_part(first, 'month')}-{date_part(last, 'month')}"
             f"{clim_suffix}"
         )
     if "day" in freq:
-        return f"{date_part(first, 'day')}-{date_part(last, 'day')}{clim_suffix}"
+        return (
+            f"{date_part(first, 'day')}-{date_part(last, 'day')}"
+            f"{clim_suffix}"
+        )
     if "subhr" in freq:
         return (
             f"{date_part(first, 'second')}-{date_part(last, 'second')}"
@@ -615,4 +628,7 @@ def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
             f"{date_part(first, 'minute')}-{date_part(last, 'minute')}"
             f"{clim_suffix}"
         )
-    return f"{date_part(first, 'month')}-{date_part(last, 'month')}{clim_suffix}"
+    return (
+        f"{date_part(first, 'month')}-{date_part(last, 'month')}"
+        f"{clim_suffix}"
+    )
