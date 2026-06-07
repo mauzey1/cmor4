@@ -9,7 +9,7 @@ import numpy as np
 
 from ._time_utils import cftime_interval_days
 from .axis import Axis
-from .exceptions import TableValidationError
+from .exceptions import AxisValidationError
 
 
 DEFAULT_INTERVAL_WARNING = 0.1
@@ -60,7 +60,7 @@ def _validate_and_normalize_axis(
 
     values, bounds = _normalize_bounds_shape(axis, values, bounds)
     if _requires_bounds(axis) and bounds is None:
-        raise TableValidationError(
+        raise AxisValidationError(
             f"axis {name!r} must have bounds, but none were provided."
         )
 
@@ -103,7 +103,7 @@ def _normalize_bounds_shape(
     if axis.get("scalar", False) and values.size == 1:
         if bounds.size == 2:
             return values, bounds.reshape(2)
-        raise TableValidationError(
+        raise AxisValidationError(
             "Scalar coordinate bounds must have 2 values."
         )
     if (
@@ -115,7 +115,7 @@ def _normalize_bounds_shape(
         return values, pairs
     if bounds.shape[:-1] == values_shape and bounds.shape[-1] >= 2:
         return values, bounds
-    raise TableValidationError(
+    raise AxisValidationError(
         f"axis {axis.get('name')!r} bounds shape {bounds.shape!r} does not "
         f"match coordinate value shape {values_shape!r}."
     )
@@ -134,7 +134,7 @@ def _validate_requested_values(
         if index > 0:
             eps = min(eps, abs(expected - requested[index - 1]) * tolerance)
         if not np.any(np.abs(flat_values - expected) <= eps):
-            raise TableValidationError(
+            raise AxisValidationError(
                 f"requested value {expected:g} for axis {name!r} was "
                 "not found."
             )
@@ -168,7 +168,7 @@ def _validate_requested_bounds(
         )
         candidates = first_bounds if index % 2 == 0 else second_bounds
         if not np.any(np.abs(candidates - expected) <= eps):
-            raise TableValidationError(
+            raise AxisValidationError(
                 f"requested bounds value {expected:g} for axis {name!r} "
                 "was not found."
             )
@@ -187,7 +187,7 @@ def _validate_valid_range(
         bad = flat[flat < valid_min - eps]
         if bad.size:
             target = "bounds" if is_bounds else "value"
-            raise TableValidationError(
+            raise AxisValidationError(
                 f"axis {name!r} detected {target} {bad[0]:g} when "
                 f"valid_min is {valid_min:g}."
             )
@@ -196,7 +196,7 @@ def _validate_valid_range(
         bad = flat[flat > valid_max + eps]
         if bad.size:
             target = "bounds" if is_bounds else "value"
-            raise TableValidationError(
+            raise AxisValidationError(
                 f"axis {name!r} detected {target} {bad[0]:g} when "
                 f"valid_max is {valid_max:g}."
             )
@@ -218,7 +218,7 @@ def _validate_monotonic(
             if climatology:
                 warnings.warn(message, RuntimeWarning, stacklevel=3)
             else:
-                raise TableValidationError(message)
+                raise AxisValidationError(message)
         if climatology:
             return
         if pairs.shape[0] >= 2:
@@ -227,7 +227,7 @@ def _validate_monotonic(
             overlap = deltas * _direction(starts) < -1.0e-12
             if np.any(overlap):
                 index = int(np.nonzero(overlap)[0][0])
-                raise TableValidationError(
+                raise AxisValidationError(
                     f"axis {name!r} has overlapping bounds values at "
                     f"index {index}."
                 )
@@ -243,7 +243,7 @@ def _validate_monotonic(
         return
     flat = values.reshape(-1)
     if flat.size >= 3 and not _strictly_monotonic(flat):
-        raise TableValidationError(f"axis {name!r} has non-monotonic values.")
+        raise AxisValidationError(f"axis {name!r} has non-monotonic values.")
 
 
 def _validate_values_inside_bounds(
@@ -260,7 +260,7 @@ def _validate_values_inside_bounds(
     outside = (flat_values < lower) | (flat_values > upper)
     if np.any(outside):
         index = int(np.nonzero(outside)[0][0])
-        raise TableValidationError(
+        raise AxisValidationError(
             f"axis {name!r} has value {flat_values[index]:g} not within "
             f"bounds {pairs[index, 0]:g}, {pairs[index, 1]:g} at "
             f"index {index}."
@@ -323,7 +323,7 @@ def _validate_time_interval(
         f"({differences[index] * 100.0:.1f}% difference)."
     )
     if bad_errors[index]:
-        raise TableValidationError(message)
+        raise AxisValidationError(message)
     warnings.warn(message, RuntimeWarning, stacklevel=3)
 
 

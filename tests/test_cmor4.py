@@ -251,7 +251,7 @@ class Cmor4Test(unittest.TestCase):
                 *horizontal_axes(self.project),
             ]
             with self.assertRaisesRegex(
-                cmor4.TableValidationError,
+                cmor4.AxisValidationError,
                 "Time interval mismatch detected",
             ):
                 cmor4.create_dataset(
@@ -304,7 +304,7 @@ class Cmor4Test(unittest.TestCase):
                 ),
             ]
             with self.assertRaisesRegex(
-                cmor4.TableValidationError,
+                cmor4.AxisValidationError,
                 "valid_min",
             ):
                 cmor4.create_dataset(

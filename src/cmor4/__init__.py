@@ -12,7 +12,10 @@ from .core import (
 from .axis import Axis
 from .cv import ControlledVocabulary
 from .dataset import DatasetInfo
-from .exceptions import TableValidationError
+from .exceptions import (
+    TableValidationError,
+    AxisValidationError
+)
 from .grid import Grid
 from .variable import Variable
 from .zfactor import ZFactor
@@ -20,6 +23,7 @@ from .tables import ProjectTables
 
 __all__ = [
     "Axis",
+    "AxisValidationError",
     "Cmor4Result",
     "build_output_path",
     "cmorize",
