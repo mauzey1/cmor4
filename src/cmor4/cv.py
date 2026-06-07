@@ -45,7 +45,19 @@ class ControlledVocabulary(Mapping[str, Any]):
     def filename(self) -> str:
         return self.path.name if self.path is not None else "CV"
 
-    def add_scalar_defaults(self, dataset: dict[str, Any]) -> None:
+    def get_dataset_info(self, dataset: dict[str, Any]) -> dict[str, Any]:
+        """Get dataset info with CV defaults."""
+        normalized_dataset = dict(dataset)
+        self._add_scalar_defaults(normalized_dataset)
+        self._add_source_defaults(normalized_dataset)
+        self._add_institution_default(normalized_dataset)
+        self._add_experiment_defaults(normalized_dataset)
+        self._add_license_text(normalized_dataset)
+        self._add_runtime_global_defaults(normalized_dataset)
+
+        return normalized_dataset
+
+    def _add_scalar_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill scalar CV defaults that are not templated."""
 
         for key, value in self.items():
@@ -57,7 +69,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             ):
                 dataset[key] = value
 
-    def add_source_defaults(self, dataset: dict[str, Any]) -> None:
+    def _add_source_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill attributes supplied by a source_id CV entry."""
 
         source_entries = self.get("source_id")
@@ -74,7 +86,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             if default is not None:
                 dataset.setdefault(key, default)
 
-    def add_institution_default(self, dataset: dict[str, Any]) -> None:
+    def _add_institution_default(self, dataset: dict[str, Any]) -> None:
         """Fill institution text from institution_id."""
 
         if "institution" in dataset:
@@ -90,7 +102,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         if isinstance(institution, str) and institution:
             dataset["institution"] = institution
 
-    def add_experiment_defaults(self, dataset: dict[str, Any]) -> None:
+    def _add_experiment_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill scalar attributes supplied by an experiment_id CV entry."""
 
         experiment_entry = self.experiment_entry(dataset)
@@ -110,7 +122,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             if default is not None:
                 dataset.setdefault(key, default)
 
-    def add_runtime_global_defaults(self, dataset: dict[str, Any]) -> None:
+    def _add_runtime_global_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill required globals that CMOR normally creates while writing."""
 
         required = self.required_global_attributes()
@@ -147,7 +159,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             if default is not None:
                 dataset[key] = default
 
-    def add_license_text(self, dataset: dict[str, Any]) -> None:
+    def _add_license_text(self, dataset: dict[str, Any]) -> None:
         license_cv = self.get("license")
         if "license" in dataset or not isinstance(license_cv, Mapping):
             return

@@ -124,13 +124,7 @@ class ProjectTables:
             if isinstance(dataset, DatasetInfo)
             else dataset
         )
-        normalized_dataset = dict(dataset)
-        self.cv.add_scalar_defaults(normalized_dataset)
-        self.cv.add_source_defaults(normalized_dataset)
-        self.cv.add_institution_default(normalized_dataset)
-        self.cv.add_experiment_defaults(normalized_dataset)
-        self.cv.add_license_text(normalized_dataset)
-        self.cv.add_runtime_global_defaults(normalized_dataset)
+        normalized_dataset = self.cv.get_dataset_info(dataset)
         self.cv.validate_dataset_values(normalized_dataset)
         self.validate_source_attributes(normalized_dataset)
         self.validate_experiment(normalized_dataset)
@@ -147,19 +141,13 @@ class ProjectTables:
         variable: Variable,
     ) -> tuple[DatasetInfo, Variable]:
         user_info = dataset.user_info
-        normalized_dataset = dict(dataset)
-        self.cv.add_scalar_defaults(normalized_dataset)
+        normalized_dataset = self.cv.get_dataset_info(dataset)
         variable_entry = variable.resolve_table_entry(self)
         self._add_table_header_defaults(normalized_dataset, variable_entry)
         normalized_variable = variable.merge_table_entry(variable_entry)
         self._add_variable_global_defaults(
             normalized_dataset, normalized_variable
         )
-        self.cv.add_source_defaults(normalized_dataset)
-        self.cv.add_institution_default(normalized_dataset)
-        self.cv.add_experiment_defaults(normalized_dataset)
-        self.cv.add_license_text(normalized_dataset)
-        self.cv.add_runtime_global_defaults(normalized_dataset)
         self.validate_dataset(normalized_dataset)
         self.validate_source_attributes(normalized_dataset)
         self.validate_experiment(normalized_dataset)
