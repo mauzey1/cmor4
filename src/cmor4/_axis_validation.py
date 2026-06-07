@@ -7,6 +7,7 @@ import warnings
 
 import numpy as np
 
+from ._time_utils import cftime_interval_days
 from .axis import Axis
 from .exceptions import TableValidationError
 
@@ -303,8 +304,8 @@ def _validate_time_interval(
     if spec is None or spec.days <= 0:
         return
     units = str(axis.get("units", "days since ?"))
-    interval_values = np.diff(flat)
-    interval_days = np.abs(interval_values) * _time_unit_days(units)
+    calendar = str(axis.get("calendar", dataset.get("calendar", "standard")))
+    interval_days = _time_interval_days(flat, units, calendar)
     if interval_days.size == 0:
         return
     differences = np.abs(interval_days - spec.days) / spec.days
@@ -324,6 +325,16 @@ def _validate_time_interval(
     if bad_errors[index]:
         raise TableValidationError(message)
     warnings.warn(message, RuntimeWarning, stacklevel=3)
+
+
+def _time_interval_days(
+    values: np.ndarray, units: str, calendar: str
+) -> np.ndarray:
+    cftime_intervals = cftime_interval_days(values, units, calendar)
+    if cftime_intervals is not None:
+        return cftime_intervals
+    interval_values = np.diff(values)
+    return np.abs(interval_values) * _time_unit_days(units)
 
 
 def _interval_spec(

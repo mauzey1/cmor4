@@ -3,11 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 import xarray as xr
 
 import cmor4
+import cmor4._axis_validation as axis_validation
+import cmor4._time_utils as time_utils
 from table_helpers import cmip7_project
 
 
@@ -310,6 +313,34 @@ class Cmor4Test(unittest.TestCase):
                     bad_lat_axes,
                     np.ones((2, 2, 2), dtype="f4"),
                 )
+
+    def test_time_interval_uses_cftime_with_numeric_fallback(self):
+        with mock.patch.object(
+            time_utils.cftime,
+            "num2date",
+            wraps=time_utils.cftime.num2date,
+        ) as num2date:
+            intervals = axis_validation._time_interval_days(
+                np.asarray([0.0, 1.0, 2.0]),
+                "months since 2001-01-01",
+                "360_day",
+            )
+
+        self.assertTrue(num2date.called)
+        np.testing.assert_allclose(intervals, [30.0, 30.0])
+
+        with mock.patch.object(
+            time_utils.cftime,
+            "num2date",
+            side_effect=ValueError("unsupported units"),
+        ):
+            fallback_intervals = axis_validation._time_interval_days(
+                np.asarray([0.0, 1.0]),
+                "years since 2001-01-01",
+                "standard",
+            )
+
+        np.testing.assert_allclose(fallback_intervals, [365.0])
 
     def test_string_from_template_uses_global_attrs_and_special_values(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

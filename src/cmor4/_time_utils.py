@@ -47,6 +47,46 @@ def decode_time_value(
     return base + timedelta(seconds=numeric)
 
 
+def cftime_interval_days(
+    values: np.ndarray, units: str, calendar: str
+) -> np.ndarray | None:
+    if " since " not in units:
+        return None
+    try:
+        dates = cftime.num2date(
+            values.astype("f8"),
+            normalize_time_units(units),
+            calendar=calendar or "standard",
+            only_use_cftime_datetimes=False,
+            only_use_python_datetimes=False,
+        )
+    except Exception:
+        return None
+
+    elapsed_days: list[float] = []
+    for start, end in zip(dates[:-1], dates[1:]):
+        seconds = _elapsed_seconds(start, end)
+        if seconds is None:
+            return None
+        elapsed_days.append(abs(seconds) / 86400.0)
+    return np.asarray(elapsed_days, dtype="f8")
+
+
+def _elapsed_seconds(start: Any, end: Any) -> float | None:
+    try:
+        delta = end - start
+    except TypeError:
+        return None
+    if hasattr(delta, "total_seconds"):
+        return float(delta.total_seconds())
+    days = getattr(delta, "days", None)
+    seconds = getattr(delta, "seconds", 0)
+    microseconds = getattr(delta, "microseconds", 0)
+    if days is None:
+        return None
+    return float(days * 86400.0 + seconds + microseconds / 1.0e6)
+
+
 def normalize_time_units(units: str) -> str:
     match = re.match(
         r"^(\w+) since (\d{1,4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?(.*)$",
