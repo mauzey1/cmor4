@@ -68,7 +68,8 @@ def _validate_and_normalize_axis(
         values = values.astype("f8", copy=True)
         if bounds is not None and _is_numeric(bounds):
             bounds = bounds.astype("f8", copy=True)
-        values, bounds = _normalize_longitude(axis, values, bounds)
+        if not _is_longitude(axis):
+            values, bounds = _normalize_longitude(axis, values, bounds)
         _validate_requested_values(axis, values, name)
         _validate_valid_range(axis, values, name, is_bounds=False)
         _validate_monotonic(axis, values, name, is_bounds=False)
@@ -364,8 +365,6 @@ def _interval_spec(
 def _normalize_longitude(
     axis: Axis, values: np.ndarray, bounds: np.ndarray | None
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    if not _is_longitude(axis):
-        return values, bounds
     valid_min = _numeric_or_none(axis.get("valid_min"))
     valid_max = _numeric_or_none(axis.get("valid_max"))
     if valid_min is None or valid_max is None:
