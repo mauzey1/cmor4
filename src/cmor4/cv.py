@@ -172,6 +172,12 @@ class ControlledVocabulary(Mapping[str, Any]):
     def validate_dataset(self, dataset: Mapping[str, Any]) -> None:
         """Validate user-supplied controlled values against the project CV."""
 
+        self.validate_dataset_values(dataset)
+        self.validate_required_global_attributes(dataset)
+
+    def validate_dataset_values(self, dataset: Mapping[str, Any]) -> None:
+        """Validate controlled values without requiring every global attr."""
+
         for key, value in dataset.items():
             if key.startswith("_") or key in {
                 "outpath",
@@ -186,8 +192,6 @@ class ControlledVocabulary(Mapping[str, Any]):
                 raise TableValidationError(
                     f"{key}={value!r} is not allowed by {self.filename}."
                 )
-
-        self.validate_required_global_attributes(dataset)
 
     def validate_required_global_attributes(
         self, dataset: Mapping[str, Any]

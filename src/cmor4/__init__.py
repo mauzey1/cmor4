@@ -11,6 +11,7 @@ from .core import (
 )
 from .axis import Axis
 from .cv import ControlledVocabulary
+from .dataset import DatasetInfo
 from .exceptions import TableValidationError
 from .grid import Grid
 from .variable import Variable
@@ -24,6 +25,7 @@ __all__ = [
     "cmorize",
     "create_dataset",
     "ControlledVocabulary",
+    "DatasetInfo",
     "Grid",
     "open_dataset",
     "ProjectTables",

@@ -17,16 +17,17 @@ from the project coordinate and grid tables. Formula-term metadata is read from
 the project formula terms table. These files come from the project table
 repositories, not from `cmor4`.
 
-With `project=`, the caller normally supplies data values, bounds, source-time
-units, missing values, and non-table custom metadata. Standardized variable
-attributes (`units`, `standard_name`, `long_name`, `cell_methods`,
-`cell_measures`, and `comment`), axis attributes, and z-factor attributes come
-from the loaded project tables. Scalar axes such as `height2m` are added from
-the table when a variable requires them and the table provides a fixed value.
-Coordinate entries tagged with `generic_level_name` satisfy matching generic
-vertical dimensions such as `alevel` or `olevel`; when multiple concrete
-coordinate entries advertise the same generic level, select one with
-`table_entry` or `axis_entry`.
+The project object is the normal construction surface. The caller supplies
+data values, bounds, source-time units, missing values, and non-table custom
+metadata; `project.variable(...)`, `project.axis(...)`,
+`project.zfactor(...)`, `project.grid(...)`, and `project.dataset_info(...)`
+merge in metadata from the loaded tables. Scalar axes such as `height2m` are
+added during `cmor4.create_dataset(...)` or `cmor4.cmorize(...)` when a
+variable requires them and the
+table provides a fixed value. Coordinate entries tagged with
+`generic_level_name` satisfy matching generic vertical dimensions such as
+`alevel` or `olevel`; when multiple concrete coordinate entries advertise the
+same generic level, select one with `table_entry` or `axis_entry`.
 
 Examples:
 
@@ -37,11 +38,12 @@ Examples:
 - DRCDP: `PCMDI/DRCDP` table files such as `Tables/DRCDP_CV.json`,
   `Tables/DRCDP_AP1hr.json`, and `Tables/DRCDP_APday.json`
 
-When `project=` is provided, `cmor4` validates controlled values against the CV
-and validates variable names, dimensions, frequency, realm, and table identity
-against the loaded variable table entries. Table-backed variable attributes
-such as units, standard names, long names, cell methods, cell measures, and
-comments are applied from the variable table entries.
+`project.dataset_info(...)` validates controlled dataset values against the CV.
+Variable names, dimensions, frequency, realm, and table identity are validated
+when the variable is used with the dataset by `cmor4.create_dataset(...)`,
+`cmor4.cmorize(...)`, or path-template helpers. Table-backed variable
+attributes such as units, standard names, long names, cell methods, cell
+measures, and comments are applied from the variable table entries.
 
 The test suite uses project table repositories checked out as git submodules
 under `project_tables/`:
@@ -76,7 +78,7 @@ import numpy as np
 import cmor4
 
 project = cmor4.ProjectTables.from_directory(
-    "../cmip7-cmor-tables",
+    "project_tables/cmip7-cmor-tables",
     cv_file="tables-cvs/cmor-cvs.json",
     variable_tables=["tables/CMIP7_atmos.json"],
     coordinate_table="tables/CMIP7_coordinate.json",
@@ -89,6 +91,8 @@ dataset = {
     "institution_id": "CCCma",
     "source_id": "DUMMY-MODEL",
     "experiment_id": "amip",
+    "license_id": "CC-BY-4.0",
+    "nominal_resolution": "100 km",
     "realization_index": "r9",
     "initialization_index": "i1",
     "physics_index": "p1",
@@ -99,40 +103,40 @@ dataset = {
     "outpath": "cmor_output",
 }
 
-variable = cmor4.Variable(
-    name="tas_tavg-h2m-hxy-u",
+variable = project.variable(
+    "tas_tavg-h2m-hxy-u",
     missing_value=np.float32(1.0e20),
 )
+dataset_info = project.dataset_info(dataset)
 
 axes = [
-    cmor4.Axis(
-        name="time",
+    project.axis(
+        "time",
         values=[15.0, 45.0],
         bounds=[[0.0, 30.0], [30.0, 60.0]],
         units="days since 2000-01-01",
     ),
-    cmor4.Axis(
-        name="latitude",
+    project.axis(
+        "latitude",
         values=[-45.0, 45.0],
         bounds=[[-90.0, 0.0], [0.0, 90.0]],
     ),
-    cmor4.Axis(
-        name="longitude",
+    project.axis(
+        "longitude",
         values=[90.0, 270.0],
         bounds=[[0.0, 180.0], [180.0, 360.0]],
     ),
 ]
-
 data = np.ones((2, 2, 2), dtype="f4") * 288.0
-result = cmor4.cmorize(dataset, variable, axes, data, project=project)
+result = cmor4.cmorize(dataset_info, variable, axes, data)
 
 print(result.path)
 print(result.dataset)
 ```
 
-Use `cmor4.create_dataset(...)` when you want the `xarray.Dataset` without
-writing a file, and `cmor4.open_dataset(path)` to read NetCDF output back with
-`xarray`.
+Use `cmor4.create_dataset(dataset_info, variable, axes, data)` when you want the
+`xarray.Dataset` without writing a file, and `cmor4.open_dataset(path)` to
+read NetCDF output back with `xarray`.
 
 ## Notebooks
 

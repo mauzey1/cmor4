@@ -10,6 +10,7 @@ from ._table_utils import (
 )
 from .axis import Axis
 from .cv import ControlledVocabulary
+from .dataset import DatasetInfo
 from .exceptions import TableValidationError
 from .grid import Grid
 from .variable import Variable, VariableEntry
@@ -112,13 +113,40 @@ class ProjectTables:
             grid_table=resolved_grid_table,
         )
 
-    def prepare_inputs(
+    def dataset_info(
         self,
         dataset: Mapping[str, Any],
-        variable: Variable,
-    ) -> tuple[dict[str, Any], Variable]:
-        """Validate dataset and variable input, returning normalized copies."""
+    ) -> DatasetInfo:
+        """Create prepared dataset metadata from user input and tables."""
 
+        user_info = (
+            dataset.user_info
+            if isinstance(dataset, DatasetInfo)
+            else dataset
+        )
+        normalized_dataset = dict(dataset)
+        self.cv.add_scalar_defaults(normalized_dataset)
+        self.cv.add_source_defaults(normalized_dataset)
+        self.cv.add_institution_default(normalized_dataset)
+        self.cv.add_experiment_defaults(normalized_dataset)
+        self.cv.add_license_text(normalized_dataset)
+        self.cv.add_runtime_global_defaults(normalized_dataset)
+        self.cv.validate_dataset_values(normalized_dataset)
+        self.validate_source_attributes(normalized_dataset)
+        self.validate_experiment(normalized_dataset)
+        self.validate_parent_attributes(normalized_dataset)
+        return DatasetInfo(
+            normalized_dataset,
+            project=self,
+            user_info=user_info,
+        )
+
+    def _dataset_for_variable(
+        self,
+        dataset: DatasetInfo,
+        variable: Variable,
+    ) -> tuple[DatasetInfo, Variable]:
+        user_info = dataset.user_info
         normalized_dataset = dict(dataset)
         self.cv.add_scalar_defaults(normalized_dataset)
         variable_entry = variable.resolve_table_entry(self)
@@ -149,7 +177,62 @@ class ProjectTables:
                 f"{variable_entry.table_id}:{variable_entry.name} frequency "
                 f"{normalized_variable['frequency']!r}."
             )
-        return normalized_dataset, normalized_variable
+        return DatasetInfo(
+            normalized_dataset,
+            project=self,
+            user_info=user_info,
+        ), normalized_variable
+
+    def variable(self, name: str, **values: Any) -> Variable:
+        """Create a variable with metadata from the loaded variable tables."""
+
+        variable = Variable(name=name, **values)
+        variable_entry = variable.resolve_table_entry(self)
+        normalized = variable.merge_table_entry(variable_entry)
+        normalized.validate_against_entry(variable_entry)
+        return normalized
+
+    def axis(self, name: str, **values: Any) -> Axis:
+        """Create an axis with metadata from the loaded coordinate tables."""
+
+        return self._mark_prepared_axis(
+            Axis(name=name, **values).merge_table_entry(self)
+        )
+
+    def _axes(
+        self,
+        axes: Sequence[Axis],
+        variable: Variable | None = None,
+    ) -> tuple[Axis, ...]:
+        """Create a complete axis tuple, including required scalar axes."""
+
+        merged_axes = [
+            axis if self._is_prepared_axis(axis)
+            else axis.merge_table_entry(self)
+            for axis in axes
+        ]
+        if variable is not None:
+            merged_axes.extend(
+                Axis.missing_scalar_axes(self, merged_axes, variable)
+            )
+        return tuple(self._mark_prepared_axis(axis) for axis in merged_axes)
+
+    def grid(self, name: str | None = None, **values: Any) -> Grid:
+        """Create a grid with metadata from the loaded grid table."""
+
+        return Grid(name=name, **values).merge_table_entry(self)
+
+    def zfactor(self, name: str, **values: Any) -> ZFactor:
+        """Create a z-factor with metadata from formula-term tables."""
+
+        return ZFactor(name=name, **values).merge_table_entry(self)
+
+    def _mark_prepared_axis(self, axis: Axis) -> Axis:
+        object.__setattr__(axis, "_cmor4_project_tables", self)
+        return axis
+
+    def _is_prepared_axis(self, axis: Axis) -> bool:
+        return getattr(axis, "_cmor4_project_tables", None) is self
 
     def _add_table_header_defaults(
         self, dataset: dict[str, Any], variable_entry: VariableEntry
@@ -168,8 +251,14 @@ class ProjectTables:
         """Fill global attributes that are derived from the variable table."""
 
         variable_id, labels = variable.names()
-        dataset.setdefault("variable_id", variable_id)
-        dataset.setdefault("branded_variable", labels["branded_name"])
+        if "variable_id" not in dataset or _is_unresolved_template(
+            dataset["variable_id"]
+        ):
+            dataset["variable_id"] = variable_id
+        if "branded_variable" not in dataset or _is_unresolved_template(
+            dataset["branded_variable"]
+        ):
+            dataset["branded_variable"] = labels["branded_name"]
         for key in (
             "branding_suffix",
             "temporal_label",
@@ -178,41 +267,14 @@ class ProjectTables:
             "area_label",
         ):
             if key in labels:
-                dataset.setdefault(key, labels[key])
+                if key not in dataset or _is_unresolved_template(
+                    dataset[key]
+                ):
+                    dataset[key] = labels[key]
         for key in ("frequency", "realm", "table_id"):
             value = variable.get(key)
             if _is_table_value(value):
                 dataset.setdefault(key, _single_or_original(value))
-
-    def prepare_axes(
-        self,
-        axes: Sequence[Axis],
-        variable: Variable | None = None,
-    ) -> tuple[Axis, ...]:
-        """Merge coordinate-axis metadata from the loaded coordinate table."""
-
-        merged_axes = [axis.merge_table_entry(self) for axis in axes]
-        if variable is not None:
-            merged_axes.extend(
-                Axis.missing_scalar_axes(self, merged_axes, variable)
-            )
-        return tuple(merged_axes)
-
-    def prepare_zfactors(
-        self, zfactors: Sequence[ZFactor] | None
-    ) -> tuple[ZFactor, ...] | None:
-        """Merge z-factor metadata from the loaded formula-term table."""
-
-        if zfactors is None:
-            return None
-        return tuple(zfactor.merge_table_entry(self) for zfactor in zfactors)
-
-    def prepare_grid(self, grid: Grid | None) -> Grid | None:
-        """Merge grid-mapping metadata from the loaded grids table."""
-
-        if grid is None:
-            return None
-        return grid.merge_table_entry(self)
 
     def validate_dataset(self, dataset: Mapping[str, Any]) -> None:
         """Validate user-supplied controlled values against the project CV."""
@@ -313,6 +375,10 @@ def _overlay_table_entries(
                 entry[key] = value
         entries[name] = entry
     return entries
+
+
+def _is_unresolved_template(value: Any) -> bool:
+    return isinstance(value, str) and "<" in value and ">" in value
 
 
 def _resolve_optional_table(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -15,25 +15,10 @@ from ._time_utils import (
     date_part
 )
 from .axis import Axis
+from .dataset import DatasetInfo, INTERNAL_DATASET_KEYS
 from .grid import Grid
-from .metadata import _MetadataRecord
-from .tables import ProjectTables
 from .variable import Variable
 from .zfactor import ZFactor
-
-INTERNAL_DATASET_KEYS = {
-    "_history_template",
-    "outpath",
-    "output_file_template",
-    "output_path_template",
-}
-
-RIPF_KEYS = (
-    "realization_index",
-    "initialization_index",
-    "physics_index",
-    "forcing_index",
-)
 
 DEFAULT_OUTPUT_PATH_TEMPLATE = (
     "<drs_specs><mip_era><activity_id><institution_id><source_id>"
@@ -56,7 +41,7 @@ class Cmor4Result:
 
 
 def create_dataset(
-    dataset: Mapping[str, Any],
+    dataset: DatasetInfo,
     variable: Variable,
     axes: Sequence[Axis],
     data: Any,
@@ -64,20 +49,15 @@ def create_dataset(
     zfactors: Sequence[ZFactor] | None = None,
     grid: Grid | None = None,
     attrs: Mapping[str, Any] | None = None,
-    project: ProjectTables | None = None,
 ) -> xr.Dataset:
     """Create an xarray dataset from metadata objects.
 
     Parameters
     ----------
     dataset:
-        Global dataset metadata. Common CMOR identity fields such as
-        ``activity_id``, ``source_id``, ``experiment_id``, ``grid_label``,
-        ``frequency``, and the RIPF index fields are copied to global attrs.
+        Prepared dataset metadata created by ``ProjectTables.dataset_info``.
     variable:
-        Main variable metadata. ``name`` may be a branded name such as
-        ``tas_tavg-h2m-hxy-u``; ``id`` can override the output variable name.
-        ``dimensions`` names the axes used by the data array.
+        Main variable metadata created by ``ProjectTables.variable``.
     axes:
         Coordinate axes with ``name``, ``values``, optional ``bounds``,
         optional ``dimensions`` for auxiliary coordinates, and optional
@@ -92,11 +72,8 @@ def create_dataset(
         Extra global attributes.
     """
 
-    if project is not None:
-        dataset, variable = project.prepare_inputs(dataset, variable)
-        axes = project.prepare_axes(axes, variable)
-        zfactors = project.prepare_zfactors(zfactors)
-        grid = project.prepare_grid(grid)
+    dataset, variable = _dataset_and_variable(dataset, variable)
+    axes = _dataset_axes(dataset, axes, variable)
 
     coords: dict[str, Any] = {}
     data_vars: dict[str, Any] = {}
@@ -172,7 +149,7 @@ def create_dataset(
     ds = xr.Dataset(
         data_vars=data_vars,
         coords=coords,
-        attrs=_global_attrs(dataset, variable, attrs),
+        attrs=dataset.global_attributes(variable, attrs),
     )
 
     if zfactor_names:
@@ -194,7 +171,7 @@ def create_dataset(
 
 def write_netcdf(
     ds: xr.Dataset,
-    dataset: Mapping[str, Any],
+    dataset: DatasetInfo,
     variable: Variable,
     path: str | Path | None = None,
     **to_netcdf_kwargs: Any,
@@ -212,7 +189,7 @@ def write_netcdf(
 
 
 def cmorize(
-    dataset: Mapping[str, Any],
+    dataset: DatasetInfo,
     variable: Variable,
     axes: Sequence[Axis],
     data: Any,
@@ -221,16 +198,11 @@ def cmorize(
     grid: Grid | None = None,
     path: str | Path | None = None,
     attrs: Mapping[str, Any] | None = None,
-    project: ProjectTables | None = None,
     **to_netcdf_kwargs: Any,
 ) -> Cmor4Result:
     """Create and write a CMOR-like NetCDF file from metadata objects."""
 
-    if project is not None:
-        dataset, variable = project.prepare_inputs(dataset, variable)
-        axes = project.prepare_axes(axes, variable)
-        zfactors = project.prepare_zfactors(zfactors)
-        grid = project.prepare_grid(grid)
+    dataset, variable = _dataset_and_variable(dataset, variable)
     ds = create_dataset(
         dataset,
         variable,
@@ -253,12 +225,13 @@ def open_dataset(path: str | Path, **kwargs: Any) -> xr.Dataset:
 
 
 def build_output_path(
-    dataset: Mapping[str, Any],
+    dataset: DatasetInfo,
     variable: Variable,
     ds: xr.Dataset | None = None,
 ) -> Path:
     """Build a CMOR-like output path from dataset and variable metadata."""
 
+    dataset, variable = _dataset_and_variable(dataset, variable)
     root = Path(str(dataset.get("outpath", "."))).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
     path_template = str(
@@ -283,13 +256,14 @@ def build_output_path(
 
 def string_from_template(
     template: str,
-    dataset: Mapping[str, Any],
+    dataset: DatasetInfo,
     variable: Variable,
     ds: xr.Dataset | None = None,
     separator: str | None = None,
 ) -> str:
     """Render a template from global attributes and computed path tokens."""
 
+    dataset, variable = _dataset_and_variable(dataset, variable)
     return render_template(
         template,
         _template_tokens(dataset, variable, ds),
@@ -432,45 +406,25 @@ def _set_formula_terms(
                 ds[coord_name].attrs["formula_terms"] = formula_terms
 
 
-def _global_attrs(
-    dataset: Mapping[str, Any],
+def _dataset_and_variable(
+    dataset: DatasetInfo,
     variable: Variable,
-    extra_attrs: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    attrs: dict[str, Any] = {
-        "Conventions": dataset.get("Conventions", "CF-1.11"),
-        "cmor4_version": "0.1.0",
-    }
-    for key, value in dataset.items():
-        if key in INTERNAL_DATASET_KEYS or key.startswith("_"):
-            continue
-        if _MetadataRecord.is_netcdf_attr_value(value):
-            attrs[key] = value
+) -> tuple[DatasetInfo, Variable]:
+    project = dataset.project
+    if project is None:
+        return dataset, variable
+    return project._dataset_for_variable(dataset, variable)
 
-    var_name, labels = variable.names()
-    attrs.setdefault("variable_id", var_name)
-    attrs.setdefault("branded_variable", labels["branded_name"])
-    for key in (
-        "branding_suffix",
-        "temporal_label",
-        "vertical_label",
-        "horizontal_label",
-        "area_label",
-    ):
-        if key in labels:
-            attrs.setdefault(key, labels[key])
-    for key in ("frequency", "realm", "table_id"):
-        if key in variable:
-            attrs.setdefault(key, variable[key])
-    if "table_info" in variable:
-        attrs.setdefault("table_info", variable["table_info"])
-    attrs.setdefault("variant_label", _variant_label(dataset))
-    attrs.setdefault(
-        "creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    )
-    if extra_attrs:
-        attrs.update(_MetadataRecord.netcdf_attrs(extra_attrs))
-    return attrs
+
+def _dataset_axes(
+    dataset: DatasetInfo,
+    axes: Sequence[Axis],
+    variable: Variable,
+) -> tuple[Axis, ...]:
+    project = dataset.project
+    if project is None:
+        return tuple(axes)
+    return project._axes(axes, variable)
 
 
 def _add_axis_dim_aliases(
@@ -498,17 +452,8 @@ def _named_dimensions(
     return tuple(dims)
 
 
-def _variant_label(dataset: Mapping[str, Any]) -> str:
-    if dataset.get("variant_label"):
-        return str(dataset["variant_label"])
-    values = [dataset.get(key) for key in RIPF_KEYS]
-    if all(value not in (None, "") for value in values):
-        return "".join(str(value) for value in values)
-    return "r1i1p1f1"
-
-
 def _template_tokens(
-    dataset: Mapping[str, Any],
+    dataset: DatasetInfo,
     variable: Variable,
     ds: xr.Dataset | None,
 ) -> dict[str, Any]:
@@ -516,7 +461,7 @@ def _template_tokens(
     frequency = str(
         dataset.get("frequency", variable.get("frequency", "fx"))
     )
-    variant_label = _variant_label(dataset)
+    variant_label = dataset.variant_label()
     version = str(dataset.get("version") or f"v{date.today():%Y%m%d}")
     time_range = _time_range(ds, frequency) if frequency != "fx" else None
 

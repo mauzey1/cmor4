@@ -11,7 +11,15 @@ import cmor4
 from table_helpers import cmip7_project, drcdp_project, obs4mips_project
 
 
-def guide_time_axis(values, bounds, units, calendar="standard"):
+def guide_time_axis(values, bounds, units, calendar="standard", project=None):
+    if project is not None:
+        return project.axis(
+            "time",
+            values=values,
+            bounds=bounds,
+            units=units,
+            extra={"calendar": calendar},
+        )
     return cmor4.Axis(
         name="time",
         values=values,
@@ -21,8 +29,14 @@ def guide_time_axis(values, bounds, units, calendar="standard"):
     )
 
 
-def guide_lat_axis(values=(-45.0, 45.0)):
+def guide_lat_axis(values=(-45.0, 45.0), project=None):
     values = list(values)
+    if project is not None:
+        return project.axis(
+            "latitude",
+            values=values,
+            bounds=_regular_bounds(values),
+        )
     return cmor4.Axis(
         name="latitude",
         values=values,
@@ -30,8 +44,14 @@ def guide_lat_axis(values=(-45.0, 45.0)):
     )
 
 
-def guide_lon_axis(values=(90.0, 180.0, 270.0)):
+def guide_lon_axis(values=(90.0, 180.0, 270.0), project=None):
     values = list(values)
+    if project is not None:
+        return project.axis(
+            "longitude",
+            values=values,
+            bounds=_regular_bounds(values),
+        )
     return cmor4.Axis(
         name="longitude",
         values=values,
@@ -135,19 +155,21 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
     def test_drcdp_hourly_precipitation_uses_project_drs_template(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = drcdp_info(Path(tmp_dir))
-            variable = cmor4.Variable(
-                name="pr",
+            project = self.drcdp_ap1hr_project
+            variable = project.variable(
+                "pr",
                 missing_value=np.float32(1.0e20),
             )
+            info = project.dataset_info(drcdp_info(Path(tmp_dir)))
             axes = [
                 guide_time_axis(
                     [23.5, 24.5],
                     [[23.0, 24.0], [24.0, 25.0]],
                     "hours since 2008-12-31",
+                    project=project,
                 ),
-                guide_lat_axis(),
-                guide_lon_axis(),
+                guide_lat_axis(project=project),
+                guide_lon_axis(project=project),
             ]
 
             result = cmor4.cmorize(
@@ -155,7 +177,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 variable,
                 axes,
                 np.ones((2, 2, 3), dtype="f4"),
-                project=self.drcdp_ap1hr_project,
             )
 
             self.assertEqual(
@@ -176,19 +197,25 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
     def test_drcdp_tasmax_auto_adds_table_height2m_scalar(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = drcdp_info(Path(tmp_dir), source_id="LOCA2-1")
-            variable = cmor4.Variable(
-                name="tasmax",
+            project = self.drcdp_apday_project
+            variable = project.variable(
+                "tasmax",
                 missing_value=np.float32(1.0e20),
+            )
+            info = project.dataset_info(
+                drcdp_info(Path(tmp_dir), source_id="LOCA2-1")
             )
             axes = [
                 guide_time_axis(
                     [39811.0, 39812.0],
                     [[39810.5, 39811.5], [39811.5, 39812.5]],
                     "days since 1900-01-01",
+                    project=project,
                 ),
                 guide_lat_axis((32.0, 33.0, 34.0)),
-                guide_lon_axis((240.0, 241.0, 242.0, 243.0)),
+                guide_lon_axis(
+                    (240.0, 241.0, 242.0, 243.0)
+                ),
             ]
 
             ds = cmor4.create_dataset(
@@ -196,7 +223,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 variable,
                 axes,
                 np.ones((2, 3, 4), dtype="f4"),
-                project=self.drcdp_apday_project,
             )
 
             self.assertEqual(ds["tasmax"].dims, ("time", "lat", "lon"))
@@ -207,7 +233,8 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
     def test_cmip7_tas_auto_adds_table_height2m_scalar(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = {
+            project = self.cmip7_atmos_project
+            raw_info = {
                 "activity_id": "CMIP",
                 "calendar": "360_day",
                 "experiment_id": "amip",
@@ -230,17 +257,21 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     [[0.0, 30.0], [30.0, 60.0]],
                     "days since 1979-01-01",
                     calendar="360_day",
+                    project=project,
                 ),
                 guide_lat_axis((10.0, 20.0, 30.0)),
-                guide_lon_axis((0.0, 90.0, 180.0, 270.0)),
+                guide_lon_axis(
+                    (0.0, 90.0, 180.0, 270.0)
+                ),
             ]
+            variable = project.variable("tas_tavg-h2m-hxy-u")
+            info = project.dataset_info(raw_info)
 
             ds = cmor4.create_dataset(
                 info,
-                cmor4.Variable(name="tas_tavg-h2m-hxy-u"),
+                variable,
                 axes,
                 np.ones((2, 3, 4), dtype="f4"),
-                project=self.cmip7_atmos_project,
             )
 
             self.assertEqual(ds["tas"].dims, ("time", "lat", "lon"))
@@ -249,12 +280,17 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
     def test_drcdp_tasmax_grid_crs_dataset_shape(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = drcdp_info(
-                Path(tmp_dir), source_id="MACA3-0", institution_id="UCM-ACSL"
-            )
-            variable = cmor4.Variable(
-                name="tasmax",
+            project = self.drcdp_apday_project
+            variable = project.variable(
+                "tasmax",
                 missing_value=np.float32(1.0e20),
+            )
+            info = project.dataset_info(
+                drcdp_info(
+                    Path(tmp_dir),
+                    source_id="MACA3-0",
+                    institution_id="UCM-ACSL",
+                )
             )
             axes = [
                 guide_time_axis(
@@ -300,7 +336,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 axes,
                 np.ones((2, 2, 3), dtype="f4"),
                 grid=grid,
-                project=self.drcdp_apday_project,
             )
 
             self.assertEqual(ds["tasmax"].dims, ("time", "lat", "lon"))
@@ -326,22 +361,25 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
     def test_obs4mips_monthly_gridded_precipitation_template(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = obs4mips_info(
+            project = self.obs4mips_amon_project
+            raw_info = obs4mips_info(
                 Path(tmp_dir),
                 "CMAP-V1902",
                 "NOAA-NCEI",
-                self.obs4mips_amon_project.cv["license"],
+                project.cv["license"],
             )
-            info["grid"] = "1x1 degree latitude x longitude"
-            variable = cmor4.Variable(
-                name="pr",
+            raw_info["grid"] = "1x1 degree latitude x longitude"
+            variable = project.variable(
+                "pr",
                 missing_value=np.float32(1.0e20),
             )
+            info = project.dataset_info(raw_info)
             axes = [
                 guide_time_axis(
                     [15.0, 45.0],
                     [[0.0, 30.0], [30.0, 60.0]],
                     "days since 1979-01-01",
+                    project=project,
                 ),
                 guide_lat_axis((-45.0, 0.0)),
                 guide_lon_axis((90.0, 180.0, 270.0)),
@@ -352,7 +390,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 variable,
                 axes,
                 np.ones((2, 2, 3), dtype="f4"),
-                project=self.obs4mips_amon_project,
             )
 
             self.assertEqual(
@@ -366,13 +403,14 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
     def test_obs4mips_point_site_precipitation_dataset(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = obs4mips_info(
+            project = self.obs4mips_a1hrpt_project
+            raw_info = obs4mips_info(
                 Path(tmp_dir),
                 "ARMBE-atm-c1-1-8",
                 "DOE-ARM",
-                self.obs4mips_a1hrpt_project.cv["license"],
+                project.cv["license"],
             )
-            info.update(
+            raw_info.update(
                 {
                     "grid": "site",
                     "nominal_resolution": "site",
@@ -381,15 +419,17 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     "site_location": "San Luis",
                 }
             )
-            variable = cmor4.Variable(name="pr")
+            variable = project.variable("pr")
+            info = project.dataset_info(raw_info)
             axes = [
                 guide_time_axis(
                     [0.5, 1.5],
                     [[0.0, 1.0], [1.0, 2.0]],
                     "hours since 2018-01-01",
+                    project=project,
                 ),
-                cmor4.Axis(name="latitude1", values=[36.605]),
-                cmor4.Axis(name="longitude1", values=[262.515]),
+                project.axis("latitude1", values=[36.605]),
+                project.axis("longitude1", values=[262.515]),
             ]
 
             result = cmor4.cmorize(
@@ -397,7 +437,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 variable,
                 axes,
                 np.ones((2, 1, 1), dtype="f4"),
-                project=self.obs4mips_a1hrpt_project,
             )
 
             self.assertEqual(
@@ -410,31 +449,34 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
     def test_obs4mips_zonal_mean_o3zm_writes_o3_variable(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = obs4mips_info(
+            project = self.obs4mips_amon_project
+            raw_info = obs4mips_info(
                 Path(tmp_dir),
                 "BSVertOzone-v1-0",
                 "DLR-BIRA",
-                self.obs4mips_amon_project.cv["license"],
+                project.cv["license"],
                 grid_label="gnz",
             )
-            info.update(
+            raw_info.update(
                 {
                     "grid": "5 degree latitude height zonal mean",
                     "nominal_resolution": "500 km",
                 }
             )
-            variable = cmor4.Variable(
-                name="o3zm",
+            variable = project.variable(
+                "o3zm",
                 missing_value=np.float32(1.0e20),
             )
+            info = project.dataset_info(raw_info)
             axes = [
                 guide_time_axis(
                     [15.0, 45.0],
                     [[0.0, 30.0], [30.0, 60.0]],
                     "days since 1979-01-01",
+                    project=project,
                 ),
-                cmor4.Axis(
-                    name="height",
+                project.axis(
+                    "height",
                     values=[1000.0, 5000.0, 10000.0],
                 ),
                 guide_lat_axis((-60.0, -30.0)),
@@ -445,7 +487,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 variable,
                 axes,
                 np.ones((2, 3, 2), dtype="f4"),
-                project=self.obs4mips_amon_project,
             )
 
             self.assertEqual(

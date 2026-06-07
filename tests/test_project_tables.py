@@ -22,7 +22,26 @@ def require_path(test_case: unittest.TestCase, path: Path) -> None:
         test_case.skipTest(f"Project table source is not available: {path}")
 
 
-def lat_lon_axes():
+def lat_lon_axes(project=None):
+    if project is not None:
+        return [
+            project.axis(
+                "time",
+                values=[15.0, 45.0],
+                bounds=[[0.0, 30.0], [30.0, 60.0]],
+                units="days since 2000-01-01",
+            ),
+            project.axis(
+                "latitude",
+                values=[-45.0, 45.0],
+                bounds=[[-90.0, 0.0], [0.0, 90.0]],
+            ),
+            project.axis(
+                "longitude",
+                values=[90.0, 270.0],
+                bounds=[[0.0, 180.0], [180.0, 360.0]],
+            ),
+        ]
     return [
         cmor4.Axis(
             name="time",
@@ -65,45 +84,48 @@ def cmip7_dataset(**overrides):
 
 class ProjectTablesTest(unittest.TestCase):
     def assert_grid_table_metadata_is_used(self, project):
-        axes = project.prepare_axes(
-            [
-                cmor4.Axis(
-                    name="time",
-                    values=[15.0],
-                    units="days since 2020-02-01",
-                ),
-                cmor4.Axis(name="x", values=[0.0, 1.0]),
-                cmor4.Axis(name="y", values=[2.0, 3.0]),
-                cmor4.Axis(
-                    name="latitude",
-                    out_name="latitude",
-                    values=[[10.0, 20.0], [30.0, 40.0]],
-                    dimensions=["x", "y"],
-                    bounds=np.ones((2, 2, 4), dtype="f8"),
-                    bounds_name="vertices_latitude",
-                    bounds_dim="vertices",
-                    auxiliary=True,
-                ),
-                cmor4.Axis(
-                    name="longitude",
-                    out_name="longitude",
-                    values=[[100.0, 110.0], [120.0, 130.0]],
-                    dimensions=["x", "y"],
-                    bounds=np.ones((2, 2, 4), dtype="f8"),
-                    bounds_name="vertices_longitude",
-                    bounds_dim="vertices",
-                    auxiliary=True,
-                ),
-            ]
+        axes = [
+            project.axis(
+                "time",
+                values=[15.0],
+                units="days since 2020-02-01",
+            ),
+            project.axis("x", values=[0.0, 1.0]),
+            project.axis("y", values=[2.0, 3.0]),
+            project.axis(
+                "latitude",
+                out_name="latitude",
+                values=[[10.0, 20.0], [30.0, 40.0]],
+                dimensions=["x", "y"],
+                bounds=np.ones((2, 2, 4), dtype="f8"),
+                bounds_name="vertices_latitude",
+                bounds_dim="vertices",
+                auxiliary=True,
+            ),
+            project.axis(
+                "longitude",
+                out_name="longitude",
+                values=[[100.0, 110.0], [120.0, 130.0]],
+                dimensions=["x", "y"],
+                bounds=np.ones((2, 2, 4), dtype="f8"),
+                bounds_name="vertices_longitude",
+                bounds_dim="vertices",
+                auxiliary=True,
+            ),
+        ]
+
+        variable = cmor4.Variable(
+            name="sample",
+            dimensions=["time", "x", "y"],
+            coordinates=["latitude", "longitude"],
+        )
+        info = cmor4.DatasetInfo.from_mapping(
+            {"frequency": "mon"},
         )
 
         ds = cmor4.create_dataset(
-            {"frequency": "mon"},
-            cmor4.Variable(
-                name="sample",
-                dimensions=["time", "x", "y"],
-                coordinates=["latitude", "longitude"],
-            ),
+            info,
+            variable,
             axes,
             np.ones((1, 2, 2), dtype="f4"),
         )
@@ -183,28 +205,28 @@ class ProjectTablesTest(unittest.TestCase):
     def test_cmip7_generic_level_resolves_concrete_coordinate(self):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_ocean.json")
-        dataset = cmip7_dataset()
+        variable = project.variable("agessc_tavg-ol-hxy-sea")
+        dataset = project.dataset_info(cmip7_dataset())
 
         ds = cmor4.create_dataset(
             dataset,
-            cmor4.Variable(name="agessc_tavg-ol-hxy-sea"),
+            variable,
             [
-                cmor4.Axis(
-                    name="time",
+                project.axis(
+                    "time",
                     values=[15.0, 45.0],
                     units="days since 2000-01-01",
                 ),
-                cmor4.Axis(
-                    name="olevel",
+                project.axis(
+                    "olevel",
                     values=[5.0, 50.0],
                     bounds=[[0.0, 10.0], [10.0, 100.0]],
                     standard_name="depth",
                 ),
-                cmor4.Axis(name="latitude", values=[-45.0, 45.0]),
-                cmor4.Axis(name="longitude", values=[90.0, 270.0]),
+                project.axis("latitude", values=[-45.0, 45.0]),
+                project.axis("longitude", values=[90.0, 270.0]),
             ],
             np.ones((2, 2, 2, 2), dtype="f4"),
-            project=project,
         )
 
         self.assertEqual(
@@ -261,18 +283,20 @@ class ProjectTablesTest(unittest.TestCase):
                 coordinate_table=coordinate_table,
             )
 
+            variable = project.variable("sample")
+            info = project.dataset_info({})
+
             ds = cmor4.create_dataset(
-                {},
-                cmor4.Variable(name="sample"),
+                info,
+                variable,
                 [
-                    cmor4.Axis(
-                        name="source_x",
+                    project.axis(
+                        "source_x",
                         table_entry="runtime_axis",
                         values=[0.0, 1.0],
                     )
                 ],
                 np.ones((2,), dtype="f4"),
-                project=project,
             )
 
             self.assertEqual(ds["sample"].dims, ("runtime_axis",))
@@ -295,45 +319,48 @@ class ProjectTablesTest(unittest.TestCase):
     def test_cmip7_grid_axes_and_aux_coords_come_from_grids_table(self):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_seaIce.json")
-        axes = project.prepare_axes(
-            [
-                cmor4.Axis(
-                    name="time",
-                    values=[15.0],
-                    units="days since 2020-02-01",
-                ),
-                cmor4.Axis(name="x", values=[0.0, 1.0]),
-                cmor4.Axis(name="y", values=[2.0, 3.0]),
-                cmor4.Axis(
-                    name="latitude",
-                    out_name="latitude",
-                    values=[[10.0, 20.0], [30.0, 40.0]],
-                    dimensions=["x", "y"],
-                    bounds=np.ones((2, 2, 4), dtype="f8"),
-                    bounds_name="vertices_latitude",
-                    bounds_dim="vertices",
-                    auxiliary=True,
-                ),
-                cmor4.Axis(
-                    name="longitude",
-                    out_name="longitude",
-                    values=[[100.0, 110.0], [120.0, 130.0]],
-                    dimensions=["x", "y"],
-                    bounds=np.ones((2, 2, 4), dtype="f8"),
-                    bounds_name="vertices_longitude",
-                    bounds_dim="vertices",
-                    auxiliary=True,
-                ),
-            ]
+        axes = [
+            project.axis(
+                "time",
+                values=[15.0],
+                units="days since 2020-02-01",
+            ),
+            project.axis("x", values=[0.0, 1.0]),
+            project.axis("y", values=[2.0, 3.0]),
+            project.axis(
+                "latitude",
+                out_name="latitude",
+                values=[[10.0, 20.0], [30.0, 40.0]],
+                dimensions=["x", "y"],
+                bounds=np.ones((2, 2, 4), dtype="f8"),
+                bounds_name="vertices_latitude",
+                bounds_dim="vertices",
+                auxiliary=True,
+            ),
+            project.axis(
+                "longitude",
+                out_name="longitude",
+                values=[[100.0, 110.0], [120.0, 130.0]],
+                dimensions=["x", "y"],
+                bounds=np.ones((2, 2, 4), dtype="f8"),
+                bounds_name="vertices_longitude",
+                bounds_dim="vertices",
+                auxiliary=True,
+            ),
+        ]
+
+        variable = cmor4.Variable(
+            name="sample",
+            dimensions=["time", "x", "y"],
+            coordinates=["latitude", "longitude"],
+        )
+        info = cmor4.DatasetInfo.from_mapping(
+            {"frequency": "mon"},
         )
 
         ds = cmor4.create_dataset(
-            {"frequency": "mon"},
-            cmor4.Variable(
-                name="sample",
-                dimensions=["time", "x", "y"],
-                coordinates=["latitude", "longitude"],
-            ),
+            info,
+            variable,
             axes,
             np.ones((1, 2, 2), dtype="f4"),
         )
@@ -369,7 +396,7 @@ class ProjectTablesTest(unittest.TestCase):
 
         self.assert_grid_table_metadata_is_used(project)
 
-    def test_prepare_inputs_merges_authoritative_variable_metadata(self):
+    def test_dataset_info_merges_authoritative_variable_metadata(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
         dataset = {
@@ -391,9 +418,8 @@ class ProjectTablesTest(unittest.TestCase):
             "variant_label": "CMORGuide",
         }
 
-        prepared_dataset, prepared_variable = project.prepare_inputs(
-            dataset, cmor4.Variable(name="o3zm")
-        )
+        prepared_variable = project.variable("o3zm")
+        prepared_dataset = project.dataset_info(dataset)
 
         self.assertEqual(prepared_dataset["source_id"], "BSVertOzone-v1-0")
         self.assertEqual(prepared_variable.id, "o3")
@@ -501,14 +527,15 @@ class ProjectTablesTest(unittest.TestCase):
                 "source_id": "DUMMY-MODEL",
                 "version": "v20200101",
             }
-            variable = cmor4.Variable(name="tos_tavg-u-hxy-sea")
+            variable = project.variable("tos_tavg-u-hxy-sea")
+            info = project.dataset_info(dataset)
+            axes = lat_lon_axes(project)
 
             result = cmor4.cmorize(
-                dataset,
+                info,
                 variable,
-                lat_lon_axes(),
+                axes,
                 np.ones((2, 2, 2), dtype="f4"),
-                project=project,
             )
 
             self.assertEqual(result.dataset["tos"].attrs["units"], "degC")
@@ -548,12 +575,14 @@ class ProjectTablesTest(unittest.TestCase):
             "archive_id": "WCRP",
         }
 
+        variable = project.variable("tos_tavg-u-hxy-sea")
+        info = project.dataset_info(dataset)
+
         ds = cmor4.create_dataset(
-            dataset,
-            cmor4.Variable(name="tos_tavg-u-hxy-sea"),
-            lat_lon_axes(),
+            info,
+            variable,
+            lat_lon_axes(project),
             np.ones((2, 2, 2), dtype="f4"),
-            project=project,
         )
 
         expected = {
@@ -602,13 +631,7 @@ class ProjectTablesTest(unittest.TestCase):
         dataset = cmip7_dataset(activity_id="not-a-real-activity")
 
         with self.assertRaises(cmor4.TableValidationError):
-            cmor4.create_dataset(
-                dataset,
-                cmor4.Variable(name="tos_tavg-u-hxy-sea"),
-                lat_lon_axes(),
-                np.ones((2, 2, 2), dtype="f4"),
-                project=project,
-            )
+            project.dataset_info(dataset)
 
     def test_experiment_required_source_type_is_validated(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -660,24 +683,20 @@ class ProjectTablesTest(unittest.TestCase):
                 "source_type": "AOGCM AER",
             }
 
-            prepared, _ = project.prepare_inputs(
-                dataset, cmor4.Variable(name="sample")
-            )
+            prepared = project.dataset_info(dataset)
             self.assertEqual(prepared["source_type"], "AOGCM AER")
 
             with self.assertRaisesRegex(
                 cmor4.TableValidationError, "missing required"
             ):
-                project.prepare_inputs(
-                    {**dataset, "source_type": "AER"},
-                    cmor4.Variable(name="sample"),
+                project.dataset_info(
+                    {**dataset, "source_type": "AER"}
                 )
             with self.assertRaisesRegex(
                 cmor4.TableValidationError, "not allowed"
             ):
-                project.prepare_inputs(
-                    {**dataset, "source_type": "AOGCM LAND"},
-                    cmor4.Variable(name="sample"),
+                project.dataset_info(
+                    {**dataset, "source_type": "AOGCM LAND"}
                 )
 
     def test_required_global_attributes_are_enforced(self):
@@ -685,16 +704,17 @@ class ProjectTablesTest(unittest.TestCase):
         project = cmip7_project("tables/CMIP7_ocean.json")
         dataset = cmip7_dataset()
         dataset.pop("license_id")
+        variable = project.variable("tos_tavg-u-hxy-sea")
+        info = project.dataset_info(dataset)
 
         with self.assertRaisesRegex(
             cmor4.TableValidationError, "license_id"
         ):
             cmor4.create_dataset(
-                dataset,
-                cmor4.Variable(name="tos_tavg-u-hxy-sea"),
-                lat_lon_axes(),
+                info,
+                variable,
+                lat_lon_axes(project),
                 np.ones((2, 2, 2), dtype="f4"),
-                project=project,
             )
 
     def test_source_id_specific_attributes_are_validated(self):
@@ -716,13 +736,7 @@ class ProjectTablesTest(unittest.TestCase):
         with self.assertRaisesRegex(
             cmor4.TableValidationError, "institution_id"
         ):
-            cmor4.create_dataset(
-                dataset,
-                cmor4.Variable(name="tasmax"),
-                lat_lon_axes(),
-                np.ones((2, 2, 2), dtype="f4"),
-                project=project,
-            )
+            project.dataset_info(dataset)
 
     def test_parent_experiment_attributes_are_required_by_experiment_cv(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -732,13 +746,7 @@ class ProjectTablesTest(unittest.TestCase):
         with self.assertRaisesRegex(
             cmor4.TableValidationError, "parent_experiment_id"
         ):
-            cmor4.create_dataset(
-                dataset,
-                cmor4.Variable(name="tos_tavg-u-hxy-sea"),
-                lat_lon_axes(),
-                np.ones((2, 2, 2), dtype="f4"),
-                project=project,
-            )
+            project.dataset_info(dataset)
 
     def test_parent_experiment_attributes_follow_experiment_cv(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -755,12 +763,14 @@ class ProjectTablesTest(unittest.TestCase):
             branch_time_in_parent=0.0,
         )
 
+        variable = project.variable("tos_tavg-u-hxy-sea")
+        info = project.dataset_info(dataset)
+
         ds = cmor4.create_dataset(
-            dataset,
-            cmor4.Variable(name="tos_tavg-u-hxy-sea"),
-            lat_lon_axes(),
+            info,
+            variable,
+            lat_lon_axes(project),
             np.ones((2, 2, 2), dtype="f4"),
-            project=project,
         )
 
         self.assertEqual(ds.attrs["parent_experiment_id"], "piControl")
@@ -793,12 +803,8 @@ class ProjectTablesTest(unittest.TestCase):
         for key, value in cases.items():
             with self.subTest(key=key):
                 with self.assertRaises(cmor4.TableValidationError):
-                    cmor4.create_dataset(
-                        {**dataset, key: value},
-                        cmor4.Variable(name="tos_tavg-u-hxy-sea"),
-                        lat_lon_axes(),
-                        np.ones((2, 2, 2), dtype="f4"),
-                        project=project,
+                    project.dataset_info(
+                        {**dataset, key: value}
                     )
 
     def test_cmip7_variable_attrs_come_from_variable_table(self):
@@ -820,20 +826,22 @@ class ProjectTablesTest(unittest.TestCase):
             "source_id": "DUMMY-MODEL",
         }
 
+        variable = project.variable(
+            "tos_tavg-u-hxy-sea",
+            units="K",
+            standard_name="not_the_table_value",
+            attrs={
+                "long_name": "Not the table value",
+                "cell_methods": "not the table value",
+            },
+        )
+        info = project.dataset_info(dataset)
+
         ds = cmor4.create_dataset(
-            dataset,
-            cmor4.Variable(
-                name="tos_tavg-u-hxy-sea",
-                units="K",
-                standard_name="not_the_table_value",
-                attrs={
-                    "long_name": "Not the table value",
-                    "cell_methods": "not the table value",
-                },
-            ),
-            lat_lon_axes(),
+            info,
+            variable,
+            lat_lon_axes(project),
             np.ones((2, 2, 2), dtype="f4"),
-            project=project,
         )
 
         self.assertEqual(ds["tos"].attrs["units"], "degC")
@@ -882,17 +890,27 @@ class ProjectTablesTest(unittest.TestCase):
                 "version": "v20260512",
             }
             axes = [
-                lat_lon_axes()[0],
-                cmor4.Axis(name="height", values=[1000.0, 5000.0]),
-                lat_lon_axes()[1],
+                project.axis(
+                    "time",
+                    values=[15.0, 45.0],
+                    bounds=[[0.0, 30.0], [30.0, 60.0]],
+                    units="days since 2000-01-01",
+                ),
+                project.axis("height", values=[1000.0, 5000.0]),
+                project.axis(
+                    "latitude",
+                    values=[-45.0, 45.0],
+                    bounds=[[-90.0, 0.0], [0.0, 90.0]],
+                ),
             ]
+            variable = project.variable("o3zm")
+            info = project.dataset_info(dataset)
 
             result = cmor4.cmorize(
-                dataset,
-                cmor4.Variable(name="o3zm"),
+                info,
+                variable,
                 axes,
                 np.ones((2, 2, 2), dtype="f4"),
-                project=project,
             )
 
             self.assertIn("o3", result.dataset)
@@ -918,13 +936,7 @@ class ProjectTablesTest(unittest.TestCase):
         }
 
         with self.assertRaises(cmor4.TableValidationError):
-            cmor4.create_dataset(
-                dataset,
-                cmor4.Variable(name="not_a_table_variable"),
-                lat_lon_axes(),
-                np.ones((2, 2, 2), dtype="f4"),
-                project=project,
-            )
+            project.variable("not_a_table_variable")
 
     def test_obs4mips_rejects_frequency_that_does_not_match_table(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
@@ -940,13 +952,25 @@ class ProjectTablesTest(unittest.TestCase):
             "source_id": "CMAP-V1902",
         }
 
+        variable = project.variable("pr")
+        info = project.dataset_info(dataset)
+        axes = [
+            project.axis(
+                "time",
+                values=[15.0, 45.0],
+                bounds=[[0.0, 30.0], [30.0, 60.0]],
+                units="days since 2000-01-01",
+            ),
+            project.axis("latitude", values=[-45.0, 45.0]),
+            project.axis("longitude", values=[90.0, 270.0]),
+        ]
+
         with self.assertRaises(cmor4.TableValidationError):
             cmor4.create_dataset(
-                dataset,
-                cmor4.Variable(name="pr"),
-                lat_lon_axes(),
+                info,
+                variable,
+                axes,
                 np.ones((2, 2, 2), dtype="f4"),
-                project=project,
             )
 
 

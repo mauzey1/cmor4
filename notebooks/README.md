@@ -6,11 +6,11 @@ The examples use table-backed metadata: variable attributes come from the
 loaded CMIP7 variable table, coordinate attributes come from the coordinate
 and grid tables, and hybrid-coordinate z-factor
 attributes come from the formula terms table. The notebook dictionaries focus
-on dataset and custom grid metadata. `cmor4.Axis`, `cmor4.Variable`, and
-`cmor4.ZFactor` objects carry source values, bounds, calendars, and missing
-values.
-Fixed scalar coordinates such as `height2m` are added from the table when the
-selected variable requires them.
+on dataset and custom grid metadata. The examples use `project.variable(...)`,
+`project.axis(...)`, `project.zfactor(...)`, and `project.dataset_info(...)`
+to combine runtime values with table metadata. Fixed scalar coordinates such
+as `height2m` are added during dataset creation when the selected variable
+requires them.
 
 ## Setup
 
