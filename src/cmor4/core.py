@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 import xarray as xr
 
+from ._axis_validation import validate_and_normalize_axes
 from ._templates import render_template
 from ._time_utils import (
     decode_time_value,
@@ -74,6 +75,7 @@ def create_dataset(
 
     dataset, variable = _dataset_and_variable(dataset, variable)
     axes = _dataset_axes(dataset, axes, variable)
+    axes = validate_and_normalize_axes(dataset, variable, axes)
 
     coords: dict[str, Any] = {}
     data_vars: dict[str, Any] = {}

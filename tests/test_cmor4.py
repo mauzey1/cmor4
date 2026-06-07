@@ -211,6 +211,106 @@ class Cmor4Test(unittest.TestCase):
             self.assertEqual(ds["lat"].attrs["bounds"], "lat_bnds")
             self.assertEqual(ds.attrs["variant_label"], "r9i1p1f3")
 
+    def test_axis_validation_matches_cmor_time_and_bounds_checks(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            variable = self.project.variable(
+                "tos_tavg-u-hxy-sea",
+                table_id="ocean",
+            )
+            info = self.project.dataset_info(dataset_info(Path(tmp_dir)))
+            axes = [
+                self.project.axis(
+                    "time",
+                    values=[15.0, 45.0],
+                    bounds=[[0.0, 31.0], [31.0, 60.0]],
+                    units="days since 2000-01-01",
+                ),
+                *horizontal_axes(self.project),
+            ]
+
+            with self.assertWarnsRegex(RuntimeWarning, "bound midpoints"):
+                ds = cmor4.create_dataset(
+                    info,
+                    variable,
+                    axes,
+                    np.ones((2, 2, 2), dtype="f4"),
+                )
+
+            np.testing.assert_allclose(ds["time"].values, [15.5, 45.5])
+
+            bad_interval_axes = [
+                self.project.axis(
+                    "time",
+                    values=[15.0, 45.0, 90.0],
+                    bounds=[[0.0, 30.0], [30.0, 60.0], [60.0, 120.0]],
+                    units="days since 2000-01-01",
+                ),
+                *horizontal_axes(self.project),
+            ]
+            with self.assertRaisesRegex(
+                cmor4.TableValidationError,
+                "Time interval mismatch detected",
+            ):
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    bad_interval_axes,
+                    np.ones((3, 2, 2), dtype="f4"),
+                )
+
+    def test_axis_validation_rejects_bad_values_and_accepts_flat_bounds(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            variable = self.project.variable(
+                "tos_tavg-u-hxy-sea",
+                table_id="ocean",
+            )
+            info = self.project.dataset_info(dataset_info(Path(tmp_dir)))
+
+            flat_bound_axes = [
+                time_axis(self.project),
+                self.project.axis(
+                    "latitude",
+                    values=[-45.0, 45.0],
+                    bounds=[-90.0, 0.0, 90.0],
+                ),
+                self.project.axis(
+                    "longitude",
+                    values=[90.0, 270.0],
+                    bounds=[0.0, 180.0, 360.0],
+                ),
+            ]
+            ds = cmor4.create_dataset(
+                info,
+                variable,
+                flat_bound_axes,
+                np.ones((2, 2, 2), dtype="f4"),
+            )
+            self.assertEqual(ds["lat_bnds"].shape, (2, 2))
+
+            bad_lat_axes = [
+                time_axis(self.project),
+                self.project.axis(
+                    "latitude",
+                    values=[-95.0, 45.0],
+                    bounds=[[-100.0, 0.0], [0.0, 90.0]],
+                ),
+                self.project.axis(
+                    "longitude",
+                    values=[90.0, 270.0],
+                    bounds=[[0.0, 180.0], [180.0, 360.0]],
+                ),
+            ]
+            with self.assertRaisesRegex(
+                cmor4.TableValidationError,
+                "valid_min",
+            ):
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    bad_lat_axes,
+                    np.ones((2, 2, 2), dtype="f4"),
+                )
+
     def test_string_from_template_uses_global_attrs_and_special_values(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             variable = cmor4.Variable(name="sample", dimensions=["time"])
@@ -278,7 +378,27 @@ class Cmor4Test(unittest.TestCase):
                 time_axis(self.project),
                 self.project.axis(
                     "plev19",
-                    values=[100000.0, 50000.0],
+                    values=[
+                        100000.0,
+                        92500.0,
+                        85000.0,
+                        70000.0,
+                        60000.0,
+                        50000.0,
+                        40000.0,
+                        30000.0,
+                        25000.0,
+                        20000.0,
+                        15000.0,
+                        10000.0,
+                        7000.0,
+                        5000.0,
+                        3000.0,
+                        2000.0,
+                        1000.0,
+                        500.0,
+                        100.0,
+                    ],
                     units="Pa",
                     positive="down",
                 ),
@@ -293,7 +413,7 @@ class Cmor4Test(unittest.TestCase):
                 plev_info,
                 plev_variable,
                 plev_axes,
-                np.ones((2, 2, 2, 2), dtype="f4"),
+                np.ones((2, 19, 2, 2), dtype="f4"),
             )
 
             self.assertEqual(

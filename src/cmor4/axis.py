@@ -86,10 +86,19 @@ class Axis(_MetadataRecord):
             "generic_level_name",
             "z_factors",
             "z_bounds_factors",
+            "valid_min",
+            "valid_max",
+            "requested",
+            "requested_bounds",
+            "bounds_values",
+            "must_have_bounds",
+            "stored_direction",
+            "tolerance",
+            "type",
         ):
             value = entry.get(key)
             if is_table_value(value):
-                merged.setdefault(key, value)
+                merged.setdefault(key, parse_table_value(value))
         merged.setdefault("out_name", entry_name)
         if "values" not in merged:
             values = entry_values(entry)

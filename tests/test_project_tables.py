@@ -88,6 +88,7 @@ class ProjectTablesTest(unittest.TestCase):
             project.axis(
                 "time",
                 values=[15.0],
+                bounds=[[0.0, 30.0]],
                 units="days since 2020-02-01",
             ),
             project.axis("x", values=[0.0, 1.0]),
@@ -215,6 +216,7 @@ class ProjectTablesTest(unittest.TestCase):
                 project.axis(
                     "time",
                     values=[15.0, 45.0],
+                    bounds=[[0.0, 30.0], [30.0, 60.0]],
                     units="days since 2000-01-01",
                 ),
                 project.axis(
@@ -223,8 +225,16 @@ class ProjectTablesTest(unittest.TestCase):
                     bounds=[[0.0, 10.0], [10.0, 100.0]],
                     standard_name="depth",
                 ),
-                project.axis("latitude", values=[-45.0, 45.0]),
-                project.axis("longitude", values=[90.0, 270.0]),
+                project.axis(
+                    "latitude",
+                    values=[-45.0, 45.0],
+                    bounds=[[-90.0, 0.0], [0.0, 90.0]],
+                ),
+                project.axis(
+                    "longitude",
+                    values=[90.0, 270.0],
+                    bounds=[[0.0, 180.0], [180.0, 360.0]],
+                ),
             ],
             np.ones((2, 2, 2, 2), dtype="f4"),
         )
@@ -323,6 +333,7 @@ class ProjectTablesTest(unittest.TestCase):
             project.axis(
                 "time",
                 values=[15.0],
+                bounds=[[0.0, 30.0]],
                 units="days since 2020-02-01",
             ),
             project.axis("x", values=[0.0, 1.0]),
