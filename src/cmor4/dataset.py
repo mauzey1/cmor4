@@ -32,6 +32,15 @@ class DatasetInfo(Mapping[str, Any]):
     tables it contains user-provided dataset metadata plus project CV defaults
     and runtime global attributes. Variable-derived global attributes are added
     when a variable is passed to ``create_dataset`` or related helpers.
+
+    Parameters
+    ----------
+    data:
+        Prepared dataset metadata values.
+    project:
+        Project table loader that prepared the metadata, if any.
+    user_info:
+        Original user-provided dataset metadata.
     """
 
     data: Mapping[str, Any]
@@ -56,7 +65,20 @@ class DatasetInfo(Mapping[str, Any]):
         values: Mapping[str, Any],
         project: Any = None,
     ) -> "DatasetInfo":
-        """Create dataset info directly from user metadata."""
+        """Create dataset info directly from user metadata.
+
+        Parameters
+        ----------
+        values:
+            Dataset metadata values.
+        project:
+            Project table loader associated with the metadata, if any.
+
+        Returns
+        -------
+        DatasetInfo
+            Mapping-compatible dataset metadata record.
+        """
 
         return cls(
             values,
@@ -65,7 +87,13 @@ class DatasetInfo(Mapping[str, Any]):
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a mutable copy of the prepared dataset metadata."""
+        """Return a mutable copy of the prepared dataset metadata.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dataset metadata as a new dictionary.
+        """
 
         return dict(self.data)
 
@@ -74,7 +102,21 @@ class DatasetInfo(Mapping[str, Any]):
         variable: Any,
         extra_attrs: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Return NetCDF global attributes for this dataset and variable."""
+        """Return NetCDF global attributes for this dataset and variable.
+
+        Parameters
+        ----------
+        variable:
+            Variable metadata whose labels and table attributes are added to
+            the global attributes.
+        extra_attrs:
+            Additional global attributes that override generated values.
+
+        Returns
+        -------
+        dict[str, Any]
+            NetCDF-safe global attributes.
+        """
 
         attrs: dict[str, Any] = {
             "Conventions": self.get("Conventions", "CF-1.11"),
@@ -112,7 +154,14 @@ class DatasetInfo(Mapping[str, Any]):
         return attrs
 
     def variant_label(self) -> str:
-        """Return the explicit or RIPF-derived variant label."""
+        """Return the explicit or RIPF-derived variant label.
+
+        Returns
+        -------
+        str
+            Existing ``variant_label``, a label derived from RIPF index
+            attributes, or the default ``r1i1p1f1``.
+        """
 
         if self.get("variant_label"):
             return str(self["variant_label"])

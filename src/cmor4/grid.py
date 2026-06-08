@@ -32,7 +32,29 @@ _NON_NEGATIVE_PARAMETERS = {
 
 @dataclass(frozen=True)
 class Grid(_MetadataRecord):
-    """Runtime grid dimensions and optional grid-mapping metadata."""
+    """Runtime grid dimensions and optional grid-mapping metadata.
+
+    Parameters
+    ----------
+    dimensions:
+        Output dimensions used for the data variable.
+    name:
+        Requested grid mapping entry name.
+    table_entry, mapping_entry:
+        Grid table entry selectors.
+    mapping_var:
+        Name of the scalar grid-mapping variable to write.
+    mapping_name, grid_mapping_name:
+        CF grid mapping name.
+    coordinates:
+        Auxiliary coordinate names associated with the grid.
+    params:
+        Grid-mapping parameter values.
+    attrs:
+        Extra NetCDF attributes for the grid-mapping variable.
+    extra:
+        Additional mapping keys preserved by the metadata record.
+    """
 
     dimensions: tuple[str, ...] | list[str] | None = None
     name: str | None = None
@@ -47,7 +69,18 @@ class Grid(_MetadataRecord):
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
     def merge_table_entry(self, project: Any) -> "Grid":
-        """Merge grid-mapping metadata from the loaded grids table."""
+        """Merge grid-mapping metadata from the loaded grids table.
+
+        Parameters
+        ----------
+        project:
+            Project table loader containing grid mapping entries.
+
+        Returns
+        -------
+        Grid
+            New grid metadata record with table defaults applied.
+        """
 
         merged = self.to_dict()
         entry_name, entry = self.resolve_table_entry(project)
@@ -69,7 +102,18 @@ class Grid(_MetadataRecord):
     def resolve_table_entry(
         self, project: Any
     ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve a grid mapping entry from this grid definition."""
+        """Resolve a grid mapping entry from this grid definition.
+
+        Parameters
+        ----------
+        project:
+            Project table loader containing grid mapping entries.
+
+        Returns
+        -------
+        tuple[str | None, Mapping[str, Any] | None]
+            Matched entry name and table metadata, or ``(None, None)``.
+        """
 
         requested = str(
             self.table_entry
@@ -83,9 +127,31 @@ class Grid(_MetadataRecord):
 
     @property
     def variable_name(self) -> str:
+        """Return the output grid-mapping variable name.
+
+        Returns
+        -------
+        str
+            Explicit mapping variable name or the default ``crs``.
+        """
+
         return str(self.mapping_var or "crs")
 
     def variable_dimensions(self, variable: Any) -> tuple[str, ...] | None:
+        """Return data-variable dimensions implied by this grid.
+
+        Parameters
+        ----------
+        variable:
+            Variable metadata used as a fallback source of dimensions.
+
+        Returns
+        -------
+        tuple[str, ...] | None
+            Grid dimensions, variable dimensions, or ``None`` when neither is
+            defined.
+        """
+
         if self.dimensions:
             return tuple(str(name) for name in self.dimensions)
         dimensions = variable.get("dimensions")
@@ -95,6 +161,14 @@ class Grid(_MetadataRecord):
 
     @property
     def has_mapping(self) -> bool:
+        """Return whether this grid should write a grid-mapping variable.
+
+        Returns
+        -------
+        bool
+            ``True`` when a mapping name, parameters, or attributes are set.
+        """
+
         return bool(
             self.mapping_name
             or self.grid_mapping_name
@@ -103,6 +177,14 @@ class Grid(_MetadataRecord):
         )
 
     def mapping_attributes(self) -> dict[str, Any]:
+        """Return NetCDF attributes for the grid-mapping variable.
+
+        Returns
+        -------
+        dict[str, Any]
+            NetCDF-safe grid-mapping attributes after parameter validation.
+        """
+
         attrs = self.netcdf_attrs(self.attrs)
         mapping_name = self.mapping_name or self.grid_mapping_name
         if mapping_name:

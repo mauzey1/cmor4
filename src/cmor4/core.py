@@ -36,7 +36,15 @@ DEFAULT_OUTPUT_FILE_TEMPLATE = (
 
 @dataclass(frozen=True)
 class Cmor4Result:
-    """Result returned by :func:`cmorize`."""
+    """Result returned by :func:`cmorize`.
+
+    Parameters
+    ----------
+    dataset:
+        In-memory xarray dataset that was written to disk.
+    path:
+        Filesystem path where the NetCDF file was written.
+    """
 
     dataset: xr.Dataset
     path: Path
@@ -72,6 +80,12 @@ def create_dataset(
         Optional runtime grid dimensions and grid-mapping metadata.
     attrs:
         Extra global attributes.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset containing the requested variable, coordinates, bounds,
+        formula terms, grid mapping, and global attributes.
     """
 
     dataset, variable = _dataset_and_variable(dataset, variable)
@@ -182,7 +196,27 @@ def write_netcdf(
     path: str | Path | None = None,
     **to_netcdf_kwargs: Any,
 ) -> Path:
-    """Write a dataset to NetCDF and return the resolved path."""
+    """Write a dataset to NetCDF and return the resolved path.
+
+    Parameters
+    ----------
+    ds:
+        Dataset to write.
+    dataset:
+        Dataset metadata used to build the default output path.
+    variable:
+        Variable metadata used to build the default output path.
+    path:
+        Explicit output path. If omitted, the path is rendered from dataset
+        and variable metadata.
+    **to_netcdf_kwargs:
+        Additional keyword arguments forwarded to ``xarray.Dataset.to_netcdf``.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the written NetCDF file.
+    """
 
     output_path = (
         Path(path)
@@ -206,7 +240,35 @@ def cmorize(
     attrs: Mapping[str, Any] | None = None,
     **to_netcdf_kwargs: Any,
 ) -> Cmor4Result:
-    """Create and write a CMOR-like NetCDF file from metadata objects."""
+    """Create and write a CMOR-like NetCDF file from metadata objects.
+
+    Parameters
+    ----------
+    dataset:
+        Dataset-level metadata.
+    variable:
+        Main variable metadata.
+    axes:
+        Coordinate axes for the variable.
+    data:
+        Main variable data values.
+    zfactors:
+        Optional formula-term variables for hybrid coordinates.
+    grid:
+        Optional runtime grid dimensions and grid-mapping metadata.
+    path:
+        Explicit output path. If omitted, the CMOR-like path is rendered from
+        metadata.
+    attrs:
+        Extra global attributes to include in the output dataset.
+    **to_netcdf_kwargs:
+        Additional keyword arguments forwarded to ``xarray.Dataset.to_netcdf``.
+
+    Returns
+    -------
+    Cmor4Result
+        The in-memory dataset and path to the written NetCDF file.
+    """
 
     dataset, variable = _dataset_and_variable(dataset, variable)
     ds = create_dataset(
@@ -225,7 +287,20 @@ def cmorize(
 
 
 def open_dataset(path: str | Path, **kwargs: Any) -> xr.Dataset:
-    """Open a NetCDF file with xarray."""
+    """Open a NetCDF file with xarray.
+
+    Parameters
+    ----------
+    path:
+        Path to the NetCDF file.
+    **kwargs:
+        Additional keyword arguments forwarded to ``xarray.open_dataset``.
+
+    Returns
+    -------
+    xr.Dataset
+        Opened dataset.
+    """
 
     return xr.open_dataset(path, **kwargs)
 
@@ -235,7 +310,22 @@ def build_output_path(
     variable: Variable,
     ds: xr.Dataset | None = None,
 ) -> Path:
-    """Build a CMOR-like output path from dataset and variable metadata."""
+    """Build a CMOR-like output path from dataset and variable metadata.
+
+    Parameters
+    ----------
+    dataset:
+        Dataset-level metadata containing output templates and DRS tokens.
+    variable:
+        Variable metadata used for filename tokens.
+    ds:
+        Optional dataset used to derive time-range tokens.
+
+    Returns
+    -------
+    pathlib.Path
+        Rendered output path, including the ``.nc`` filename.
+    """
 
     dataset, variable = _dataset_and_variable(dataset, variable)
     root = Path(str(dataset.get("outpath", "."))).expanduser()
@@ -267,7 +357,26 @@ def string_from_template(
     ds: xr.Dataset | None = None,
     separator: str | None = None,
 ) -> str:
-    """Render a template from global attributes and computed path tokens."""
+    """Render a template from global attributes and computed path tokens.
+
+    Parameters
+    ----------
+    template:
+        Template string containing ``<token>`` placeholders.
+    dataset:
+        Dataset-level metadata used as template tokens.
+    variable:
+        Variable metadata used as template tokens.
+    ds:
+        Optional dataset used to derive time-range tokens.
+    separator:
+        Separator inserted between non-empty rendered token values.
+
+    Returns
+    -------
+    str
+        Rendered template string.
+    """
 
     dataset, variable = _dataset_and_variable(dataset, variable)
     return render_template(

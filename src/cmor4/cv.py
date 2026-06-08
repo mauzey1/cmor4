@@ -17,7 +17,16 @@ from .exceptions import ControlledVocabularyError
 
 
 class ControlledVocabulary(Mapping[str, Any]):
-    """Project controlled vocabulary with defaulting and validation helpers."""
+    """Project controlled vocabulary with defaulting and validation helpers.
+
+    Parameters
+    ----------
+    data:
+        Controlled-vocabulary data, either as a raw CV mapping or a mapping
+        containing a top-level ``CV`` key.
+    path:
+        Path to the source CV file, if loaded from disk.
+    """
 
     def __init__(
         self, data: Mapping[str, Any], path: str | Path | None = None
@@ -27,6 +36,19 @@ class ControlledVocabulary(Mapping[str, Any]):
 
     @classmethod
     def from_file(cls, path: str | Path) -> "ControlledVocabulary":
+        """Load a controlled vocabulary from a JSON file.
+
+        Parameters
+        ----------
+        path:
+            Path to the CV JSON file.
+
+        Returns
+        -------
+        ControlledVocabulary
+            Loaded controlled-vocabulary helper.
+        """
+
         cv_path = Path(path)
         with cv_path.open() as handle:
             data = json.load(handle)
@@ -43,10 +65,29 @@ class ControlledVocabulary(Mapping[str, Any]):
 
     @property
     def filename(self) -> str:
+        """Return the display name for this controlled vocabulary.
+
+        Returns
+        -------
+        str
+            Source filename when known, otherwise ``CV``.
+        """
+
         return self.path.name if self.path is not None else "CV"
 
     def get_dataset_info(self, dataset: dict[str, Any]) -> dict[str, Any]:
-        """Get dataset info with CV defaults."""
+        """Get dataset info with CV defaults.
+
+        Parameters
+        ----------
+        dataset:
+            User-provided dataset metadata.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dataset metadata with controlled-vocabulary defaults applied.
+        """
         normalized_dataset = dict(dataset)
         self._add_scalar_defaults(normalized_dataset)
         self._add_source_defaults(normalized_dataset)
@@ -182,13 +223,36 @@ class ControlledVocabulary(Mapping[str, Any]):
         dataset["license"] = _render_template(license_template, tokens)
 
     def validate_dataset(self, dataset: Mapping[str, Any]) -> None:
-        """Validate user-supplied controlled values against the project CV."""
+        """Validate user-supplied controlled values against the project CV.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata to validate.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if validation fails.
+        """
 
         self.validate_dataset_values(dataset)
         self.validate_required_global_attributes(dataset)
 
     def validate_dataset_values(self, dataset: Mapping[str, Any]) -> None:
-        """Validate controlled values without requiring every global attr."""
+        """Validate controlled values without requiring every global attr.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata to validate.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if a controlled value is not
+            allowed.
+        """
 
         for key, value in dataset.items():
             if key.startswith("_") or key in {
@@ -208,7 +272,19 @@ class ControlledVocabulary(Mapping[str, Any]):
     def validate_required_global_attributes(
         self, dataset: Mapping[str, Any]
     ) -> None:
-        """Require every CV-listed global attribute that CMOR4 can write."""
+        """Require every CV-listed global attribute that CMOR4 can write.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata to check.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if required attributes are
+            missing.
+        """
 
         missing = [
             name
@@ -222,13 +298,33 @@ class ControlledVocabulary(Mapping[str, Any]):
             )
 
     def required_global_attributes(self) -> tuple[str, ...]:
+        """Return CV-listed required global attributes.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Required global attribute names.
+        """
+
         required = self.get("required_global_attributes", ())
         if not isinstance(required, Sequence) or isinstance(required, str):
             return ()
         return tuple(str(value) for value in required)
 
     def validate_experiment(self, dataset: Mapping[str, Any]) -> None:
-        """Validate experiment-specific CV attributes."""
+        """Validate experiment-specific CV attributes.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing an ``experiment_id``.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if experiment-specific values
+            are inconsistent.
+        """
 
         experiment_entry = self.experiment_entry(dataset)
         if experiment_entry is None:
@@ -268,7 +364,21 @@ class ControlledVocabulary(Mapping[str, Any]):
         dataset: Mapping[str, Any],
         experiment_entry: Mapping[str, Any],
     ) -> None:
-        """Validate experiment-specific required source_type tokens."""
+        """Validate experiment-specific required source_type tokens.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing ``source_type``.
+        experiment_entry:
+            Experiment CV entry with required and allowed source types.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if source types are missing
+            or disallowed.
+        """
 
         required = _cv_values(experiment_entry.get("required_source_type"))
         additional = _cv_values(
@@ -300,7 +410,19 @@ class ControlledVocabulary(Mapping[str, Any]):
                 )
 
     def validate_source_attributes(self, dataset: Mapping[str, Any]) -> None:
-        """Validate source_id-specific CV attributes."""
+        """Validate source_id-specific CV attributes.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing a ``source_id``.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if source-specific metadata
+            is inconsistent.
+        """
 
         source_entries = self.get("source_id")
         source_id = dataset.get("source_id")
@@ -321,7 +443,19 @@ class ControlledVocabulary(Mapping[str, Any]):
                 )
 
     def validate_parent_attributes(self, dataset: Mapping[str, Any]) -> None:
-        """Validate CMIP-style parent experiment attributes."""
+        """Validate CMIP-style parent experiment attributes.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing experiment and parent metadata.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if parent metadata is missing
+            or inconsistent.
+        """
 
         experiment_entry = self.experiment_entry(dataset)
         if experiment_entry is None:
@@ -432,6 +566,25 @@ class ControlledVocabulary(Mapping[str, Any]):
         allowed: Any,
         dataset: Mapping[str, Any],
     ) -> bool:
+        """Return whether a value is allowed by a CV definition.
+
+        Parameters
+        ----------
+        key:
+            Dataset attribute name being validated.
+        value:
+            Dataset attribute value to check.
+        allowed:
+            CV definition for the attribute.
+        dataset:
+            Full dataset metadata, used to resolve templated CV values.
+
+        Returns
+        -------
+        bool
+            ``True`` when the value is accepted by the CV definition.
+        """
+
         if (
             key == "license"
             and isinstance(allowed, Mapping)
@@ -479,6 +632,19 @@ class ControlledVocabulary(Mapping[str, Any]):
         return True
 
     def definition_for(self, key: str) -> Any:
+        """Return the CV definition for a dataset attribute.
+
+        Parameters
+        ----------
+        key:
+            Dataset attribute name.
+
+        Returns
+        -------
+        Any
+            CV definition for ``key``, or ``None`` when the key is unknown.
+        """
+
         if key in self:
             return self[key]
         license_cv = self.get("license")
@@ -489,6 +655,19 @@ class ControlledVocabulary(Mapping[str, Any]):
     def experiment_entry(
         self, dataset: Mapping[str, Any]
     ) -> Mapping[str, Any] | None:
+        """Return the CV entry for the dataset experiment.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing ``experiment_id``.
+
+        Returns
+        -------
+        Mapping[str, Any] | None
+            Matching experiment CV entry, or ``None`` when unavailable.
+        """
+
         experiment_entries = self.get("experiment_id")
         experiment_id = dataset.get("experiment_id")
         if not isinstance(experiment_entries, Mapping) or experiment_id in (
@@ -505,6 +684,24 @@ class ControlledVocabulary(Mapping[str, Any]):
         key: str,
         expected: Any,
     ) -> None:
+        """Validate one required parent experiment attribute.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing the parent attribute.
+        key:
+            Parent attribute name to validate.
+        expected:
+            Expected CV value for the parent attribute.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if the value is missing or
+            inconsistent with the CV.
+        """
+
         value = dataset.get(key)
         if value in (None, ""):
             raise ControlledVocabularyError(f"{key} is required.")

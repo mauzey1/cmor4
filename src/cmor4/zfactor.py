@@ -17,7 +17,35 @@ from .metadata import _MetadataRecord
 
 @dataclass(frozen=True)
 class ZFactor(_MetadataRecord):
-    """Metadata and values for one hybrid-coordinate formula term."""
+    """Metadata and values for one hybrid-coordinate formula term.
+
+    Parameters
+    ----------
+    name:
+        Requested formula-term name.
+    values, data:
+        Formula-term data values.
+    dimensions:
+        Logical dimensions for the formula-term variable.
+    units, standard_name, long_name:
+        NetCDF formula-term metadata attributes.
+    out_name:
+        Output formula-term variable name.
+    table_entry, formula_entry:
+        Formula-term table entry selectors.
+    bounds:
+        Optional formula-term bounds values.
+    bounds_name, bounds_dim:
+        Output bounds variable and bounds dimension names.
+    bounds_attrs:
+        Extra attributes for the bounds variable.
+    valid_min, valid_max, ok_min_mean_abs, ok_max_mean_abs:
+        Value validation limits.
+    attrs:
+        Extra NetCDF attributes for the formula-term variable.
+    extra:
+        Additional mapping keys preserved by the metadata record.
+    """
 
     name: str
     values: Any = None
@@ -41,7 +69,18 @@ class ZFactor(_MetadataRecord):
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
     def merge_table_entry(self, project: Any) -> "ZFactor":
-        """Merge authoritative formula-term metadata into this z-factor."""
+        """Merge authoritative formula-term metadata into this z-factor.
+
+        Parameters
+        ----------
+        project:
+            Project table loader containing formula-term entries.
+
+        Returns
+        -------
+        ZFactor
+            New z-factor metadata record with table defaults applied.
+        """
 
         merged = self.to_dict()
         entry_name, entry = self.resolve_table_entry(project)
@@ -91,7 +130,18 @@ class ZFactor(_MetadataRecord):
     def resolve_table_entry(
         self, project: Any
     ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve a formula-term table entry from this z-factor."""
+        """Resolve a formula-term table entry from this z-factor.
+
+        Parameters
+        ----------
+        project:
+            Project table loader containing formula-term entries.
+
+        Returns
+        -------
+        tuple[str | None, Mapping[str, Any] | None]
+            Matched entry name and table metadata, or ``(None, None)``.
+        """
 
         requested = str(
             self.table_entry or self.formula_entry or self.name or ""
@@ -108,7 +158,13 @@ class ZFactor(_MetadataRecord):
         return None, None
 
     def attributes(self) -> dict[str, Any]:
-        """Return NetCDF attributes for this formula-term variable."""
+        """Return NetCDF attributes for this formula-term variable.
+
+        Returns
+        -------
+        dict[str, Any]
+            NetCDF-safe formula-term attributes.
+        """
 
         attrs = self.netcdf_attrs(self.attrs)
         for key in ("units", "standard_name", "long_name"):
@@ -117,17 +173,35 @@ class ZFactor(_MetadataRecord):
         return attrs
 
     def bounds_attributes(self) -> dict[str, Any]:
-        """Return NetCDF attributes for this formula-term bounds variable."""
+        """Return NetCDF attributes for this formula-term bounds variable.
+
+        Returns
+        -------
+        dict[str, Any]
+            NetCDF-safe bounds variable attributes.
+        """
 
         return self.netcdf_attrs(self.bounds_attrs)
 
     def values_array(self) -> np.ndarray:
-        """Return this formula term's values as a NetCDF-ready array."""
+        """Return this formula term's values as a NetCDF-ready array.
+
+        Returns
+        -------
+        numpy.ndarray
+            Formula-term values converted to a NetCDF-compatible array.
+        """
 
         return self.netcdf_array(self.get("values", self.get("data", [])))
 
     def bounds_array(self) -> np.ndarray:
-        """Return this formula term's bounds as a NetCDF-ready array."""
+        """Return this formula term's bounds as a NetCDF-ready array.
+
+        Returns
+        -------
+        numpy.ndarray
+            Formula-term bounds converted to a NetCDF-compatible array.
+        """
 
         return self.netcdf_array(self["bounds"])
 

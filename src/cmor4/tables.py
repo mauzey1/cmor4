@@ -24,6 +24,19 @@ class ProjectTables:
     can be loaded from ``cmip7-cmor-tables/tables-cvs/cmor-cvs.json``, one or
     more variable tables under ``cmip7-cmor-tables/tables/``, and the project
     coordinate and formula-term tables.
+
+    Parameters
+    ----------
+    cv_file:
+        Path to the project controlled-vocabulary JSON file.
+    variable_tables:
+        Paths to variable table JSON files.
+    coordinate_table:
+        Optional path to the coordinate table JSON file.
+    formula_table:
+        Optional path to the formula-terms table JSON file.
+    grid_table:
+        Optional path to the grids table JSON file.
     """
 
     def __init__(
@@ -93,7 +106,28 @@ class ProjectTables:
         formula_table: str | Path | None = None,
         grid_table: str | Path | None = None,
     ) -> "ProjectTables":
-        """Load tables using paths relative to a project root."""
+        """Load tables using paths relative to a project root.
+
+        Parameters
+        ----------
+        root:
+            Project table root directory.
+        cv_file:
+            Controlled-vocabulary file path relative to ``root``.
+        variable_tables:
+            Variable table paths relative to ``root``.
+        coordinate_table:
+            Optional coordinate table path relative to ``root``.
+        formula_table:
+            Optional formula-terms table path relative to ``root``.
+        grid_table:
+            Optional grids table path relative to ``root``.
+
+        Returns
+        -------
+        ProjectTables
+            Loaded project table helper.
+        """
 
         root_path = Path(root)
         resolved_coordinate_table = _resolve_optional_table(
@@ -117,7 +151,18 @@ class ProjectTables:
         self,
         dataset: Mapping[str, Any],
     ) -> DatasetInfo:
-        """Create prepared dataset metadata from user input and tables."""
+        """Create prepared dataset metadata from user input and tables.
+
+        Parameters
+        ----------
+        dataset:
+            User-provided dataset-level metadata.
+
+        Returns
+        -------
+        DatasetInfo
+            Validated and defaulted dataset metadata.
+        """
 
         user_info = (
             dataset.user_info
@@ -172,7 +217,20 @@ class ProjectTables:
         ), normalized_variable
 
     def variable(self, name: str, **values: Any) -> Variable:
-        """Create a variable with metadata from the loaded variable tables."""
+        """Create a variable with metadata from the loaded variable tables.
+
+        Parameters
+        ----------
+        name:
+            Variable or branded variable name to resolve.
+        **values:
+            User-supplied variable metadata overrides.
+
+        Returns
+        -------
+        Variable
+            Variable metadata with table values merged.
+        """
 
         variable = Variable(name=name, **values)
         variable_entry = variable.resolve_table_entry(self)
@@ -181,7 +239,20 @@ class ProjectTables:
         return normalized
 
     def axis(self, name: str, **values: Any) -> Axis:
-        """Create an axis with metadata from the loaded coordinate tables."""
+        """Create an axis with metadata from the loaded coordinate tables.
+
+        Parameters
+        ----------
+        name:
+            Axis or coordinate table entry name.
+        **values:
+            User-supplied axis metadata and coordinate values.
+
+        Returns
+        -------
+        Axis
+            Axis metadata with table values merged.
+        """
 
         return self._mark_prepared_axis(
             Axis(name=name, **values).merge_table_entry(self)
@@ -206,12 +277,38 @@ class ProjectTables:
         return tuple(self._mark_prepared_axis(axis) for axis in merged_axes)
 
     def grid(self, name: str | None = None, **values: Any) -> Grid:
-        """Create a grid with metadata from the loaded grid table."""
+        """Create a grid with metadata from the loaded grid table.
+
+        Parameters
+        ----------
+        name:
+            Optional grid mapping entry name.
+        **values:
+            User-supplied grid metadata overrides.
+
+        Returns
+        -------
+        Grid
+            Grid metadata with table values merged.
+        """
 
         return Grid(name=name, **values).merge_table_entry(self)
 
     def zfactor(self, name: str, **values: Any) -> ZFactor:
-        """Create a z-factor with metadata from formula-term tables."""
+        """Create a z-factor with metadata from formula-term tables.
+
+        Parameters
+        ----------
+        name:
+            Formula-term table entry name.
+        **values:
+            User-supplied formula-term metadata and values.
+
+        Returns
+        -------
+        ZFactor
+            Z-factor metadata with table values merged.
+        """
 
         return ZFactor(name=name, **values).merge_table_entry(self)
 
@@ -265,22 +362,65 @@ class ProjectTables:
                 dataset.setdefault(key, _single_or_original(value))
 
     def validate_dataset(self, dataset: Mapping[str, Any]) -> None:
-        """Validate user-supplied controlled values against the project CV."""
+        """Validate user-supplied controlled values against the project CV.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata to validate.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if validation fails.
+        """
 
         self.cv.validate_dataset(dataset)
 
     def validate_required_global_attributes(
         self, dataset: Mapping[str, Any]
     ) -> None:
-        """Require every CV-listed global attribute that CMOR4 can write."""
+        """Require every CV-listed global attribute that CMOR4 can write.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata to check.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if required attributes are
+            missing.
+        """
 
         self.cv.validate_required_global_attributes(dataset)
 
     def required_global_attributes(self) -> tuple[str, ...]:
+        """Return CV-listed required global attributes.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Required global attribute names.
+        """
+
         return self.cv.required_global_attributes()
 
     def validate_experiment(self, dataset: Mapping[str, Any]) -> None:
-        """Validate experiment-specific CV attributes."""
+        """Validate experiment-specific CV attributes.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing an ``experiment_id``.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if experiment metadata is
+            inconsistent.
+        """
 
         self.cv.validate_experiment(dataset)
 
@@ -289,17 +429,55 @@ class ProjectTables:
         dataset: Mapping[str, Any],
         experiment_entry: Mapping[str, Any],
     ) -> None:
-        """Validate experiment-specific required source_type tokens."""
+        """Validate experiment-specific required source_type tokens.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing ``source_type``.
+        experiment_entry:
+            Experiment CV entry with required and allowed source types.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if source types are missing
+            or disallowed.
+        """
 
         self.cv.validate_source_type(dataset, experiment_entry)
 
     def validate_source_attributes(self, dataset: Mapping[str, Any]) -> None:
-        """Validate source_id-specific CV attributes."""
+        """Validate source_id-specific CV attributes.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing a ``source_id``.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if source-specific metadata
+            is inconsistent.
+        """
 
         self.cv.validate_source_attributes(dataset)
 
     def validate_parent_attributes(self, dataset: Mapping[str, Any]) -> None:
-        """Validate CMIP-style parent experiment attributes."""
+        """Validate CMIP-style parent experiment attributes.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata containing experiment and parent metadata.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if parent metadata is missing
+            or inconsistent.
+        """
 
         self.cv.validate_parent_attributes(dataset)
 

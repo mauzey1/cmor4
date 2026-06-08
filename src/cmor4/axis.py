@@ -19,7 +19,51 @@ from .variable import Variable
 
 @dataclass(frozen=True)
 class Axis(_MetadataRecord):
-    """Metadata and coordinate values for one data axis."""
+    """Metadata and coordinate values for one data axis.
+
+    Parameters
+    ----------
+    name:
+        Logical axis name used by variable dimensions.
+    values:
+        Coordinate values.
+    bounds:
+        Optional coordinate bounds.
+    dimensions:
+        Underlying dimensions for auxiliary coordinates.
+    units, standard_name, long_name, axis, positive, formula:
+        NetCDF coordinate metadata attributes.
+    valid_min, valid_max:
+        Valid coordinate range limits.
+    out_name:
+        Output coordinate variable name.
+    table_entry, axis_entry, coordinate:
+        Coordinate table entry selectors.
+    grid_table_entry, grid_coordinate:
+        Grid coordinate table entry selectors.
+    scalar:
+        Whether this axis is written as a scalar coordinate.
+    auxiliary:
+        Whether this axis is written as an auxiliary coordinate.
+    auxiliary_name:
+        Output name for the auxiliary coordinate variable.
+    auxiliary_attrs:
+        Extra attributes for the auxiliary coordinate variable.
+    climatology:
+        Climatology bounds control.
+    generic_level_name:
+        Generic level selector from coordinate tables.
+    z_factors, z_bounds_factors:
+        Formula-term names associated with this axis or its bounds.
+    bounds_name, bounds_dim:
+        Output bounds variable and bounds dimension names.
+    bounds_attrs:
+        Extra attributes for the bounds variable.
+    attrs:
+        Extra attributes for the coordinate variable.
+    extra:
+        Additional mapping keys preserved by the metadata record.
+    """
 
     name: str
     values: Any = None
@@ -54,7 +98,18 @@ class Axis(_MetadataRecord):
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
     def merge_table_entry(self, project: Any) -> "Axis":
-        """Merge authoritative coordinate metadata into this axis."""
+        """Merge authoritative coordinate metadata into this axis.
+
+        Parameters
+        ----------
+        project:
+            Project table loader containing coordinate and grid entries.
+
+        Returns
+        -------
+        Axis
+            New axis metadata record with table defaults applied.
+        """
 
         merged = self.to_dict()
         entry_name, entry = self.resolve_table_entry(project)
@@ -116,7 +171,18 @@ class Axis(_MetadataRecord):
     def resolve_table_entry(
         self, project: Any
     ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve a coordinate table entry from this axis."""
+        """Resolve a coordinate table entry from this axis.
+
+        Parameters
+        ----------
+        project:
+            Project table loader containing coordinate entries.
+
+        Returns
+        -------
+        tuple[str | None, Mapping[str, Any] | None]
+            Matched entry name and table metadata, or ``(None, None)``.
+        """
 
         requested = str(
             self.table_entry
@@ -154,7 +220,18 @@ class Axis(_MetadataRecord):
     def resolve_grid_coordinate(
         self, project: Any
     ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve a grid-coordinate variable entry from this axis."""
+        """Resolve a grid-coordinate variable entry from this axis.
+
+        Parameters
+        ----------
+        project:
+            Project table loader containing grid coordinate entries.
+
+        Returns
+        -------
+        tuple[str | None, Mapping[str, Any] | None]
+            Matched entry name and table metadata, or ``(None, None)``.
+        """
 
         requested = str(
             self.grid_table_entry
@@ -181,6 +258,23 @@ class Axis(_MetadataRecord):
         axes: Sequence["Axis"],
         variable: Variable,
     ) -> list["Axis"]:
+        """Return required scalar axes missing from an axis sequence.
+
+        Parameters
+        ----------
+        project:
+            Project table loader containing coordinate entries.
+        axes:
+            Axes already supplied for the variable.
+        variable:
+            Variable metadata whose dimensions may require scalar axes.
+
+        Returns
+        -------
+        list[Axis]
+            Scalar axes implied by variable dimensions and table entries.
+        """
+
         present = {
             str(value)
             for axis in axes
@@ -221,7 +315,18 @@ class Axis(_MetadataRecord):
         return missing_axes
 
     def attributes(self, *, include_units: bool = True) -> dict[str, Any]:
-        """Return NetCDF attributes for this coordinate axis."""
+        """Return NetCDF attributes for this coordinate axis.
+
+        Parameters
+        ----------
+        include_units:
+            Whether to include the ``units`` attribute when present.
+
+        Returns
+        -------
+        dict[str, Any]
+            NetCDF-safe coordinate attributes.
+        """
 
         attrs = self.netcdf_attrs(self.attrs)
         if include_units and "units" in self:
@@ -240,22 +345,46 @@ class Axis(_MetadataRecord):
         return attrs
 
     def auxiliary_attributes(self) -> dict[str, Any]:
-        """Return NetCDF attributes for this axis' auxiliary variable."""
+        """Return NetCDF attributes for this axis' auxiliary variable.
+
+        Returns
+        -------
+        dict[str, Any]
+            NetCDF-safe auxiliary coordinate attributes.
+        """
 
         return self.netcdf_attrs(self.auxiliary_attrs)
 
     def bounds_attributes(self) -> dict[str, Any]:
-        """Return NetCDF attributes for this axis' bounds variable."""
+        """Return NetCDF attributes for this axis' bounds variable.
+
+        Returns
+        -------
+        dict[str, Any]
+            NetCDF-safe bounds variable attributes.
+        """
 
         return self.netcdf_attrs(self.bounds_attrs)
 
     def values_array(self) -> np.ndarray:
-        """Return this axis' values as a NetCDF-ready array."""
+        """Return this axis' values as a NetCDF-ready array.
+
+        Returns
+        -------
+        numpy.ndarray
+            Coordinate values converted to a NetCDF-compatible array.
+        """
 
         return self.netcdf_array(self.get("values", []))
 
     def bounds_array(self) -> np.ndarray:
-        """Return this axis' bounds as a NetCDF-ready array."""
+        """Return this axis' bounds as a NetCDF-ready array.
+
+        Returns
+        -------
+        numpy.ndarray
+            Coordinate bounds converted to a NetCDF-compatible array.
+        """
 
         return self.netcdf_array(self["bounds"])
 

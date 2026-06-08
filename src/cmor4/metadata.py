@@ -11,7 +11,13 @@ MetadataRecordT = TypeVar("MetadataRecordT", bound="_MetadataRecord")
 
 
 class _MetadataRecord(Mapping[str, Any]):
-    """Base for metadata records with controlled serialization helpers."""
+    """Base for metadata records with controlled serialization helpers.
+
+    Parameters
+    ----------
+    extra:
+        Additional mapping keys preserved by concrete metadata records.
+    """
 
     extra: Mapping[str, Any]
 
@@ -19,6 +25,19 @@ class _MetadataRecord(Mapping[str, Any]):
     def from_mapping(
         cls: type[MetadataRecordT], values: Mapping[str, Any]
     ) -> MetadataRecordT:
+        """Create a metadata record from a mapping.
+
+        Parameters
+        ----------
+        values:
+            Metadata values to map onto dataclass fields and ``extra`` keys.
+
+        Returns
+        -------
+        _MetadataRecord
+            Instance of the concrete metadata record class.
+        """
+
         field_names = {field.name for field in fields(cls)}
         kwargs = {
             key: value
@@ -35,6 +54,14 @@ class _MetadataRecord(Mapping[str, Any]):
         return cls(**kwargs)
 
     def to_dict(self) -> dict[str, Any]:
+        """Return metadata as a dictionary without empty optional values.
+
+        Returns
+        -------
+        dict[str, Any]
+            Serializable metadata values, including preserved ``extra`` keys.
+        """
+
         data: dict[str, Any] = {}
         for field_info in fields(self):
             if field_info.name == "extra":
@@ -51,16 +78,55 @@ class _MetadataRecord(Mapping[str, Any]):
         return data
 
     def updated(self: MetadataRecordT, **updates: Any) -> MetadataRecordT:
+        """Return a copy of this record with updates applied.
+
+        Parameters
+        ----------
+        **updates:
+            Metadata values to override or add.
+
+        Returns
+        -------
+        _MetadataRecord
+            New metadata record of the same concrete type.
+        """
+
         return type(self).from_mapping({**self.to_dict(), **updates})
 
     @staticmethod
     def is_netcdf_attr_value(value: Any) -> bool:
+        """Return whether a value can be written as a simple NetCDF attribute.
+
+        Parameters
+        ----------
+        value:
+            Value to test.
+
+        Returns
+        -------
+        bool
+            ``True`` for scalar string, bytes, integer, or floating values.
+        """
+
         return isinstance(
             value, (str, bytes, int, float, np.integer, np.floating)
         )
 
     @staticmethod
     def netcdf_attrs(values: Mapping[str, Any]) -> dict[str, Any]:
+        """Filter a mapping to NetCDF-safe attribute values.
+
+        Parameters
+        ----------
+        values:
+            Candidate attribute values.
+
+        Returns
+        -------
+        dict[str, Any]
+            Attributes whose values can be written directly to NetCDF.
+        """
+
         return {
             str(key): value
             for key, value in values.items()
@@ -69,6 +135,19 @@ class _MetadataRecord(Mapping[str, Any]):
 
     @staticmethod
     def netcdf_array(value: Any) -> np.ndarray:
+        """Convert a value to a NetCDF-ready array.
+
+        Parameters
+        ----------
+        value:
+            Scalar or array-like value.
+
+        Returns
+        -------
+        numpy.ndarray
+            Array with object and string-like dtypes normalized to strings.
+        """
+
         array = np.asarray(value)
         if array.dtype.kind in {"U", "S", "O"}:
             return array.astype(str)
