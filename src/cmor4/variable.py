@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ._table_utils import (
+    is_table_value,
     metadata_value_matches,
+    parse_table_value,
     single_or_original,
     table_dimensions,
 )
@@ -48,6 +50,10 @@ class Variable(_MetadataRecord):
     frequency: str | None = None
     realm: str | None = None
     table_info: str | None = None
+    valid_min: Any = None
+    valid_max: Any = None
+    ok_min_mean_abs: Any = None
+    ok_max_mean_abs: Any = None
     attrs: Mapping[str, Any] = field(default_factory=dict)
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
@@ -149,6 +155,17 @@ class Variable(_MetadataRecord):
             merged.setdefault(
                 "realm", single_or_original(entry["modeling_realm"])
             )
+        for key in (
+            "valid_min",
+            "valid_max",
+            "ok_min_mean_abs",
+            "ok_max_mean_abs",
+        ):
+            value = entry.get(key)
+            if not is_table_value(value) and variable_entry.table_header:
+                value = variable_entry.table_header.get(key)
+            if is_table_value(value):
+                merged.setdefault(key, parse_table_value(value))
         for key in (
             "units",
             "standard_name",

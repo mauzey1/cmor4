@@ -15,6 +15,7 @@ from ._time_utils import (
     add_time_delta,
     date_part
 )
+from ._variable_validation import validate_variable_values
 from .axis import Axis
 from .dataset import DatasetInfo, INTERNAL_DATASET_KEYS
 from .grid import Grid
@@ -130,6 +131,7 @@ def create_dataset(
             f"Data for {var_name!r} has {data_array.ndim} dimensions, "
             f"but variable dimensions resolve to {expected!r}."
         )
+    validate_variable_values(variable, axes, data, dims, axis_dims)
 
     var_attrs = variable.attributes(var_labels)
     explicit_coordinates = variable.get("coordinates")

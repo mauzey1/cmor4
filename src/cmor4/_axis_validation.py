@@ -68,7 +68,7 @@ def _validate_and_normalize_axis(
         values = values.astype("f8", copy=True)
         if bounds is not None and _is_numeric(bounds):
             bounds = bounds.astype("f8", copy=True)
-        if not _is_longitude(axis):
+        if _is_longitude(axis):
             values, bounds = _normalize_longitude(axis, values, bounds)
         _validate_requested_values(axis, values, name)
         _validate_valid_range(axis, values, name, is_bounds=False)

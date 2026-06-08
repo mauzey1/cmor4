@@ -14,7 +14,8 @@ from .cv import ControlledVocabulary
 from .dataset import DatasetInfo
 from .exceptions import (
     TableValidationError,
-    AxisValidationError
+    AxisValidationError,
+    VariableValidationError,
 )
 from .grid import Grid
 from .variable import Variable
@@ -36,6 +37,7 @@ __all__ = [
     "string_from_template",
     "TableValidationError",
     "Variable",
+    "VariableValidationError",
     "write_netcdf",
     "ZFactor",
 ]

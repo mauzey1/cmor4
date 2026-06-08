@@ -4,3 +4,7 @@ class TableValidationError(ValueError):
 
 class AxisValidationError(ValueError):
     """Raised when axis values or bounds violate axis contraints."""
+
+
+class VariableValidationError(ValueError):
+    """Raised when variable values violate fatal CMOR-style checks."""

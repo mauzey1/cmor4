@@ -342,6 +342,77 @@ class Cmor4Test(unittest.TestCase):
 
         np.testing.assert_allclose(fallback_intervals, [365.0])
 
+    def test_variable_value_validation_matches_cmor_nan_and_range_checks(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = cmor4.DatasetInfo.from_mapping(dataset_info(Path(tmp_dir)))
+            axis = cmor4.Axis(name="time", values=[0.0, 1.0, 2.0])
+            variable = cmor4.Variable(
+                name="sample",
+                dimensions=["time"],
+                table_id="Amon",
+                valid_min=0.0,
+                valid_max=10.0,
+                missing_value=np.float32(1.0e20),
+            )
+
+            with self.assertRaisesRegex(
+                cmor4.VariableValidationError,
+                "1 values were NaNs",
+            ):
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    [axis],
+                    np.asarray([1.0, np.nan, 2.0], dtype="f4"),
+                )
+
+            with self.assertWarnsRegex(
+                RuntimeWarning,
+                "lower than minimum valid value",
+            ):
+                ds = cmor4.create_dataset(
+                    info,
+                    variable,
+                    [axis],
+                    np.asarray([1.0, -1.0, 1.0e20], dtype="f4"),
+                )
+
+            self.assertEqual(ds["sample"].shape, (3,))
+
+    def test_variable_absolute_mean_validation_matches_cmor_thresholds(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = cmor4.DatasetInfo.from_mapping(dataset_info(Path(tmp_dir)))
+            axis = cmor4.Axis(name="time", values=[0.0, 1.0, 2.0])
+            variable = cmor4.Variable(
+                name="sample",
+                dimensions=["time"],
+                table_id="Amon",
+                ok_min_mean_abs=10.0,
+                ok_max_mean_abs=20.0,
+            )
+
+            with self.assertWarnsRegex(
+                RuntimeWarning,
+                "lower than minimum allowed",
+            ):
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    [axis],
+                    np.asarray([5.0, 5.0, 5.0], dtype="f4"),
+                )
+
+            with self.assertRaisesRegex(
+                cmor4.VariableValidationError,
+                "greater by more than an order of magnitude",
+            ):
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    [axis],
+                    np.asarray([250.0, 250.0, 250.0], dtype="f4"),
+                )
+
     def test_string_from_template_uses_global_attrs_and_special_values(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             variable = cmor4.Variable(name="sample", dimensions=["time"])
