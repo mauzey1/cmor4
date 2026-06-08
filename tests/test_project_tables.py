@@ -200,7 +200,7 @@ class ProjectTablesTest(unittest.TestCase):
             self.assertEqual(cv["activity_id"], ["CMIP"])
             self.assertEqual(cv.required_global_attributes(), ("activity_id",))
             cv.validate_dataset({"activity_id": "CMIP"})
-            with self.assertRaises(cmor4.TableValidationError):
+            with self.assertRaises(cmor4.ControlledVocabularyError):
                 cv.validate_dataset({"activity_id": "not-a-real-activity"})
 
     def test_cmip7_generic_level_resolves_concrete_coordinate(self):
@@ -641,7 +641,7 @@ class ProjectTablesTest(unittest.TestCase):
         project = cmip7_project("tables/CMIP7_ocean.json")
         dataset = cmip7_dataset(activity_id="not-a-real-activity")
 
-        with self.assertRaises(cmor4.TableValidationError):
+        with self.assertRaises(cmor4.ControlledVocabularyError):
             project.dataset_info(dataset)
 
     def test_experiment_required_source_type_is_validated(self):
@@ -698,13 +698,13 @@ class ProjectTablesTest(unittest.TestCase):
             self.assertEqual(prepared["source_type"], "AOGCM AER")
 
             with self.assertRaisesRegex(
-                cmor4.TableValidationError, "missing required"
+                cmor4.ControlledVocabularyError, "missing required"
             ):
                 project.dataset_info(
                     {**dataset, "source_type": "AER"}
                 )
             with self.assertRaisesRegex(
-                cmor4.TableValidationError, "not allowed"
+                cmor4.ControlledVocabularyError, "not allowed"
             ):
                 project.dataset_info(
                     {**dataset, "source_type": "AOGCM LAND"}
@@ -719,7 +719,7 @@ class ProjectTablesTest(unittest.TestCase):
         info = project.dataset_info(dataset)
 
         with self.assertRaisesRegex(
-            cmor4.TableValidationError, "license_id"
+            cmor4.ControlledVocabularyError, "license_id"
         ):
             cmor4.create_dataset(
                 info,
@@ -745,7 +745,7 @@ class ProjectTablesTest(unittest.TestCase):
         }
 
         with self.assertRaisesRegex(
-            cmor4.TableValidationError, "institution_id"
+            cmor4.ControlledVocabularyError, "institution_id"
         ):
             project.dataset_info(dataset)
 
@@ -755,7 +755,7 @@ class ProjectTablesTest(unittest.TestCase):
         dataset = cmip7_dataset(experiment_id="historical")
 
         with self.assertRaisesRegex(
-            cmor4.TableValidationError, "parent_experiment_id"
+            cmor4.ControlledVocabularyError, "parent_experiment_id"
         ):
             project.dataset_info(dataset)
 
@@ -813,7 +813,7 @@ class ProjectTablesTest(unittest.TestCase):
 
         for key, value in cases.items():
             with self.subTest(key=key):
-                with self.assertRaises(cmor4.TableValidationError):
+                with self.assertRaises(cmor4.ControlledVocabularyError):
                     project.dataset_info(
                         {**dataset, key: value}
                     )
@@ -976,7 +976,7 @@ class ProjectTablesTest(unittest.TestCase):
             project.axis("longitude", values=[90.0, 270.0]),
         ]
 
-        with self.assertRaises(cmor4.TableValidationError):
+        with self.assertRaises(cmor4.ControlledVocabularyError):
             cmor4.create_dataset(
                 info,
                 variable,

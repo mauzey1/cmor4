@@ -15,6 +15,7 @@ from .dataset import DatasetInfo
 from .exceptions import (
     TableValidationError,
     AxisValidationError,
+    ControlledVocabularyError,
     VariableValidationError,
 )
 from .grid import Grid
@@ -26,6 +27,7 @@ __all__ = [
     "Axis",
     "AxisValidationError",
     "Cmor4Result",
+    "ControlledVocabularyError",
     "build_output_path",
     "cmorize",
     "create_dataset",

@@ -13,7 +13,7 @@ from ._table_utils import (
     metadata_value_matches as _metadata_value_matches,
 )
 from ._templates import render_template as _render_template
-from .exceptions import TableValidationError
+from .exceptions import ControlledVocabularyError
 
 
 class ControlledVocabulary(Mapping[str, Any]):
@@ -201,7 +201,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             if allowed is not None and not self.value_allowed(
                 str(key), value, allowed, dataset
             ):
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"{key}={value!r} is not allowed by {self.filename}."
                 )
 
@@ -217,7 +217,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         ]
         if missing:
             missing_text = ", ".join(missing)
-            raise TableValidationError(
+            raise ControlledVocabularyError(
                 "Required global attributes are missing: " f"{missing_text}."
             )
 
@@ -247,7 +247,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             if not _is_table_value(expected) or key not in dataset:
                 continue
             if not _metadata_value_matches(dataset[key], expected):
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"{key}={dataset[key]!r} does not match "
                     f"experiment_id={dataset.get('experiment_id')!r} "
                     f"CV value {expected!r}."
@@ -257,7 +257,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             if not _metadata_value_matches(
                 dataset["activity_id"], expected_activity
             ):
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"activity_id={dataset['activity_id']!r} does not match "
                     f"experiment_id={dataset.get('experiment_id')!r} "
                     f"CV value {expected_activity!r}."
@@ -278,12 +278,12 @@ class ControlledVocabulary(Mapping[str, Any]):
             return
         source_type = dataset.get("source_type")
         if source_type in (None, ""):
-            raise TableValidationError("source_type is required.")
+            raise ControlledVocabularyError("source_type is required.")
         source_type_text = str(source_type)
         tokens = source_type_text.split()
         for expected in required:
             if not _source_type_pattern_matches(source_type_text, expected):
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"source_type={source_type!r} is missing required "
                     f"source type {expected!r}."
                 )
@@ -293,7 +293,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                 _source_type_pattern_matches(token, item)
                 for item in allowed
             ):
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"source_type={source_type!r} contains source type "
                     f"{token!r} that is not allowed by experiment_id="
                     f"{dataset.get('experiment_id')!r}."
@@ -315,7 +315,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             if _is_table_value(expected) and not _metadata_value_matches(
                 dataset[key], expected
             ):
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"{key}={dataset[key]!r} does not match "
                     f"source_id={source_id!r} CV value {expected!r}."
                 )
@@ -340,13 +340,13 @@ class ControlledVocabulary(Mapping[str, Any]):
         )
         if not expected_parent_experiments:
             if "parent_experiment_id" in dataset:
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"experiment_id={dataset.get('experiment_id')!r} does not "
                     "allow parent_experiment_id."
                 )
             unexpected = [name for name in parent_attrs if name in dataset]
             if unexpected:
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"experiment_id={dataset.get('experiment_id')!r} does not "
                     "allow parent attributes: " + ", ".join(unexpected) + "."
                 )
@@ -354,14 +354,14 @@ class ControlledVocabulary(Mapping[str, Any]):
 
         parent_experiment_id = dataset.get("parent_experiment_id")
         if parent_experiment_id in (None, ""):
-            raise TableValidationError(
+            raise ControlledVocabularyError(
                 f"experiment_id={dataset.get('experiment_id')!r} requires "
                 "parent_experiment_id."
             )
         if str(parent_experiment_id) not in {
             str(value) for value in expected_parent_experiments
         }:
-            raise TableValidationError(
+            raise ControlledVocabularyError(
                 f"parent_experiment_id={parent_experiment_id!r} "
                 "does not match "
                 f"experiment_id={dataset.get('experiment_id')!r} CV values "
@@ -374,13 +374,13 @@ class ControlledVocabulary(Mapping[str, Any]):
         )
         parent_source_id = dataset.get("parent_source_id")
         if parent_source_id in (None, ""):
-            raise TableValidationError("parent_source_id is required.")
+            raise ControlledVocabularyError("parent_source_id is required.")
         source_entries = self.get("source_id")
         if (
             isinstance(source_entries, Mapping)
             and str(parent_source_id) not in source_entries
         ):
-            raise TableValidationError(
+            raise ControlledVocabularyError(
                 f"parent_source_id={parent_source_id!r} is not in the CV."
             )
         expected_parent_mip_era = str(dataset.get("mip_era") or "")
@@ -389,7 +389,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             None,
             "",
         ):
-            raise TableValidationError(
+            raise ControlledVocabularyError(
                 f"parent_mip_era={dataset.get('parent_mip_era')!r} does not "
                 f"match {expected_parent_mip_era!r}."
             )
@@ -399,29 +399,29 @@ class ControlledVocabulary(Mapping[str, Any]):
             "parent_variant_label",
         ):
             if dataset.get(key) in (None, ""):
-                raise TableValidationError(f"{key} is required.")
+                raise ControlledVocabularyError(f"{key} is required.")
         if not re.fullmatch(
             r"days\s+since\s+\d{4}-\d{1,2}-\d{1,2}.*",
             str(dataset["parent_time_units"]),
         ):
-            raise TableValidationError(
+            raise ControlledVocabularyError(
                 f"parent_time_units={dataset['parent_time_units']!r} "
                 "is invalid."
             )
         if not re.fullmatch(
             r"r\d+i\d+p\d+f\d+", str(dataset["parent_variant_label"])
         ):
-            raise TableValidationError(
+            raise ControlledVocabularyError(
                 f"parent_variant_label={dataset['parent_variant_label']!r} "
                 "is invalid."
             )
         for key in ("branch_time_in_child", "branch_time_in_parent"):
             if key not in dataset:
-                raise TableValidationError(f"{key} is required.")
+                raise ControlledVocabularyError(f"{key} is required.")
             try:
                 float(dataset[key])
             except (TypeError, ValueError) as exc:
-                raise TableValidationError(
+                raise ControlledVocabularyError(
                     f"{key}={dataset[key]!r} must be numeric."
                 ) from exc
 
@@ -507,11 +507,11 @@ class ControlledVocabulary(Mapping[str, Any]):
     ) -> None:
         value = dataset.get(key)
         if value in (None, ""):
-            raise TableValidationError(f"{key} is required.")
+            raise ControlledVocabularyError(f"{key} is required.")
         if _is_table_value(expected) and not _metadata_value_matches(
             value, expected
         ):
-            raise TableValidationError(
+            raise ControlledVocabularyError(
                 f"{key}={value!r} does not match experiment_id="
                 f"{dataset.get('experiment_id')!r} CV value {expected!r}."
             )
