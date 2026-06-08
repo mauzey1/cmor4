@@ -2,9 +2,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Mapping
+import warnings
 
 from ._table_utils import is_table_value
 from .metadata import _MetadataRecord
+
+
+_LATITUDE_PARAMETERS = {
+    "grid_north_pole_latitude",
+    "latitude_of_projection_origin",
+    "standard_parallel",
+    "standard_parallel1",
+    "standard_parallel2",
+}
+
+_LONGITUDE_PARAMETERS = {
+    "grid_north_pole_longitude",
+    "longitude_of_prime_meridian",
+    "longitude_of_central_meridian",
+    "longitude_of_projection_origin",
+    "north_pole_grid_longitude",
+}
+
+_NON_NEGATIVE_PARAMETERS = {
+    "scale_factor_at_central_meridian",
+    "scale_factor_at_projection_origin",
+}
 
 
 @dataclass(frozen=True)
@@ -85,6 +108,8 @@ class Grid(_MetadataRecord):
         if mapping_name:
             attrs["grid_mapping_name"] = mapping_name
         for key, value in self.params.items():
+            if not _valid_mapping_parameter(str(key), value):
+                continue
             if isinstance(value, (list, tuple)) and value:
                 attrs[key] = value[0]
                 if len(value) > 1 and value[1]:
@@ -92,3 +117,42 @@ class Grid(_MetadataRecord):
             else:
                 attrs[key] = value
         return self.netcdf_attrs(attrs)
+
+
+def _valid_mapping_parameter(name: str, value: Any) -> bool:
+    numeric = _primary_numeric_value(value)
+    if numeric is None:
+        return True
+    if name in _LATITUDE_PARAMETERS and not -90.0 <= numeric <= 90.0:
+        warnings.warn(
+            f"{name} parameter must be between -90 and 90 degrees_north; "
+            "it will not be set.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return False
+    if name in _LONGITUDE_PARAMETERS and not -180.0 <= numeric <= 180.0:
+        warnings.warn(
+            f"{name} parameter must be between -180 and 180 degrees_east; "
+            "it will not be set.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return False
+    if name in _NON_NEGATIVE_PARAMETERS and numeric < 0.0:
+        warnings.warn(
+            f"{name} parameter must be positive; it will not be set.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return False
+    return True
+
+
+def _primary_numeric_value(value: Any) -> float | None:
+    if isinstance(value, (list, tuple)) and value:
+        value = value[0]
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

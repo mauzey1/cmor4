@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import tempfile
 import unittest
+import warnings
 from unittest import mock
 
 import numpy as np
@@ -412,6 +413,96 @@ class Cmor4Test(unittest.TestCase):
                     [axis],
                     np.asarray([250.0, 250.0, 250.0], dtype="f4"),
                 )
+
+    def test_zfactor_value_validation_uses_cmor_variable_checks(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = cmor4.DatasetInfo.from_mapping(dataset_info(Path(tmp_dir)))
+            axis = cmor4.Axis(name="time", values=[0.0, 1.0, 2.0])
+            variable = cmor4.Variable(name="sample", dimensions=["time"])
+            zfactor = cmor4.ZFactor(
+                name="ps",
+                values=[1.0, np.nan, 2.0],
+                dimensions=["time"],
+                valid_min=0.0,
+                table_entry="formula_terms",
+            )
+
+            with self.assertRaisesRegex(
+                cmor4.VariableValidationError,
+                "ps.*1 values were NaNs",
+            ):
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    [axis],
+                    np.ones(3, dtype="f4"),
+                    zfactors=[zfactor],
+                )
+
+            with self.assertWarnsRegex(
+                RuntimeWarning,
+                "ps.*lower than minimum valid value",
+            ):
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    [axis],
+                    np.ones(3, dtype="f4"),
+                    zfactors=[zfactor.updated(values=[1.0, -1.0, 2.0])],
+                )
+
+    def test_grid_mapping_parameters_match_cmor_range_checks(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = cmor4.DatasetInfo.from_mapping(dataset_info(Path(tmp_dir)))
+            variable = cmor4.Variable(
+                name="sample",
+                dimensions=["time", "y", "x"],
+            )
+            axes = [
+                cmor4.Axis(name="time", values=[0.0]),
+                cmor4.Axis(name="y", values=[0.0]),
+                cmor4.Axis(name="x", values=[0.0]),
+            ]
+            grid = cmor4.Grid(
+                mapping_name="lambert_azimuthal_equal_area",
+                params={
+                    "latitude_of_projection_origin": [100.0, "degrees_north"],
+                    "longitude_of_projection_origin": [200.0, "degrees_east"],
+                    "scale_factor_at_projection_origin": -1.0,
+                    "false_easting": [10.0, "m"],
+                },
+            )
+
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                ds = cmor4.create_dataset(
+                    info,
+                    variable,
+                    axes,
+                    np.ones((1, 1, 1), dtype="f4"),
+                    grid=grid,
+                )
+
+            messages = [str(item.message) for item in caught]
+            self.assertTrue(
+                any("between -90 and 90" in message for message in messages)
+            )
+            self.assertTrue(
+                any("between -180 and 180" in message for message in messages)
+            )
+            self.assertTrue(
+                any("must be positive" in message for message in messages)
+            )
+            self.assertNotIn(
+                "latitude_of_projection_origin", ds["crs"].attrs
+            )
+            self.assertNotIn(
+                "longitude_of_projection_origin", ds["crs"].attrs
+            )
+            self.assertNotIn(
+                "scale_factor_at_projection_origin", ds["crs"].attrs
+            )
+            self.assertEqual(ds["crs"].attrs["false_easting"], 10.0)
 
     def test_string_from_template_uses_global_attrs_and_special_values(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

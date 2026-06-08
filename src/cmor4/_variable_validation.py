@@ -7,15 +7,17 @@ import numpy as np
 
 from .axis import Axis
 from .exceptions import VariableValidationError
-from .variable import Variable
 
 
 def validate_variable_values(
-    variable: Variable,
+    variable: Mapping[str, Any],
     axes: Sequence[Axis],
     data: Any,
     dims: Sequence[str],
     axis_dims: Mapping[str, tuple[str, ...]],
+    *,
+    name: str | None = None,
+    table_id: str | None = None,
 ) -> None:
     """Apply CMOR-style checks to the main data variable values."""
 
@@ -44,7 +46,8 @@ def validate_variable_values(
         index = _first_index(nan_mask)
         raise VariableValidationError(
             "Invalid value(s) detected for variable "
-            f"{_variable_name(variable)!r} (table: {_table_id(variable)}): "
+            f"{_variable_name(variable, name)!r} "
+            f"(table: {_table_id(variable, table_id)}): "
             f"{count} values were NaNs. First encountered NaN was at "
             "(axis: index/value):"
             f"{_format_location(index, dims, axes, axis_dims)}"
@@ -66,6 +69,8 @@ def validate_variable_values(
         np.less,
         "lower than minimum valid value",
         np.nanmin,
+        name=name,
+        table_id=table_id,
     )
     _warn_for_limit(
         variable,
@@ -78,8 +83,10 @@ def validate_variable_values(
         np.greater,
         "greater than maximum valid value",
         np.nanmax,
+        name=name,
+        table_id=table_id,
     )
-    _check_absolute_mean(variable, active)
+    _check_absolute_mean(variable, active, name=name, table_id=table_id)
 
 
 def _as_float_masked_array(data: Any) -> np.ma.MaskedArray | None:
@@ -100,6 +107,9 @@ def _warn_for_limit(
     compare: Any,
     phrase: str,
     extrema: Any,
+    *,
+    name: str | None,
+    table_id: str | None,
 ) -> None:
     limit = _numeric_or_none(variable.get(key))
     if limit is None:
@@ -113,7 +123,8 @@ def _warn_for_limit(
     index = _first_index(bad_mask)
     warnings.warn(
         "Invalid value(s) detected for variable "
-        f"{_variable_name(variable)!r} (table: {_table_id(variable)}): "
+        f"{_variable_name(variable, name)!r} "
+        f"(table: {_table_id(variable, table_id)}): "
         f"{count} values were {phrase} ({limit:.4g}). "
         f"Encountered bad value ({bad_value:.5g}) was at "
         "(axis: index/value):"
@@ -123,22 +134,30 @@ def _warn_for_limit(
     )
 
 
-def _check_absolute_mean(variable: Variable, active: np.ndarray) -> None:
+def _check_absolute_mean(
+    variable: Mapping[str, Any],
+    active: np.ndarray,
+    *,
+    name: str | None,
+    table_id: str | None,
+) -> None:
     mean_abs = float(np.mean(np.abs(active)))
     ok_min = _numeric_or_none(variable.get("ok_min_mean_abs"))
     if ok_min is not None:
         if mean_abs < 0.1 * ok_min:
             raise VariableValidationError(
                 "Invalid Absolute Mean for variable "
-                f"{_variable_name(variable)!r} (table: {_table_id(variable)}) "
+                f"{_variable_name(variable, name)!r} "
+                f"(table: {_table_id(variable, table_id)}) "
                 f"({mean_abs:.5g}) is lower by more than an order of "
                 f"magnitude than minimum allowed: {ok_min:.4g}"
             )
         if mean_abs < ok_min:
             warnings.warn(
                 "Invalid Absolute Mean for variable "
-                f"{_variable_name(variable)!r} "
-                f"(table: {_table_id(variable)}) ({mean_abs:.5g}) is lower "
+                f"{_variable_name(variable, name)!r} "
+                f"(table: {_table_id(variable, table_id)}) "
+                f"({mean_abs:.5g}) is lower "
                 f"than minimum allowed: {ok_min:.4g}",
                 RuntimeWarning,
                 stacklevel=3,
@@ -149,15 +168,17 @@ def _check_absolute_mean(variable: Variable, active: np.ndarray) -> None:
         if mean_abs > 10.0 * ok_max:
             raise VariableValidationError(
                 "Invalid Absolute Mean for variable "
-                f"{_variable_name(variable)!r} (table: {_table_id(variable)}) "
+                f"{_variable_name(variable, name)!r} "
+                f"(table: {_table_id(variable, table_id)}) "
                 f"({mean_abs:.5g}) is greater by more than an order of "
                 f"magnitude than maximum allowed: {ok_max:.4g}"
             )
         if mean_abs > ok_max:
             warnings.warn(
                 "Invalid Absolute Mean for variable "
-                f"{_variable_name(variable)!r} "
-                f"(table: {_table_id(variable)}) ({mean_abs:.5g}) is greater "
+                f"{_variable_name(variable, name)!r} "
+                f"(table: {_table_id(variable, table_id)}) "
+                f"({mean_abs:.5g}) is greater "
                 f"than maximum allowed: {ok_max:.4g}",
                 RuntimeWarning,
                 stacklevel=3,
@@ -215,9 +236,16 @@ def _axis_value(axis: Axis, location: int) -> Any:
     return location
 
 
-def _variable_name(variable: Variable) -> str:
-    return variable.names()[0]
+def _variable_name(variable: Mapping[str, Any], name: str | None) -> str:
+    if name is not None:
+        return name
+    names = getattr(variable, "names", None)
+    if callable(names):
+        return names()[0]
+    return str(variable.get("out_name", variable.get("name", "")))
 
 
-def _table_id(variable: Variable) -> str:
+def _table_id(variable: Mapping[str, Any], table_id: str | None) -> str:
+    if table_id is not None:
+        return str(table_id)
     return str(variable.get("table_id", ""))

@@ -8,6 +8,7 @@ import numpy as np
 from ._table_utils import (
     is_table_value,
     metadata_value_matches,
+    parse_table_value,
     table_dimensions,
 )
 from .exceptions import TableValidationError
@@ -32,6 +33,10 @@ class ZFactor(_MetadataRecord):
     bounds_name: str | None = None
     bounds_dim: str | None = None
     bounds_attrs: Mapping[str, Any] = field(default_factory=dict)
+    valid_min: Any = None
+    valid_max: Any = None
+    ok_min_mean_abs: Any = None
+    ok_max_mean_abs: Any = None
     attrs: Mapping[str, Any] = field(default_factory=dict)
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
@@ -53,6 +58,15 @@ class ZFactor(_MetadataRecord):
             value = entry.get(key)
             if is_table_value(value):
                 merged.setdefault(key, value)
+        for key in (
+            "valid_min",
+            "valid_max",
+            "ok_min_mean_abs",
+            "ok_max_mean_abs",
+        ):
+            value = entry.get(key)
+            if is_table_value(value):
+                merged.setdefault(key, parse_table_value(value))
         if "dimensions" not in merged and is_table_value(
             entry.get("dimensions")
         ):

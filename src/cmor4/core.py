@@ -106,7 +106,9 @@ def create_dataset(
 
     zfactor_names: list[str] = []
     for zfactor in zfactors or ():
-        zfactor_names.append(_add_zfactor(zfactor, data_vars, axis_dims))
+        zfactor_names.append(
+            _add_zfactor(zfactor, axes, data_vars, axis_dims)
+        )
 
     data_array = np.asarray(data)
     var_name, var_labels = variable.names()
@@ -357,6 +359,7 @@ def _add_axis(
 
 def _add_zfactor(
     zfactor: ZFactor,
+    axes: Sequence[Axis],
     data_vars: dict[str, Any],
     axis_dims: Mapping[str, tuple[str, ...]],
 ) -> str:
@@ -366,13 +369,32 @@ def _add_zfactor(
     dims = _named_dimensions(zfactor.get("dimensions", ()), axis_dims)
     if not dims and values.ndim > 0:
         dims = (out_name,)
+    validate_variable_values(
+        zfactor,
+        axes,
+        values,
+        dims,
+        axis_dims,
+        name=out_name,
+        table_id=str(zfactor.get("table_entry", "formula_terms")),
+    )
     attrs = zfactor.attributes()
     data_vars[out_name] = (dims, values, attrs)
 
     if "bounds" in zfactor:
         bounds_name = str(zfactor.get("bounds_name") or f"{out_name}_bnds")
+        bounds_dims = dims + (str(zfactor.get("bounds_dim", "bnds")),)
+        validate_variable_values(
+            zfactor,
+            axes,
+            zfactor.bounds_array(),
+            bounds_dims,
+            axis_dims,
+            name=bounds_name,
+            table_id=str(zfactor.get("table_entry", "formula_terms")),
+        )
         data_vars[bounds_name] = (
-            dims + (str(zfactor.get("bounds_dim", "bnds")),),
+            bounds_dims,
             zfactor.bounds_array(),
             zfactor.bounds_attributes(),
         )
