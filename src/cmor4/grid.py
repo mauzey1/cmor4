@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from typing import Any, Mapping
 import warnings
 
@@ -54,6 +54,9 @@ class Grid(_MetadataRecord):
         Extra NetCDF attributes for the grid-mapping variable.
     extra:
         Additional mapping keys preserved by the metadata record.
+    project:
+        Optional project tables used to resolve and merge grid metadata during
+        construction.
     """
 
     dimensions: tuple[str, ...] | list[str] | None = None
@@ -67,6 +70,14 @@ class Grid(_MetadataRecord):
     params: Mapping[str, Any] = field(default_factory=dict)
     attrs: Mapping[str, Any] = field(default_factory=dict)
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
+    project: InitVar[Any | None] = None
+
+    def __post_init__(self, project: Any | None) -> None:
+        if project is None:
+            return
+        merged = self.merge_table_entry(project)
+        for key, value in merged.to_dict().items():
+            object.__setattr__(self, key, value)
 
     def merge_table_entry(self, project: Any) -> "Grid":
         """Merge grid-mapping metadata from the loaded grids table.

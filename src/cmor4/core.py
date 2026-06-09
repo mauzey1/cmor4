@@ -62,6 +62,13 @@ def create_dataset(
 ) -> xr.Dataset:
     """Create an xarray dataset from metadata objects.
 
+    When ``dataset`` was created by :meth:`ProjectTables.dataset_info`, this
+    function uses the associated project tables to fill dataset-level defaults,
+    add required scalar axes, validate table metadata for the supplied
+    ``Variable``, ``Axis``, ``Grid``, and ``ZFactor`` records, validate the
+    final global attributes, and verify that the generated xarray dataset
+    contains the expected variables.
+
     Parameters
     ----------
     dataset:
@@ -86,9 +93,24 @@ def create_dataset(
     xr.Dataset
         Dataset containing the requested variable, coordinates, bounds,
         formula terms, grid mapping, and global attributes.
+
+    Raises
+    ------
+    AxisValidationError
+        If coordinate values or bounds are inconsistent with axis metadata.
+    TableValidationError
+        If project-backed metadata does not match the loaded project tables.
+    ControlledVocabularyError
+        If final global attributes are missing required values or contain
+        values that are not allowed by the project controlled vocabulary.
+    VariableValidationError
+        If data values violate variable validation limits.
+    ValueError
+        If the data shape or final dataset structure is inconsistent with the
+        requested metadata.
     """
 
-    dataset, variable = _dataset_and_variable(dataset, variable)
+    dataset = _dataset_for_variable(dataset, variable)
     axes = _dataset_axes(dataset, axes, variable)
     axes = validate_and_normalize_axes(dataset, variable, axes)
 
@@ -186,6 +208,17 @@ def create_dataset(
             int(value) for value in chunksizes
         )
 
+    _validate_final_components(
+        ds,
+        dataset,
+        variable,
+        axes,
+        zfactors or (),
+        grid,
+        dims,
+        zfactor_names,
+    )
+
     return ds
 
 
@@ -270,7 +303,7 @@ def cmorize(
         The in-memory dataset and path to the written NetCDF file.
     """
 
-    dataset, variable = _dataset_and_variable(dataset, variable)
+    dataset = _dataset_for_variable(dataset, variable)
     ds = create_dataset(
         dataset,
         variable,
@@ -327,7 +360,7 @@ def build_output_path(
         Rendered output path, including the ``.nc`` filename.
     """
 
-    dataset, variable = _dataset_and_variable(dataset, variable)
+    dataset = _dataset_for_variable(dataset, variable)
     root = Path(str(dataset.get("outpath", "."))).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
     path_template = str(
@@ -378,7 +411,7 @@ def string_from_template(
         Rendered template string.
     """
 
-    dataset, variable = _dataset_and_variable(dataset, variable)
+    dataset = _dataset_for_variable(dataset, variable)
     return render_template(
         template,
         _template_tokens(dataset, variable, ds),
@@ -541,13 +574,101 @@ def _set_formula_terms(
                 ds[coord_name].attrs["formula_terms"] = formula_terms
 
 
-def _dataset_and_variable(
+def _validate_final_components(
+    ds: xr.Dataset,
     dataset: DatasetInfo,
     variable: Variable,
-) -> tuple[DatasetInfo, Variable]:
+    axes: Sequence[Axis],
+    zfactors: Sequence[ZFactor],
+    grid: Grid | None,
+    dims: Sequence[str],
+    zfactor_names: Sequence[str],
+) -> None:
+    project = dataset.project
+    if project is not None:
+        project.validate_global_attributes(ds.attrs)
+        project.validate_components(
+            variable,
+            axes,
+            grid=grid,
+            zfactors=zfactors,
+        )
+
+    var_name = variable.names()[0]
+    if var_name not in ds.data_vars:
+        raise ValueError(f"Variable {var_name!r} was not created.")
+    if tuple(ds[var_name].dims) != tuple(dims):
+        raise ValueError(
+            f"Variable {var_name!r} dimensions {tuple(ds[var_name].dims)!r} "
+            f"do not match expected dimensions {tuple(dims)!r}."
+        )
+
+    for axis in axes:
+        _validate_final_axis(ds, axis)
+
+    if grid is not None and grid.has_mapping:
+        if grid.variable_name not in ds.data_vars:
+            raise ValueError(
+                f"Grid mapping variable {grid.variable_name!r} "
+                "was not created."
+            )
+        if ds[var_name].attrs.get("grid_mapping") != grid.variable_name:
+            raise ValueError(
+                f"Variable {var_name!r} does not reference grid mapping "
+                f"{grid.variable_name!r}."
+            )
+
+    for zfactor, out_name in zip(zfactors, zfactor_names):
+        _validate_final_zfactor(ds, zfactor, out_name)
+
+
+def _validate_final_axis(ds: xr.Dataset, axis: Axis) -> None:
+    out_name = str(axis.get("out_name") or axis["name"])
+    value_name = str(axis.get("auxiliary_name") or out_name)
+    if out_name not in ds.coords and value_name not in ds.variables:
+        raise ValueError(f"Axis {axis['name']!r} was not created.")
+    if "bounds" not in axis:
+        return
+    climatology_axis = str(axis.get("climatology", "")).lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    bounds_name = str(
+        axis.get("bounds_name")
+        or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
+    )
+    if bounds_name not in ds.data_vars:
+        raise ValueError(
+            f"Bounds variable {bounds_name!r} for axis {axis['name']!r} "
+            "was not created."
+        )
+
+
+def _validate_final_zfactor(
+    ds: xr.Dataset,
+    zfactor: ZFactor,
+    out_name: str,
+) -> None:
+    if out_name not in ds.data_vars:
+        raise ValueError(f"Z-factor {out_name!r} was not created.")
+    if "bounds" not in zfactor:
+        return
+    bounds_name = str(zfactor.get("bounds_name") or f"{out_name}_bnds")
+    if bounds_name not in ds.data_vars:
+        raise ValueError(
+            f"Bounds variable {bounds_name!r} for z-factor {out_name!r} "
+            "was not created."
+        )
+
+
+def _dataset_for_variable(
+    dataset: DatasetInfo,
+    variable: Variable,
+) -> DatasetInfo:
     project = dataset.project
     if project is None:
-        return dataset, variable
+        return dataset
     return project._dataset_for_variable(dataset, variable)
 
 

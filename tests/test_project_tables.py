@@ -728,6 +728,23 @@ class ProjectTablesTest(unittest.TestCase):
                 np.ones((2, 2, 2), dtype="f4"),
             )
 
+    def test_final_global_attributes_are_validated(self):
+        require_path(self, CMIP7_TABLE_ROOT)
+        project = cmip7_project("tables/CMIP7_ocean.json")
+        variable = project.variable("tos_tavg-u-hxy-sea")
+        info = project.dataset_info(cmip7_dataset())
+
+        with self.assertRaisesRegex(
+            cmor4.ControlledVocabularyError, "not-a-real-activity"
+        ):
+            cmor4.create_dataset(
+                info,
+                variable,
+                lat_lon_axes(project),
+                np.ones((2, 2, 2), dtype="f4"),
+                attrs={"activity_id": "not-a-real-activity"},
+            )
+
     def test_source_id_specific_attributes_are_validated(self):
         require_path(self, DRCDP_TABLE_ROOT)
         project = drcdp_project("Tables/DRCDP_APday.json")

@@ -184,37 +184,36 @@ class ProjectTables:
         self,
         dataset: DatasetInfo,
         variable: Variable,
-    ) -> tuple[DatasetInfo, Variable]:
+    ) -> DatasetInfo:
         user_info = dataset.user_info
         normalized_dataset = self.cv.get_dataset_info(dataset)
         variable_entry = variable.resolve_table_entry(self)
         self._add_table_header_defaults(normalized_dataset, variable_entry)
-        normalized_variable = variable.merge_table_entry(variable_entry)
         self._add_variable_global_defaults(
-            normalized_dataset, normalized_variable
+            normalized_dataset, variable
         )
         self.validate_dataset(normalized_dataset)
         self.validate_source_attributes(normalized_dataset)
         self.validate_experiment(normalized_dataset)
         self.validate_parent_attributes(normalized_dataset)
-        normalized_variable.validate_against_entry(variable_entry)
+        variable.validate_against_entry(variable_entry)
         if (
             "frequency" in normalized_dataset
-            and "frequency" in normalized_variable
+            and "frequency" in variable
             and str(normalized_dataset["frequency"])
-            != str(normalized_variable["frequency"])
+            != str(variable["frequency"])
         ):
             raise TableValidationError(
                 f"frequency={normalized_dataset['frequency']!r} "
                 "does not match "
                 f"{variable_entry.table_id}:{variable_entry.name} frequency "
-                f"{normalized_variable['frequency']!r}."
+                f"{variable['frequency']!r}."
             )
         return DatasetInfo(
             normalized_dataset,
             project=self,
             user_info=user_info,
-        ), normalized_variable
+        )
 
     def variable(self, name: str, **values: Any) -> Variable:
         """Create a variable with metadata from the loaded variable tables.
@@ -232,11 +231,7 @@ class ProjectTables:
             Variable metadata with table values merged.
         """
 
-        variable = Variable(name=name, **values)
-        variable_entry = variable.resolve_table_entry(self)
-        normalized = variable.merge_table_entry(variable_entry)
-        normalized.validate_against_entry(variable_entry)
-        return normalized
+        return Variable(name=name, project=self, **values)
 
     def axis(self, name: str, **values: Any) -> Axis:
         """Create an axis with metadata from the loaded coordinate tables.
@@ -255,7 +250,7 @@ class ProjectTables:
         """
 
         return self._mark_prepared_axis(
-            Axis(name=name, **values).merge_table_entry(self)
+            Axis(name=name, project=self, **values)
         )
 
     def _axes(
@@ -292,7 +287,7 @@ class ProjectTables:
             Grid metadata with table values merged.
         """
 
-        return Grid(name=name, **values).merge_table_entry(self)
+        return Grid(name=name, project=self, **values)
 
     def zfactor(self, name: str, **values: Any) -> ZFactor:
         """Create a z-factor with metadata from formula-term tables.
@@ -310,7 +305,78 @@ class ProjectTables:
             Z-factor metadata with table values merged.
         """
 
-        return ZFactor(name=name, **values).merge_table_entry(self)
+        return ZFactor(name=name, project=self, **values)
+
+    def validate_components(
+        self,
+        variable: Variable,
+        axes: Sequence[Axis],
+        *,
+        grid: Grid | None = None,
+        zfactors: Sequence[ZFactor] = (),
+    ) -> None:
+        """Validate metadata records against the loaded project tables.
+
+        This is the final table-backed metadata validation used by
+        ``create_dataset`` after axes have been normalized and required scalar
+        axes have been added. Records that were already prepared by this
+        ``ProjectTables`` instance are treated as authoritative; other records
+        are resolved against the loaded variable, coordinate, grid, and
+        formula-term tables to catch inconsistent metadata.
+
+        Parameters
+        ----------
+        variable:
+            Main variable metadata to validate against the loaded variable
+            tables.
+        axes:
+            Coordinate axis metadata to validate against coordinate and grid
+            coordinate tables.
+        grid:
+            Optional grid mapping metadata to validate against the loaded grid
+            table.
+        zfactors:
+            Optional hybrid-coordinate formula-term metadata to validate
+            against formula-term tables.
+
+        Returns
+        -------
+        None
+            Raises ``TableValidationError`` if metadata is inconsistent with
+            the loaded project tables.
+        """
+
+        variable_entry = variable.resolve_table_entry(self)
+        variable.validate_against_entry(variable_entry)
+        for axis in axes:
+            if not self._is_prepared_axis(axis):
+                axis.merge_table_entry(self)
+        if grid is not None:
+            grid.merge_table_entry(self)
+        for zfactor in zfactors:
+            zfactor.merge_table_entry(self)
+
+    def validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
+        """Validate final NetCDF global attributes against project tables.
+
+        Parameters
+        ----------
+        attrs:
+            Global attributes from the generated dataset. These include
+            dataset metadata, variable-derived global attributes, runtime
+            defaults, and any user-supplied attribute overrides.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if required attributes are
+            missing or controlled global attribute values are invalid.
+        """
+
+        self.validate_dataset(attrs)
+        self.validate_source_attributes(attrs)
+        self.validate_experiment(attrs)
+        self.validate_parent_attributes(attrs)
 
     def _mark_prepared_axis(self, axis: Axis) -> Axis:
         object.__setattr__(axis, "_cmor4_project_tables", self)

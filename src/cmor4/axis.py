@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -63,6 +63,9 @@ class Axis(_MetadataRecord):
         Extra attributes for the coordinate variable.
     extra:
         Additional mapping keys preserved by the metadata record.
+    project:
+        Optional project tables used to resolve and merge axis metadata during
+        construction.
     """
 
     name: str
@@ -96,6 +99,14 @@ class Axis(_MetadataRecord):
     bounds_attrs: Mapping[str, Any] = field(default_factory=dict)
     attrs: Mapping[str, Any] = field(default_factory=dict)
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
+    project: InitVar[Any | None] = None
+
+    def __post_init__(self, project: Any | None) -> None:
+        if project is None:
+            return
+        merged = self.merge_table_entry(project)
+        for key, value in merged.to_dict().items():
+            object.__setattr__(self, key, value)
 
     def merge_table_entry(self, project: Any) -> "Axis":
         """Merge authoritative coordinate metadata into this axis.
