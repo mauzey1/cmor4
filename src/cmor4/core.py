@@ -650,7 +650,7 @@ def _validate_final_zfactor(
     zfactor: ZFactor,
     out_name: str,
 ) -> None:
-    if out_name not in ds.data_vars:
+    if out_name not in ds.variables:
         raise ValueError(f"Z-factor {out_name!r} was not created.")
     if "bounds" not in zfactor:
         return

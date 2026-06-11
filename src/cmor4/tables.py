@@ -86,6 +86,11 @@ class ProjectTables:
         self.coordinate_entries = _overlay_table_entries(
             coordinate_entries, self.grid_axis_entries
         )
+        self.scalar_axis_entries = {
+            name: entry
+            for name, entry in self.coordinate_entries.items()
+            if _is_table_value(entry.get("value"))
+        }
         self.generic_level_entries = _generic_level_entries(
             self.coordinate_entries
         )
@@ -262,14 +267,67 @@ class ProjectTables:
 
         merged_axes = [
             axis if self._is_prepared_axis(axis)
-            else axis.merge_table_entry(self)
+            else axis._merge_table_entry(self)
             for axis in axes
         ]
         if variable is not None:
-            merged_axes.extend(
-                Axis.missing_scalar_axes(self, merged_axes, variable)
-            )
+            merged_axes.extend(self.scalar_axes_for(variable, merged_axes))
         return tuple(self._mark_prepared_axis(axis) for axis in merged_axes)
+
+    def scalar_axes_for(
+        self,
+        variable: Variable,
+        axes: Sequence[Axis] = (),
+    ) -> tuple[Axis, ...]:
+        """Return fixed scalar axes required by a variable and not supplied."""
+
+        present = {
+            str(value)
+            for axis in axes
+            for value in (
+                axis.name,
+                axis.table_entry,
+                axis.axis_entry,
+                axis.coordinate,
+                axis.out_name,
+                axis.generic_level_name,
+            )
+            if value
+        }
+        missing_axes: list[Axis] = []
+        for dimension in variable.get("dimensions", ()):
+            dimension_name = str(dimension)
+            if dimension_name in present:
+                continue
+            if dimension_name not in self.scalar_axis_entries:
+                continue
+            axis = Axis(
+                name=dimension_name,
+                table_entry=dimension_name,
+                scalar=True,
+                project=self,
+            )
+            missing_axes.append(axis)
+            present.update(
+                str(value)
+                for value in (
+                    axis.name,
+                    axis.table_entry,
+                    axis.out_name,
+                    axis.generic_level_name,
+                )
+                if value
+            )
+        return tuple(self._mark_prepared_axis(axis) for axis in missing_axes)
+
+    def complete_axes(
+        self,
+        variable: Variable,
+        axes: Sequence[Axis],
+    ) -> tuple[Axis, ...]:
+        """Return supplied axes plus fixed scalar axes required by variable."""
+
+        return self._axes(axes, variable)
 
     def grid(self, name: str | None = None, **values: Any) -> Grid:
         """Create a grid with metadata from the loaded grid table.
@@ -350,11 +408,65 @@ class ProjectTables:
         variable.validate_against_entry(variable_entry)
         for axis in axes:
             if not self._is_prepared_axis(axis):
-                axis.merge_table_entry(self)
+                self._validate_axis_component(axis)
         if grid is not None:
-            grid.merge_table_entry(self)
+            self._validate_grid_component(grid)
         for zfactor in zfactors:
-            zfactor.merge_table_entry(self)
+            self._validate_zfactor_component(zfactor)
+
+    def _validate_axis_component(self, axis: Axis) -> None:
+        entry_name, entry = axis.resolve_table_entry(self)
+        if entry is not None:
+            axis._validate_metadata(
+                "axis",
+                entry_name,
+                entry,
+                (
+                    "units",
+                    "standard_name",
+                    "long_name",
+                    "axis",
+                    "positive",
+                    "formula",
+                ),
+            )
+        grid_entry_name, grid_entry = axis.resolve_grid_coordinate(self)
+        if grid_entry is not None:
+            axis._validate_metadata(
+                "grid coordinate",
+                grid_entry_name,
+                grid_entry,
+                ("units", "standard_name", "long_name"),
+            )
+
+    def _validate_grid_component(self, grid: Grid) -> None:
+        entry_name, entry = grid.resolve_table_entry(self)
+        if entry is None:
+            return
+        user_values = grid.to_dict()
+        for key in ("mapping_name", "grid_mapping_name"):
+            expected = entry.get(key)
+            if (
+                _is_table_value(expected)
+                and key in user_values
+                and str(user_values[key]) != str(expected)
+            ):
+                raise TableValidationError(
+                    f"grid mapping {entry_name!r} {key}="
+                    f"{user_values[key]!r} does not match table value "
+                    f"{expected!r}."
+                )
+
+    def _validate_zfactor_component(self, zfactor: ZFactor) -> None:
+        entry_name, entry = zfactor.resolve_table_entry(self)
+        if entry is None:
+            return
+        zfactor._validate_metadata(
+            "formula term",
+            entry_name,
+            entry,
+            ("units", "standard_name", "long_name"),
+        )
 
     def validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
         """Validate final NetCDF global attributes against project tables.

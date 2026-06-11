@@ -75,11 +75,11 @@ class ZFactor(_MetadataRecord):
     def __post_init__(self, project: Any | None) -> None:
         if project is None:
             return
-        merged = self.merge_table_entry(project)
+        merged = self._merge_table_entry(project)
         for key, value in merged.to_dict().items():
             object.__setattr__(self, key, value)
 
-    def merge_table_entry(self, project: Any) -> "ZFactor":
+    def _merge_table_entry(self, project: Any) -> "ZFactor":
         """Merge authoritative formula-term metadata into this z-factor.
 
         Parameters

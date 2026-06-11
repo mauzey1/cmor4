@@ -14,7 +14,6 @@ from ._table_utils import (
 )
 from .exceptions import TableValidationError
 from .metadata import _MetadataRecord
-from .variable import Variable
 
 
 @dataclass(frozen=True)
@@ -94,6 +93,12 @@ class Axis(_MetadataRecord):
     generic_level_name: str | None = None
     z_factors: str | None = None
     z_bounds_factors: str | None = None
+    requested: Any = None
+    requested_bounds: Any = None
+    bounds_values: Any = None
+    must_have_bounds: Any = None
+    stored_direction: str | None = None
+    tolerance: Any = None
     bounds_name: str | None = None
     bounds_dim: str | None = None
     bounds_attrs: Mapping[str, Any] = field(default_factory=dict)
@@ -104,11 +109,12 @@ class Axis(_MetadataRecord):
     def __post_init__(self, project: Any | None) -> None:
         if project is None:
             return
-        merged = self.merge_table_entry(project)
+        merged = self._merge_table_entry(project)
+        merged._validate_values_early()
         for key, value in merged.to_dict().items():
             object.__setattr__(self, key, value)
 
-    def merge_table_entry(self, project: Any) -> "Axis":
+    def _merge_table_entry(self, project: Any) -> "Axis":
         """Merge authoritative coordinate metadata into this axis.
 
         Parameters
@@ -160,7 +166,6 @@ class Axis(_MetadataRecord):
             "must_have_bounds",
             "stored_direction",
             "tolerance",
-            "type",
         ):
             value = entry.get(key)
             if is_table_value(value):
@@ -261,69 +266,6 @@ class Axis(_MetadataRecord):
         if len(matches) == 1:
             return matches[0]
         return None, None
-
-    @classmethod
-    def missing_scalar_axes(
-        cls,
-        project: Any,
-        axes: Sequence["Axis"],
-        variable: Variable,
-    ) -> list["Axis"]:
-        """Return required scalar axes missing from an axis sequence.
-
-        Parameters
-        ----------
-        project:
-            Project table loader containing coordinate entries.
-        axes:
-            Axes already supplied for the variable.
-        variable:
-            Variable metadata whose dimensions may require scalar axes.
-
-        Returns
-        -------
-        list[Axis]
-            Scalar axes implied by variable dimensions and table entries.
-        """
-
-        present = {
-            str(value)
-            for axis in axes
-            for value in (
-                axis.name,
-                axis.table_entry,
-                axis.axis_entry,
-                axis.coordinate,
-                axis.out_name,
-                axis.generic_level_name,
-            )
-            if value
-        }
-        missing_axes: list[Axis] = []
-        for dimension in variable.get("dimensions", ()):
-            dimension_name = str(dimension)
-            if dimension_name in present:
-                continue
-            entry = project.coordinate_entries.get(dimension_name)
-            if entry is None or not is_table_value(entry.get("value")):
-                continue
-            axis = cls(
-                name=dimension_name,
-                table_entry=dimension_name,
-                scalar=True,
-            ).merge_table_entry(project)
-            missing_axes.append(axis)
-            present.update(
-                str(value)
-                for value in (
-                    axis.name,
-                    axis.table_entry,
-                    axis.out_name,
-                    axis.generic_level_name,
-                )
-                if value
-            )
-        return missing_axes
 
     def attributes(self, *, include_units: bool = True) -> dict[str, Any]:
         """Return NetCDF attributes for this coordinate axis.
@@ -501,3 +443,10 @@ class Axis(_MetadataRecord):
                     f"{entry_type} {entry_name!r} {key}={user_values[key]!r} "
                     f"does not match table value {expected!r}."
                 )
+
+    def _validate_values_early(self) -> None:
+        """Run component-level axis checks that do not need dataset context."""
+
+        from ._axis_validation import validate_axis_values_early
+
+        validate_axis_values_early(self)

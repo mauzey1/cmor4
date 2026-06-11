@@ -322,9 +322,7 @@ class ProjectTablesTest(unittest.TestCase):
             cmor4.TableValidationError,
             "Generic level 'olevel' matches multiple coordinate entries",
         ):
-            cmor4.Axis(name="olevel", values=[5.0, 50.0]).merge_table_entry(
-                project
-            )
+            project.axis("olevel", values=[5.0, 50.0])
 
     def test_cmip7_grid_axes_and_aux_coords_come_from_grids_table(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -491,9 +489,9 @@ class ProjectTablesTest(unittest.TestCase):
                 coordinate_table=coordinate_table,
             )
 
-            merged = cmor4.Axis(
-                name="x", values=[0.0, 1.0], axis="X", units="m"
-            ).merge_table_entry(project)
+            merged = project.axis(
+                "x", values=[0.0, 1.0], axis="X", units="m"
+            )
 
             self.assertEqual(merged.name, "x")
             self.assertIsNone(merged.table_entry)

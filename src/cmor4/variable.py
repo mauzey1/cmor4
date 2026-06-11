@@ -109,7 +109,7 @@ class Variable(_MetadataRecord):
         if project is None:
             return
         variable_entry = self.resolve_table_entry(project)
-        merged = self.merge_table_entry(variable_entry)
+        merged = self._merge_table_entry(variable_entry)
         merged.validate_against_entry(variable_entry)
         for key, value in merged.to_dict().items():
             object.__setattr__(self, key, value)
@@ -204,7 +204,7 @@ class Variable(_MetadataRecord):
             f"Variable {requested!r} was not found in loaded variable tables."
         )
 
-    def merge_table_entry(self, variable_entry: VariableEntry) -> "Variable":
+    def _merge_table_entry(self, variable_entry: VariableEntry) -> "Variable":
         """Merge authoritative table metadata with user variable controls.
 
         Parameters

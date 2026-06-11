@@ -124,8 +124,8 @@ class Cmor4Test(unittest.TestCase):
             prepared_variable = self.project.variable(
                 "tos_tavg-u-hxy-sea", table_id="ocean"
             )
-        prepared_axis = axis.merge_table_entry(self.project)
-        prepared_zfactor = zfactor.merge_table_entry(self.project)
+        prepared_axis = self.project.axis("time", values=np.arange(2))
+        prepared_zfactor = self.project.zfactor("p0", values=100000.0)
 
         self.assertIsInstance(prepared_info, cmor4.DatasetInfo)
         self.assertIsInstance(prepared_variable, cmor4.Variable)
@@ -172,6 +172,7 @@ class Cmor4Test(unittest.TestCase):
         self.assertEqual(axis.out_name, "lat")
         self.assertEqual(axis.units, "degrees_north")
         self.assertEqual(axis.axis, "Y")
+        self.assertNotIn("type", axis.extra)
         self.assertEqual(grid.coordinates, ["rlon", "rlat"])
         self.assertIn("false_easting", grid.params)
         self.assertEqual(zfactor.units, "Pa")
@@ -291,12 +292,28 @@ class Cmor4Test(unittest.TestCase):
             )
             self.assertEqual(ds["lat_bnds"].shape, (2, 2))
 
-            bad_lat_axes = [
-                time_axis(self.project),
+            with self.assertRaisesRegex(
+                cmor4.AxisValidationError,
+                "valid_min",
+            ):
                 self.project.axis(
                     "latitude",
                     values=[-95.0, 45.0],
                     bounds=[[-100.0, 0.0], [0.0, 90.0]],
+                )
+
+            bad_lat_axes = [
+                time_axis(self.project),
+                cmor4.Axis(
+                    name="latitude",
+                    values=[-95.0, 45.0],
+                    bounds=[[-100.0, 0.0], [0.0, 90.0]],
+                    units="degrees_north",
+                    standard_name="latitude",
+                    axis="Y",
+                    valid_min=-90.0,
+                    valid_max=90.0,
+                    out_name="lat",
                 ),
                 self.project.axis(
                     "longitude",
@@ -541,6 +558,15 @@ class Cmor4Test(unittest.TestCase):
     def test_scalar_height_and_pressure_level_patterns(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_info = dataset_info(Path(tmp_dir))
+            scalar_variable = self.project.variable(
+                "tas_tavg-h2m-hxy-u",
+                table_id="atmos",
+            )
+            scalar_axes = self.project.scalar_axes_for(scalar_variable)
+            self.assertEqual(scalar_variable.id, "tas")
+            self.assertEqual([axis.name for axis in scalar_axes], ["height2m"])
+            self.assertEqual(scalar_axes[0].values, [2.0])
+
             axes = [
                 time_axis(self.project),
                 self.project.axis(
@@ -671,6 +697,7 @@ class Cmor4Test(unittest.TestCase):
                 ds["a"].attrs["long_name"],
                 "vertical coordinate formula term: a",
             )
+            self.assertIn("p0", ds.variables)
             self.assertEqual(ds["p0"].attrs["units"], "Pa")
             self.assertEqual(ds["a_bnds"].dims, ("lev", "bnds"))
             self.assertEqual(ds["ps"].dims, ("time", "lat", "lon"))

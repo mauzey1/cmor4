@@ -75,11 +75,11 @@ class Grid(_MetadataRecord):
     def __post_init__(self, project: Any | None) -> None:
         if project is None:
             return
-        merged = self.merge_table_entry(project)
+        merged = self._merge_table_entry(project)
         for key, value in merged.to_dict().items():
             object.__setattr__(self, key, value)
 
-    def merge_table_entry(self, project: Any) -> "Grid":
+    def _merge_table_entry(self, project: Any) -> "Grid":
         """Merge grid-mapping metadata from the loaded grids table.
 
         Parameters
@@ -98,6 +98,10 @@ class Grid(_MetadataRecord):
         if entry is None:
             return Grid.from_mapping(merged)
         merged.setdefault("table_entry", entry_name)
+        for key in ("mapping_name", "grid_mapping_name"):
+            value = entry.get(key)
+            if is_table_value(value):
+                merged.setdefault(key, value)
         coordinates = entry.get("coordinates")
         if "coordinates" not in merged and is_table_value(coordinates):
             merged["coordinates"] = str(coordinates).split()

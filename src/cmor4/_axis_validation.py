@@ -48,10 +48,27 @@ def validate_and_normalize_axes(
     )
 
 
+def validate_axis_values_early(axis: Axis) -> None:
+    """Validate axis values without dataset- or frequency-dependent checks."""
+
+    _validate_and_normalize_axis(
+        {},
+        {},
+        axis,
+        include_time_checks=False,
+        enforce_required_bounds=False,
+        normalize=False,
+    )
+
+
 def _validate_and_normalize_axis(
     dataset: Mapping[str, Any],
     variable: Mapping[str, Any],
     axis: Axis,
+    *,
+    include_time_checks: bool = True,
+    enforce_required_bounds: bool = True,
+    normalize: bool = True,
 ) -> Axis:
     values = axis.values_array()
     bounds = axis.bounds_array() if "bounds" in axis else None
@@ -59,7 +76,7 @@ def _validate_and_normalize_axis(
     climatology = _is_truthy(axis.get("climatology"))
 
     values, bounds = _normalize_bounds_shape(axis, values, bounds)
-    if _requires_bounds(axis) and bounds is None:
+    if enforce_required_bounds and _requires_bounds(axis) and bounds is None:
         raise AxisValidationError(
             f"axis {name!r} must have bounds, but none were provided."
         )
@@ -78,13 +95,25 @@ def _validate_and_normalize_axis(
         _validate_valid_range(axis, bounds, name, is_bounds=True)
         if bounds.shape[-1] == 2:
             _validate_requested_bounds(axis, bounds, name)
-            _validate_monotonic(axis, bounds, name, is_bounds=True)
-            _validate_values_inside_bounds(values, bounds, name)
-        if _is_time_axis(axis) and not climatology and bounds.shape[-1] == 2:
+            if include_time_checks or (
+                not _is_time_axis(axis) and not climatology
+            ):
+                _validate_monotonic(axis, bounds, name, is_bounds=True)
+            if include_time_checks or not _is_time_axis(axis):
+                _validate_values_inside_bounds(values, bounds, name)
+        if (
+            include_time_checks
+            and _is_time_axis(axis)
+            and not climatology
+            and bounds.shape[-1] == 2
+        ):
             values = _time_values_from_bounds(values, bounds, name)
 
-    if _is_time_axis(axis) and not climatology:
+    if include_time_checks and _is_time_axis(axis) and not climatology:
         _validate_time_interval(dataset, variable, axis, values)
+
+    if not normalize:
+        return axis
 
     updates: dict[str, Any] = {}
     if not np.array_equal(values, axis.values_array()):
