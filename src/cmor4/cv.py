@@ -12,7 +12,10 @@ from ._table_utils import (
     is_table_value as _is_table_value,
     metadata_value_matches as _metadata_value_matches,
 )
-from ._templates import render_template as _render_template
+from ._templates import (
+    is_unresolved_template as _is_unresolved_template,
+    render_template as _render_template,
+)
 from .exceptions import ControlledVocabularyError
 
 
@@ -593,7 +596,8 @@ class ControlledVocabulary(Mapping[str, Any]):
             return True
         if isinstance(allowed, str) and str(value) == allowed:
             return True
-        if isinstance(allowed, str) and "<" in allowed and ">" in allowed:
+        # Check if allowed is a template (contains tokens like <variable_id>)
+        if _is_unresolved_template(allowed):
             separator: str | None
             match key:
                 case "branding_suffix":

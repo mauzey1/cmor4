@@ -8,6 +8,7 @@ from ._table_utils import (
     is_table_value as _is_table_value,
     single_or_original as _single_or_original,
 )
+from ._templates import is_unresolved_template as _is_unresolved_template
 from .axis import Axis
 from .cv import ControlledVocabulary
 from .dataset import DatasetInfo
@@ -826,9 +827,6 @@ def _overlay_table_entries(
         entries[name] = entry
     return entries
 
-
-def _is_unresolved_template(value: Any) -> bool:
-    return isinstance(value, str) and "<" in value and ">" in value
 
 
 def _resolve_optional_table(
