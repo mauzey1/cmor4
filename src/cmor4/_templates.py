@@ -12,9 +12,10 @@ def render_template(template: str,
     Template tokens are placeholders in the form <token_name> that get replaced
     with corresponding values from the tokens mapping.
 
-    This function is permissive and will match any content between angle brackets,
-    including text with spaces like <Your Centre Name>. For strict detection of
-    actual template tokens (no whitespace), use is_unresolved_template().
+    This function is permissive and will match any content between angle
+    brackets, including text with spaces like <Your Centre Name>. For strict
+    detection of actual template tokens (no whitespace), use
+    is_unresolved_template().
 
     Parameters
     ----------
@@ -23,19 +24,20 @@ def render_template(template: str,
     tokens:
         Mapping of token names to their replacement values.
     separator:
-        Optional separator to insert between adjacent tokens (e.g., "-" or "_").
+        Optional separator to insert between adjacent tokens
+        (e.g., "-" or "_").
 
     Returns
     -------
     str
-        Rendered template with tokens replaced by their values. Tokens not found
-        in the mapping are replaced with empty strings.
+        Rendered template with tokens replaced by their values. Tokens not
+        found in the mapping are replaced with empty strings.
 
     Notes
     -----
-    This function uses a permissive pattern `<([^>]+)>` that matches any content
-    between angle brackets, including whitespace. This allows it to handle
-    placeholder text like `<Your Centre Name>` from CV files.
+    This function uses a permissive pattern `<([^>]+)>` that matches any
+    content between angle brackets, including whitespace. This allows it to
+    handle placeholder text like `<Your Centre Name>` from CV files.
     """
     _template = template
     if separator:
@@ -54,8 +56,8 @@ def is_unresolved_template(value: Any) -> bool:
     no whitespace, e.g., <variable_id>, <mip_era>, <source_id>. This helps
     distinguish actual template tokens from other uses of angle brackets.
 
-    For rendering templates (including those with whitespace), use render_template()
-    which is more permissive.
+    For rendering templates (including those with whitespace), use
+    render_template() which is more permissive.
 
     Parameters
     ----------
@@ -83,7 +85,8 @@ def is_unresolved_template(value: Any) -> bool:
 
     Notes
     -----
-    This function uses the strict pattern `<\S+>` (non-whitespace only), while
-    render_template() uses the permissive pattern `<([^>]+)>` (any content).
+    This function uses the strict pattern r"<\\S+>" (non-whitespace only),
+    while render_template() uses the permissive pattern r"<([^>]+)>"
+    (any content).
     """
     return isinstance(value, str) and bool(re.search(r"<\S+>", value))

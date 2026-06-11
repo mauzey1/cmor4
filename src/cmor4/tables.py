@@ -193,9 +193,9 @@ class ProjectTables:
     ) -> DatasetInfo:
         """Prepare dataset info with variable-specific metadata and validation.
 
-        This is called by create_dataset to merge variable metadata into dataset
-        and perform initial validation. Full component validation happens later
-        via validate_components.
+        This is called by create_dataset to merge variable metadata into
+        dataset and perform initial validation. Full component validation
+        happens later via validate_components.
         """
         user_info = dataset.user_info
         normalized_dataset = self.cv.get_dataset_info(dataset)
@@ -218,7 +218,8 @@ class ProjectTables:
         )
 
         # Quick validation check for dataset-variable consistency
-        # This is duplicated in validate_components but done early for fast failure
+        # This is duplicated in validate_components but done early for fast
+        # failure
         variable.validate_against_entry(variable_entry)
         self._validate_dataset_variable_consistency(
             prepared_dataset, variable, variable_entry
@@ -271,9 +272,10 @@ class ProjectTables:
     ) -> tuple[Axis, ...]:
         """Create a complete axis tuple, including required scalar axes.
 
-        Axes created via this ProjectTables instance (using axis() factory method
-        or with project=self) are already prepared. Axes from other sources are
-        merged with this ProjectTables instance to ensure consistent table data.
+        Axes created via this ProjectTables instance (using axis() factory
+        method or with project=self) are already prepared. Axes from other
+        sources are merged with this ProjectTables instance to ensure
+        consistent table data.
         """
 
         merged_axes = [
@@ -388,22 +390,24 @@ class ProjectTables:
         """Validate metadata records and dataset configuration comprehensively.
 
         This is the complete validation check that ensures all components are
-        consistent with each other and with the loaded project tables. It can be
-        used both as the final check before dataset creation and as a user-facing
-        validation function to verify metadata setup before writing data.
+        consistent with each other and with the loaded project tables. It can
+        be used both as the final check before dataset creation and as a
+        user-facing validation function to verify metadata setup before
+        writing data.
 
-        Components created via this ProjectTables instance (using factory methods
-        or with project=self) already have validated attributes stored and are
-        trusted. Components from other sources are validated here to ensure they
-        match table constraints.
+        Components created via this ProjectTables instance (using factory
+        methods or with project=self) already have validated attributes
+        stored and are trusted. Components from other sources are validated
+        here to ensure they match table constraints.
 
-        This validation works with the stored attributes in each component rather
-        than re-fetching table data.
+        This validation works with the stored attributes in each component
+        rather than re-fetching table data.
 
         Parameters
         ----------
         dataset:
-            Dataset metadata to validate. If provided, enables additional checks:
+            Dataset metadata to validate. If provided, enables additional
+            checks:
             - Frequency consistency between dataset and variable
             - Time axis validation with frequency context
             - Dataset global attribute completeness
@@ -452,7 +456,9 @@ class ProjectTables:
 
         # Dataset-variable consistency checks
         if dataset is not None:
-            self._validate_dataset_variable_consistency(dataset, variable, variable_entry)
+            self._validate_dataset_variable_consistency(
+                dataset, variable, variable_entry
+            )
 
         # Axis validation: only validate axes not prepared by this instance
         for axis in axes:
@@ -474,7 +480,9 @@ class ProjectTables:
                         ),
                     )
                 # Validate axis against grid coordinate entry (if applicable)
-                grid_entry_name, grid_entry = axis.resolve_grid_coordinate(self)
+                grid_entry_name, grid_entry = (
+                    axis.resolve_grid_coordinate(self)
+                )
                 if grid_entry is not None:
                     axis._validate_metadata(
                         "grid coordinate",
@@ -541,12 +549,13 @@ class ProjectTables:
         variable: Variable,
         axes: Sequence[Axis],
     ) -> None:
-        """Validate axes in context of dataset (e.g., time axis with frequency).
+        """Validate axes in context of dataset.
 
-        This is a placeholder for cross-component validation checks that require
-        dataset context. The main time axis validation with frequency happens in
-        validate_and_normalize_axes during dataset creation, but this could be
-        extended to perform additional checks.
+        For example, time axis with frequency. This is a placeholder for
+        cross-component validation checks that require dataset context. The
+        main time axis validation with frequency happens in
+        validate_and_normalize_axes during dataset creation, but this could
+        be extended to perform additional checks.
         """
         # Check that required scalar axes are present (if not auto-added)
         present_names = {
@@ -568,9 +577,11 @@ class ProjectTables:
             if dimension_name not in present_names:
                 if dimension_name in self.scalar_axis_entries:
                     raise TableValidationError(
-                        f"Variable requires scalar axis {dimension_name!r} but it "
-                        "was not provided. Use ProjectTables.scalar_axes_for() or "
-                        "ProjectTables.complete_axes() to get required scalar axes."
+                        f"Variable requires scalar axis {dimension_name!r} "
+                        "but it was not provided. Use "
+                        "ProjectTables.scalar_axes_for() or "
+                        "ProjectTables.complete_axes() to get required "
+                        "scalar axes."
                     )
                 # Non-scalar dimension not found - will be caught elsewhere
                 # (e.g., when building dataset if dimension truly missing)
@@ -826,7 +837,6 @@ def _overlay_table_entries(
                 entry[key] = value
         entries[name] = entry
     return entries
-
 
 
 def _resolve_optional_table(
