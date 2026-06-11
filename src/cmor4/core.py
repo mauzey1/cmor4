@@ -588,6 +588,7 @@ def _validate_final_components(
     if project is not None:
         project.validate_global_attributes(ds.attrs)
         project.validate_components(
+            dataset,
             variable,
             axes,
             grid=grid,

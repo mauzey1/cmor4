@@ -110,7 +110,8 @@ class Variable(_MetadataRecord):
             return
         variable_entry = self.resolve_table_entry(project)
         merged = self._merge_table_entry(variable_entry)
-        merged.validate_against_entry(variable_entry)
+        # Note: Full validation happens in ProjectTables._dataset_for_variable
+        # and validate_components, not during construction
         for key, value in merged.to_dict().items():
             object.__setattr__(self, key, value)
 

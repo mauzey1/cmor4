@@ -445,7 +445,19 @@ class Axis(_MetadataRecord):
                 )
 
     def _validate_values_early(self) -> None:
-        """Run component-level axis checks that do not need dataset context."""
+        """Run component-level axis checks that do not need dataset context.
+
+        This is partial validation performed during construction. It checks:
+        - Monotonicity
+        - Valid ranges
+        - Requested values
+        - Bounds shape and consistency
+
+        It skips:
+        - Time interval validation (needs frequency from dataset/variable)
+        - Required bounds enforcement (checked during full validation)
+        - Value normalization (done during full validation)
+        """
 
         from ._axis_validation import validate_axis_values_early
 
