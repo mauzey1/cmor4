@@ -7,7 +7,7 @@ CMOR4 is a Python package for creating CF-compliant climate model output in NetC
 ## Key Features
 
 - **Pythonic API**: Create datasets using Python objects instead of JSON configuration files
-- **Project table validation**: Ensures compliance with projects using CMOR table formats, currently supporting [CMIP7](https://wcrp-cmip.org/cmip7/), [obs4MIPs](https://esgf.llnl.gov/obs4mips/), and [DRCDP](https://github.com/PCMDI/DRCDP)
+- **Project table validation**: Ensures compliance with projects using CMOR table formats, currently supporting [CMIP7](https://github.com/WCRP-CMIP/cmip7-cmor-tables), [obs4MIPs](https://github.com/PCMDI/obs4MIPs-cmor-tables), and [DRCDP](https://github.com/PCMDI/DRCDP)
 - **xarray integration**: Built on xarray for modern, Pythonic data handling
 - **Minimal metadata entry**: Only specify variable names and data - CF attributes are applied automatically from tables
 - **CF compliance**: Produces Climate and Forecast conventions-compliant NetCDF files
