@@ -189,15 +189,62 @@ class Axis(_MetadataRecord):
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         """Resolve a coordinate table entry from this axis.
 
+        This method searches the project's coordinate tables for an entry
+        matching this axis. It tries multiple strategies in order: exact name
+        match, generic level name disambiguation, out_name match, and finally
+        matching by out_name and standard_name combination.
+
         Parameters
         ----------
-        project:
-            Project table loader containing coordinate entries.
+        project
+            Project table loader containing coordinate and grid axis entries
+            from loaded coordinate and grid tables.
 
         Returns
         -------
         tuple[str | None, Mapping[str, Any] | None]
-            Matched entry name and table metadata, or ``(None, None)``.
+            A tuple containing:
+
+            - entry_name (str or None): The matched coordinate table entry name
+            - entry (dict or None): The table entry metadata dictionary
+
+            Returns ``(None, None)`` if no matching entry is found.
+
+        Raises
+        ------
+        TableValidationError
+            If a generic level name matches multiple entries without
+            disambiguation via table_entry or axis_entry.
+
+        Notes
+        -----
+        Resolution strategy:
+
+        1. Direct match by table_entry, axis_entry, coordinate, or name
+        2. Generic level name match (e.g., "alevel", "olevel"), narrowed by
+           standard_name, formula, z_factors, etc. if multiple matches exist
+        3. Match by out_name in coordinate entries
+        4. Match by out_name and standard_name combination
+
+        Examples
+        --------
+        Resolve standard coordinate::
+
+            axis = Axis(name="time", values=[...])
+            entry_name, entry = axis.resolve_table_entry(project)
+            # Returns ("time", {...}) from coordinate table
+
+        Resolve generic level::
+
+            axis = Axis(name="alevel", standard_name="altitude")
+            entry_name, entry = axis.resolve_table_entry(project)
+            # Returns specific altitude entry matching standard_name
+
+        Disambiguate with table_entry::
+
+            axis = Axis(name="plev", table_entry="plev19")
+            entry_name, entry = axis.resolve_table_entry(project)
+            # Returns ("plev19", {...}) specifically
         """
 
         requested = str(
@@ -238,15 +285,46 @@ class Axis(_MetadataRecord):
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         """Resolve a grid-coordinate variable entry from this axis.
 
+        Grid coordinates are auxiliary coordinate variables defined in the
+        project's grid table, typically representing latitude and longitude
+        on non-rectilinear grids (e.g., curvilinear ocean grids). This method
+        searches for a matching grid coordinate entry by name or out_name.
+
         Parameters
         ----------
-        project:
-            Project table loader containing grid coordinate entries.
+        project
+            Project table loader containing grid coordinate entries from the
+            loaded grids table.
 
         Returns
         -------
         tuple[str | None, Mapping[str, Any] | None]
-            Matched entry name and table metadata, or ``(None, None)``.
+            A tuple containing:
+
+            - entry_name (str or None): Matched grid coordinate entry name
+            - entry (dict or None): Grid coordinate entry metadata
+
+            Returns ``(None, None)`` if no matching entry is found.
+
+        Notes
+        -----
+        Grid coordinates differ from regular axis coordinates in that they are
+        typically 2D auxiliary coordinates (e.g., ``lat(j,i)``, ``lon(j,i)``)
+        rather than 1D dimension coordinates.
+
+        Examples
+        --------
+        Resolve grid coordinate for curvilinear grid::
+
+            axis = Axis(name="latitude", dimensions=("j", "i"), values=lat_2d)
+            entry_name, entry = axis.resolve_grid_coordinate(project)
+            # Returns ("latitude", {...}) from grid coordinate table
+
+        Explicit grid coordinate selection::
+
+            axis = Axis(name="lat", grid_coordinate="latitude_bnds")
+            entry_name, entry = axis.resolve_grid_coordinate(project)
+            # Returns ("latitude_bnds", {...}) specifically
         """
 
         requested = str(
@@ -270,15 +348,52 @@ class Axis(_MetadataRecord):
     def attributes(self, *, include_units: bool = True) -> dict[str, Any]:
         """Return NetCDF attributes for this coordinate axis.
 
+        This method constructs the complete set of NetCDF attributes for the
+        coordinate variable, including CF-required and optional metadata.
+
         Parameters
         ----------
-        include_units:
-            Whether to include the ``units`` attribute when present.
+        include_units
+            Whether to include the ``units`` attribute. Set to False when
+            creating index-based auxiliary coordinates that should not have
+            units (e.g., basin indices).
 
         Returns
         -------
         dict[str, Any]
-            NetCDF-safe coordinate attributes.
+            NetCDF-safe coordinate attributes suitable for assignment to an
+            xarray coordinate or NetCDF variable. Always includes attributes
+            like standard_name, long_name, axis, positive, formula, valid_min,
+            and valid_max when they are defined in the axis metadata.
+
+        Notes
+        -----
+        The units attribute is included by default but can be excluded for
+        special coordinate types. Other attributes from the ``attrs`` field
+        are merged first, allowing standard attributes to override them.
+
+        Examples
+        --------
+        Get attributes for a time axis::
+
+            axis = project.axis("time", values=[...])
+            attrs = axis.attributes()
+            # attrs = {
+            #     "units": "days since 1850-01-01",
+            #     "standard_name": "time",
+            #     "calendar": "noleap",
+            #     ...
+            # }
+
+        Get attributes without units for index coordinate::
+
+            axis = Axis(
+                name="basin",
+                values=[1, 2, 3],
+                auxiliary_name="basin_label"
+            )
+            attrs = axis.attributes(include_units=False)
+            # attrs does not include "units"
         """
 
         attrs = self.netcdf_attrs(self.attrs)
@@ -300,10 +415,31 @@ class Axis(_MetadataRecord):
     def auxiliary_attributes(self) -> dict[str, Any]:
         """Return NetCDF attributes for this axis' auxiliary variable.
 
+        Auxiliary coordinates are variables that provide alternate or
+        supplementary coordinate information, such as string labels for
+        integer indices (e.g., basin names for basin indices).
+
         Returns
         -------
         dict[str, Any]
-            NetCDF-safe auxiliary coordinate attributes.
+            NetCDF-safe attributes for the auxiliary coordinate variable,
+            filtered to include only values compatible with NetCDF format.
+
+        Examples
+        --------
+        Create axis with auxiliary coordinate for basin labels::
+
+            axis = Axis(
+                name="basin",
+                values=[1, 2, 3],
+                auxiliary_name="basin_label",
+                auxiliary_attrs={
+                    "long_name": "Basin Name",
+                    "comment": "Integer basin indices"
+                }
+            )
+            attrs = axis.auxiliary_attributes()
+            # attrs = {"long_name": "Basin Name", "comment": "..."}
         """
 
         return self.netcdf_attrs(self.auxiliary_attrs)
@@ -311,10 +447,40 @@ class Axis(_MetadataRecord):
     def bounds_attributes(self) -> dict[str, Any]:
         """Return NetCDF attributes for this axis' bounds variable.
 
+        Bounds variables define the edges or limits of coordinate cells and
+        are required for certain types of coordinates (especially time and
+        spatial coordinates used in integration or averaging).
+
         Returns
         -------
         dict[str, Any]
-            NetCDF-safe bounds variable attributes.
+            NetCDF-safe attributes for the bounds variable, filtered to
+            include only values compatible with NetCDF format. May include
+            units, standard_name, and long_name from the bounds_attrs field
+            or grid coordinate bounds entries.
+
+        Examples
+        --------
+        Get bounds attributes from coordinate table::
+
+            axis = project.axis(
+                "time",
+                values=[0, 30, 60],
+                bounds=[[0, 30], [30, 60], [60, 90]]
+            )
+            attrs = axis.bounds_attributes()
+            # attrs may include units, long_name from table
+
+        Custom bounds attributes::
+
+            axis = Axis(
+                name="lat",
+                values=[-45, 0, 45],
+                bounds=[[-90, -22.5], [-22.5, 22.5], [22.5, 90]],
+                bounds_attrs={"comment": "Cell boundaries"}
+            )
+            attrs = axis.bounds_attributes()
+            # attrs = {"comment": "Cell boundaries"}
         """
 
         return self.netcdf_attrs(self.bounds_attrs)
@@ -322,10 +488,35 @@ class Axis(_MetadataRecord):
     def values_array(self) -> np.ndarray:
         """Return this axis' values as a NetCDF-ready array.
 
+        This method converts the axis values to a numpy array with a dtype
+        suitable for NetCDF output, handling various input types including
+        lists, tuples, numpy arrays, xarray DataArrays, and datetime objects.
+
         Returns
         -------
         numpy.ndarray
-            Coordinate values converted to a NetCDF-compatible array.
+            Coordinate values as a numpy array with appropriate dtype for
+            NetCDF serialization. Time coordinates are converted to numeric
+            values, and other types are converted to their NetCDF-compatible
+            representations.
+
+        Examples
+        --------
+        Convert time values::
+
+            axis = Axis(
+                name="time",
+                values=[datetime(2000, 1, 1), datetime(2000, 2, 1)],
+                units="days since 1850-01-01"
+            )
+            arr = axis.values_array()
+            # Returns numeric array relative to reference date
+
+        Convert latitude values::
+
+            axis = Axis(name="lat", values=[-90, -45, 0, 45, 90])
+            arr = axis.values_array()
+            # Returns np.array([-90., -45., 0., 45., 90.])
         """
 
         return self.netcdf_array(self.get("values", []))
@@ -333,10 +524,45 @@ class Axis(_MetadataRecord):
     def bounds_array(self) -> np.ndarray:
         """Return this axis' bounds as a NetCDF-ready array.
 
+        This method converts the axis bounds to a numpy array with shape
+        (n_values, 2) or (n_values, n_bounds) for climatology, and with a
+        dtype suitable for NetCDF output.
+
         Returns
         -------
         numpy.ndarray
-            Coordinate bounds converted to a NetCDF-compatible array.
+            Coordinate bounds as a numpy array with shape matching the number
+            of coordinate values. Standard bounds have shape (n, 2) where each
+            row contains [lower_bound, upper_bound] for the corresponding
+            coordinate cell. Climatology bounds may have additional vertices.
+
+        Raises
+        ------
+        KeyError
+            If the axis does not have bounds defined.
+
+        Examples
+        --------
+        Get bounds for latitude cells::
+
+            axis = Axis(
+                name="lat",
+                values=[-45, 0, 45],
+                bounds=[[-90, -22.5], [-22.5, 22.5], [22.5, 90]]
+            )
+            bnds = axis.bounds_array()
+            # Returns array([[-90., -22.5], [-22.5, 22.5], [22.5, 90.]])
+
+        Get bounds for time coordinate::
+
+            axis = Axis(
+                name="time",
+                values=[15, 45],
+                bounds=[[0, 31], [31, 59]],
+                units="days since 2000-01-01"
+            )
+            bnds = axis.bounds_array()
+            # Returns array([[0, 31], [31, 59]])
         """
 
         return self.netcdf_array(self["bounds"])

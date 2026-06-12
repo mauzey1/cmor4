@@ -119,15 +119,40 @@ class Grid(_MetadataRecord):
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         """Resolve a grid mapping entry from this grid definition.
 
+        Grid mapping entries define CF-compliant coordinate reference systems
+        and projection parameters for non-geographic coordinate systems (e.g.,
+        Lambert Conformal Conic, Polar Stereographic).
+
         Parameters
         ----------
-        project:
-            Project table loader containing grid mapping entries.
+        project
+            Project table loader containing grid mapping entries from the
+            loaded grids table.
 
         Returns
         -------
         tuple[str | None, Mapping[str, Any] | None]
-            Matched entry name and table metadata, or ``(None, None)``.
+            A tuple containing:
+
+            - entry_name (str or None): Matched grid mapping entry name
+            - entry (dict or None): Grid mapping entry metadata including
+              mapping_name and projection parameters
+
+            Returns ``(None, None)`` if no matching entry is found.
+
+        Examples
+        --------
+        Resolve a standard grid mapping::
+
+            grid = Grid(name="lambert_conformal_conic")
+            entry_name, entry = grid.resolve_table_entry(project)
+            # Returns ("lambert_conformal_conic", {...}) with projection params
+
+        Explicit table entry selection::
+
+            grid = Grid(table_entry="rotated_latitude_longitude")
+            entry_name, entry = grid.resolve_table_entry(project)
+            # Returns ("rotated_latitude_longitude", {...})
         """
 
         requested = str(
@@ -144,10 +169,31 @@ class Grid(_MetadataRecord):
     def variable_name(self) -> str:
         """Return the output grid-mapping variable name.
 
+        The grid mapping variable is a scalar NetCDF variable that holds
+        projection parameters as attributes. This property returns the name
+        that will be used for that variable in the output file.
+
         Returns
         -------
         str
-            Explicit mapping variable name or the default ``crs``.
+            The grid mapping variable name. Returns the explicitly set
+            ``mapping_var`` if provided, otherwise defaults to ``"crs"``
+            (Coordinate Reference System).
+
+        Examples
+        --------
+        Default grid mapping variable name::
+
+            grid = Grid(mapping_name="lambert_conformal_conic")
+            grid.variable_name  # Returns "crs"
+
+        Custom grid mapping variable name::
+
+            grid = Grid(
+                mapping_name="polar_stereographic",
+                mapping_var="projection"
+            )
+            grid.variable_name  # Returns "projection"
         """
 
         return str(self.mapping_var or "crs")
@@ -155,16 +201,46 @@ class Grid(_MetadataRecord):
     def variable_dimensions(self, variable: Any) -> tuple[str, ...] | None:
         """Return data-variable dimensions implied by this grid.
 
+        When a grid specifies dimensions, those dimensions override the
+        variable's default dimensions. This is useful for variables on
+        non-rectilinear grids where dimension names differ from coordinate
+        table defaults.
+
         Parameters
         ----------
-        variable:
-            Variable metadata used as a fallback source of dimensions.
+        variable
+            Variable metadata used as a fallback source of dimensions when
+            the grid doesn't specify dimensions.
 
         Returns
         -------
         tuple[str, ...] | None
-            Grid dimensions, variable dimensions, or ``None`` when neither is
-            defined.
+            Ordered tuple of dimension names for the data variable. Returns
+            grid dimensions if defined, otherwise variable dimensions if
+            defined, otherwise ``None``.
+
+        Examples
+        --------
+        Grid with explicit dimensions::
+
+            grid = Grid(dimensions=("j", "i"))
+            variable = Variable(name="tos", dimensions=("lat", "lon"))
+            dims = grid.variable_dimensions(variable)
+            # Returns ("j", "i"), overriding variable dimensions
+
+        Grid without dimensions uses variable defaults::
+
+            grid = Grid(mapping_name="lambert_conformal_conic")
+            variable = Variable(name="tas", dimensions=("time", "y", "x"))
+            dims = grid.variable_dimensions(variable)
+            # Returns ("time", "y", "x") from variable
+
+        Neither grid nor variable specify dimensions::
+
+            grid = Grid()
+            variable = Variable(name="orog")
+            dims = grid.variable_dimensions(variable)
+            # Returns None
         """
 
         if self.dimensions:
@@ -178,10 +254,40 @@ class Grid(_MetadataRecord):
     def has_mapping(self) -> bool:
         """Return whether this grid should write a grid-mapping variable.
 
+        A grid mapping variable is only created if the grid defines projection
+        parameters, a mapping name, or attributes. Grids that only specify
+        dimensions without projection information do not produce a mapping
+        variable.
+
         Returns
         -------
         bool
-            ``True`` when a mapping name, parameters, or attributes are set.
+            ``True`` if a grid mapping variable should be written to the NetCDF
+            file, ``False`` otherwise. Returns ``True`` when any of
+            mapping_name, grid_mapping_name, params, or attrs are defined.
+
+        Examples
+        --------
+        Grid with projection requires mapping variable::
+
+            grid = Grid(
+                mapping_name="lambert_conformal_conic",
+                params={
+                    "standard_parallel": (30.0, "degrees_north"),
+                    "longitude_of_central_meridian": (-100.0, "degrees_east")
+                }
+            )
+            grid.has_mapping  # Returns True
+
+        Grid with only dimensions doesn't need mapping::
+
+            grid = Grid(dimensions=("j", "i"))
+            grid.has_mapping  # Returns False
+
+        Empty grid doesn't need mapping::
+
+            grid = Grid()
+            grid.has_mapping  # Returns False
         """
 
         return bool(
@@ -194,10 +300,51 @@ class Grid(_MetadataRecord):
     def mapping_attributes(self) -> dict[str, Any]:
         """Return NetCDF attributes for the grid-mapping variable.
 
+        This method constructs the complete set of CF-compliant grid mapping
+        attributes, including the grid_mapping_name and all projection
+        parameters. Parameters are validated to ensure they fall within
+        CF-required ranges (e.g., latitudes between -90 and 90).
+
         Returns
         -------
         dict[str, Any]
-            NetCDF-safe grid-mapping attributes after parameter validation.
+            NetCDF-safe grid mapping attributes suitable for assignment to
+            the scalar grid mapping variable. Includes grid_mapping_name and
+            all validated projection parameters. Parameters with units are
+            split into value and units attributes (e.g., "standard_parallel"
+            and "standard_parallel_units").
+
+        Notes
+        -----
+        Parameters are validated during attribute construction:
+
+        - Latitude parameters must be in [-90, 90] degrees_north
+        - Longitude parameters must be in [-180, 180] degrees_east
+        - Scale factor parameters must be non-negative
+
+        Invalid parameters trigger warnings and are excluded from output.
+
+        Examples
+        --------
+        Get attributes for Lambert Conformal Conic projection::
+
+            grid = Grid(
+                mapping_name="lambert_conformal_conic",
+                params={
+                    "standard_parallel": ([30.0, 60.0], "degrees_north"),
+                    "longitude_of_central_meridian": (-100.0, "degrees_east"),
+                    "latitude_of_projection_origin": (40.0, "degrees_north")
+                }
+            )
+            attrs = grid.mapping_attributes()
+            # attrs = {
+            #     "grid_mapping_name": "lambert_conformal_conic",
+            #     "standard_parallel": [30.0, 60.0],
+            #     "standard_parallel_units": "degrees_north",
+            #     "longitude_of_central_meridian": -100.0,
+            #     "longitude_of_central_meridian_units": "degrees_east",
+            #     ...
+            # }
         """
 
         attrs = self.netcdf_attrs(self.attrs)

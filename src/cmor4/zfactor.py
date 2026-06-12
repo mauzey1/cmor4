@@ -143,15 +143,41 @@ class ZFactor(_MetadataRecord):
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         """Resolve a formula-term table entry from this z-factor.
 
+        Formula terms (z-factors) are variables used in coordinate conversion
+        formulas for hybrid vertical coordinates, such as hybrid sigma-pressure
+        coordinates. This method searches the project's formula table for a
+        matching entry by name or out_name.
+
         Parameters
         ----------
-        project:
-            Project table loader containing formula-term entries.
+        project
+            Project table loader containing formula-term entries from the
+            loaded formula terms table.
 
         Returns
         -------
         tuple[str | None, Mapping[str, Any] | None]
-            Matched entry name and table metadata, or ``(None, None)``.
+            A tuple containing:
+
+            - entry_name (str or None): Matched formula-term entry name
+            - entry (dict or None): Formula-term entry metadata including
+              units, standard_name, and dimensions
+
+            Returns ``(None, None)`` if no matching entry is found.
+
+        Examples
+        --------
+        Resolve standard formula term::
+
+            zfactor = ZFactor(name="ap", values=[...])
+            entry_name, entry = zfactor.resolve_table_entry(project)
+            # Returns ("ap", {...}) from formula terms table
+
+        Resolve by out_name::
+
+            zfactor = ZFactor(name="a", formula_entry="ap")
+            entry_name, entry = zfactor.resolve_table_entry(project)
+            # Returns ("ap", {...}) matching the formula_entry
         """
 
         requested = str(
@@ -171,10 +197,39 @@ class ZFactor(_MetadataRecord):
     def attributes(self) -> dict[str, Any]:
         """Return NetCDF attributes for this formula-term variable.
 
+        This method constructs the complete set of NetCDF attributes for the
+        formula-term variable, including CF-required metadata (units,
+        standard_name, long_name) merged with any user-provided attributes.
+
         Returns
         -------
         dict[str, Any]
-            NetCDF-safe formula-term attributes.
+            NetCDF-safe formula-term attributes suitable for assignment to
+            the formula-term variable in the output dataset. Includes units,
+            standard_name, and long_name when defined, plus any additional
+            attributes from the ``attrs`` field.
+
+        Examples
+        --------
+        Get attributes for hybrid sigma coefficient::
+
+            zfactor = project.zfactor("ap", values=[...])
+            attrs = zfactor.attributes()
+            # attrs = {
+            #     "units": "Pa",
+            #     "long_name": "vertical coordinate formula term: ap(k)",
+            #     ...
+            # }
+
+        Custom attributes for formula term::
+
+            zfactor = ZFactor(
+                name="ps",
+                values=surface_pressure,
+                attrs={"comment": "Surface pressure at model timestep"}
+            )
+            attrs = zfactor.attributes()
+            # Includes custom comment plus standard attributes
         """
 
         attrs = self.netcdf_attrs(self.attrs)
@@ -186,10 +241,30 @@ class ZFactor(_MetadataRecord):
     def bounds_attributes(self) -> dict[str, Any]:
         """Return NetCDF attributes for this formula-term bounds variable.
 
+        Some formula terms require bounds variables when they represent
+        quantities that vary across coordinate cell interfaces (e.g., hybrid
+        coordinate coefficients at layer boundaries).
+
         Returns
         -------
         dict[str, Any]
-            NetCDF-safe bounds variable attributes.
+            NetCDF-safe attributes for the formula-term bounds variable,
+            filtered to include only values compatible with NetCDF format.
+            May include units, standard_name, and long_name from the
+            bounds_attrs field or formula table bounds entries.
+
+        Examples
+        --------
+        Get bounds attributes for hybrid coefficient::
+
+            zfactor = ZFactor(
+                name="ap",
+                values=[...],
+                bounds=[...],
+                bounds_attrs={"long_name": "vertical coordinate formula ..."}
+            )
+            attrs = zfactor.bounds_attributes()
+            # attrs = {"long_name": "vertical coordinate formula ..."}
         """
 
         return self.netcdf_attrs(self.bounds_attrs)
@@ -197,10 +272,39 @@ class ZFactor(_MetadataRecord):
     def values_array(self) -> np.ndarray:
         """Return this formula term's values as a NetCDF-ready array.
 
+        This method converts the formula term values to a numpy array with
+        appropriate dtype for NetCDF output, handling various input types
+        including lists, tuples, numpy arrays, and xarray DataArrays.
+
         Returns
         -------
         numpy.ndarray
-            Formula-term values converted to a NetCDF-compatible array.
+            Formula-term values as a numpy array with appropriate dtype for
+            NetCDF serialization. Returns an empty array if neither ``values``
+            nor ``data`` fields are defined.
+
+        Notes
+        -----
+        This method checks both ``values`` and ``data`` fields, preferring
+        ``values`` if both are present. This allows flexibility in how
+        formula term data is provided.
+
+        Examples
+        --------
+        Get values for hybrid sigma coefficient::
+
+            zfactor = ZFactor(
+                name="ap",
+                values=[100000, 95000, 90000, ...]
+            )
+            arr = zfactor.values_array()
+            # Returns np.array([100000., 95000., 90000., ...])
+
+        Using data field instead of values::
+
+            zfactor = ZFactor(name="ps", data=surface_pressure_array)
+            arr = zfactor.values_array()
+            # Returns surface_pressure_array as numpy array
         """
 
         return self.netcdf_array(self.get("values", self.get("data", [])))
@@ -208,10 +312,34 @@ class ZFactor(_MetadataRecord):
     def bounds_array(self) -> np.ndarray:
         """Return this formula term's bounds as a NetCDF-ready array.
 
+        This method converts the formula term bounds to a numpy array with
+        shape (n_values, 2) and dtype suitable for NetCDF output. Bounds are
+        required for formula terms that represent quantities at coordinate
+        cell interfaces.
+
         Returns
         -------
         numpy.ndarray
-            Formula-term bounds converted to a NetCDF-compatible array.
+            Formula-term bounds as a numpy array with shape (n, 2) where each
+            row contains [lower_bound, upper_bound] for the corresponding
+            formula term level or interface.
+
+        Raises
+        ------
+        KeyError
+            If the formula term does not have bounds defined.
+
+        Examples
+        --------
+        Get bounds for hybrid coefficient at interfaces::
+
+            zfactor = ZFactor(
+                name="ap",
+                values=[100000, 95000, 90000],
+                bounds=[[102000, 98000], [98000, 92000], [92000, 88000]]
+            )
+            bnds = zfactor.bounds_array()
+            # Returns array([[102000, 98000], [98000, 92000], [92000, 88000]])
         """
 
         return self.netcdf_array(self["bounds"])

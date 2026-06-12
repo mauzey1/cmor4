@@ -118,10 +118,62 @@ class Variable(_MetadataRecord):
     def names(self) -> tuple[str, dict[str, str]]:
         """Return the output variable id and branded-label metadata.
 
+        This method parses the variable name to extract the base variable ID
+        and any branding suffix components. Branded variable names follow the
+        pattern ``<variable_id>_<temporal>-<vertical>-<horizontal>-<area>``,
+        where the suffix is optional and components can be omitted.
+
         Returns
         -------
         tuple[str, dict[str, str]]
-            Output variable id and derived branded label tokens.
+            A tuple containing:
+
+            - variable_id (str): The base variable identifier (e.g., "tas")
+            - labels (dict): Dictionary with the following keys:
+
+              - "branded_name": Full branded variable name
+              - "variable_id": Base variable identifier
+              - "branding_suffix": Optional suffix after first underscore
+              - "temporal_label": Optional first component of suffix
+              - "vertical_label": Optional second component of suffix
+              - "horizontal_label": Optional third component of suffix
+              - "area_label": Optional fourth component of suffix
+
+        Examples
+        --------
+        Simple variable without branding::
+
+            variable = Variable(name="tas")
+            var_id, labels = variable.names()
+            # var_id = "tas"
+            # labels = {"branded_name": "tas", "variable_id": "tas"}
+
+        Fully branded variable::
+
+            variable = Variable(name="tas_ann-lev-reg-mean")
+            var_id, labels = variable.names()
+            # var_id = "tas"
+            # labels = {
+            #     "branded_name": "tas_ann-lev-reg-mean",
+            #     "variable_id": "tas",
+            #     "branding_suffix": "ann-lev-reg-mean",
+            #     "temporal_label": "ann",
+            #     "vertical_label": "lev",
+            #     "horizontal_label": "reg",
+            #     "area_label": "mean"
+            # }
+
+        Partial branding::
+
+            variable = Variable(name="pr_day")
+            var_id, labels = variable.names()
+            # var_id = "pr"
+            # labels = {
+            #     "branded_name": "pr_day",
+            #     "variable_id": "pr",
+            #     "branding_suffix": "day",
+            #     "temporal_label": "day"
+            # }
         """
 
         branded_name = str(
@@ -152,15 +204,49 @@ class Variable(_MetadataRecord):
     def resolve_table_entry(self, project: Any) -> VariableEntry:
         """Find a variable table entry by branded name or variable name.
 
+        This method searches the project's loaded variable tables for an entry
+        matching this variable. It first looks for an exact match by name, then
+        falls back to matching by out_name. If multiple tables contain the same
+        variable, ``table_id`` must be specified to disambiguate.
+
         Parameters
         ----------
-        project:
-            Project table loader containing variable entries.
+        project
+            Project table loader containing loaded variable entries from one or
+            more variable tables.
 
         Returns
         -------
         VariableEntry
-            Matching variable table entry.
+            The resolved variable table entry containing the variable's
+            metadata, dimensions, table_id, and table header information.
+
+        Raises
+        ------
+        TableValidationError
+            If the variable name is not found in any loaded table, if the name
+            is ambiguous across multiple tables without a table_id, or if the
+            specified table_id doesn't contain the variable.
+
+        Examples
+        --------
+        Resolve a unique variable::
+
+            variable = Variable(name="tas")
+            entry = variable.resolve_table_entry(project)
+            # Returns the single matching VariableEntry
+
+        Disambiguate with table_id::
+
+            variable = Variable(name="tas", table_id="Amon")
+            entry = variable.resolve_table_entry(project)
+            # Returns the VariableEntry from the Amon table specifically
+
+        Resolve by out_name::
+
+            variable = Variable(name="tos")  # out_name in table
+            entry = variable.resolve_table_entry(project)
+            # Matches variable entry whose out_name is "tos"
         """
 
         requested = str(self.name or self.variable_id or self.id or "")
@@ -267,15 +353,52 @@ class Variable(_MetadataRecord):
     def attributes(self, labels: Mapping[str, str]) -> dict[str, Any]:
         """Return NetCDF attributes for this data variable.
 
+        This method constructs the complete set of NetCDF attributes for the
+        main data variable by combining CF-compliant metadata (units,
+        standard_name, long_name, cell_methods, cell_measures) with branding
+        labels and any extra user-provided attributes.
+
         Parameters
         ----------
-        labels:
-            Branded variable labels returned by :meth:`names`.
+        labels
+            Branded variable labels dictionary returned by :meth:`names`,
+            containing "branded_name" and optional branding suffix components.
 
         Returns
         -------
         dict[str, Any]
-            NetCDF-safe variable attributes.
+            NetCDF-safe variable attributes suitable for assignment to an
+            xarray DataArray or NetCDF variable. Includes standard CF
+            attributes plus branded_variable_name and optional label
+            components.
+
+        Notes
+        -----
+        The following attributes are included if defined in the variable:
+
+        - units, standard_name, long_name (CF-required metadata)
+        - cell_methods, cell_measures, comment (CF-optional metadata)
+        - branded_variable_name (always included from labels)
+        - branding_suffix, temporal_label, vertical_label, horizontal_label,
+          area_label (included if present in labels)
+
+        Additional attributes from the ``attrs`` field are merged first,
+        allowing standard attributes to override them.
+
+        Examples
+        --------
+        Get attributes for a variable::
+
+            variable = project.variable("tas")
+            var_id, labels = variable.names()
+            attrs = variable.attributes(labels)
+            # attrs = {
+            #     "units": "K",
+            #     "standard_name": "air_temperature",
+            #     "long_name": "Near-Surface Air Temperature",
+            #     "branded_variable_name": "tas",
+            #     ...
+            # }
         """
 
         attrs = self.netcdf_attrs(self.attrs)
@@ -304,15 +427,54 @@ class Variable(_MetadataRecord):
     def validate_against_entry(self, variable_entry: VariableEntry) -> None:
         """Validate variable metadata against a variable table entry.
 
+        This method checks that user-provided variable metadata is
+        consistent with the resolved table entry. It validates the variable
+        ID, dimensions, CF attributes (units, standard_name, etc.), and
+        table-derived metadata (frequency, realm, table_id).
+
         Parameters
         ----------
-        variable_entry:
-            Table entry that defines the allowed metadata values.
+        variable_entry
+            The resolved variable table entry containing authoritative metadata
+            from the project variable tables.
 
-        Returns
-        -------
-        None
-            Raises ``TableValidationError`` if metadata is inconsistent.
+        Raises
+        ------
+        TableValidationError
+            If any of the following validation checks fail:
+
+            - variable_id or id doesn't match table out_name
+            - dimensions don't match table dimensions
+            - units, standard_name, long_name, cell_methods, cell_measures, or
+              comment don't match table values (when both are specified)
+            - frequency, realm, or table_id don't match expected values
+
+        Notes
+        -----
+        This validation is performed automatically by ``create_dataset`` and
+        ``validate_components``. It can also be called directly to verify
+        metadata before dataset creation.
+
+        Examples
+        --------
+        Validate variable metadata::
+
+            project = ProjectTables(...)
+            variable = Variable(name="tas", dimensions=("time", "lat", "lon"))
+            entry = variable.resolve_table_entry(project)
+            variable.validate_against_entry(entry)
+            # Raises TableValidationError if dimensions don't match
+
+        Validate with overridden metadata::
+
+            variable = Variable(
+                name="tas",
+                units="degC"  # Table requires "K"
+            )
+            entry = variable.resolve_table_entry(project)
+            variable.validate_against_entry(entry)
+            # Raises: TableValidationError: units='degC' does not match
+            # Amon:tas value 'K'
         """
 
         entry = variable_entry.entry

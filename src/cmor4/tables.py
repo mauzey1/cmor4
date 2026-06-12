@@ -230,17 +230,58 @@ class ProjectTables:
     def variable(self, name: str, **values: Any) -> Variable:
         """Create a variable with metadata from the loaded variable tables.
 
+        This factory method creates a ``Variable`` metadata record by resolving
+        the variable name against loaded tables and merging table metadata with
+        user-provided values. Table metadata (units, standard_name, dimensions,
+        etc.) are authoritative and will override conflicting user values. User
+        values are used for data-specific attributes like missing_value.
+
         Parameters
         ----------
-        name:
-            Variable or branded variable name to resolve.
-        **values:
-            User-supplied variable metadata overrides.
+        name
+            Variable name or branded variable name to resolve in the loaded
+            tables. Can be a simple variable name (e.g., "tas") or a branded
+            name with suffix (e.g., "tas_ann-lev-reg-mean").
+        **values
+            Optional user-supplied variable metadata. Common keywords include
+            missing_value, fill_value, chunksizes, valid_min, valid_max,
+            ok_min_mean_abs, ok_max_mean_abs, coordinates, and attrs for
+            additional NetCDF attributes.
 
         Returns
         -------
         Variable
-            Variable metadata with table values merged.
+            Variable metadata record with table values merged and validated.
+
+        Raises
+        ------
+        TableValidationError
+            If the variable name is not found in loaded tables, if the name is
+            ambiguous across multiple tables without specifying table_id, or if
+            user-supplied metadata conflicts with table requirements.
+
+        Examples
+        --------
+        Create a simple variable from table::
+
+            project = ProjectTables.from_directory(...)
+            variable = project.variable("tas")
+            # Returns Variable with units="K",
+            # dimensions=("time", "lat", "lon")
+
+        Create variable with data-specific attributes::
+
+            variable = project.variable(
+                "tas",
+                missing_value=-999.0,
+                valid_min=200.0,
+                valid_max=330.0
+            )
+
+        Disambiguate variable across tables::
+
+            variable = project.variable("tas", table_id="Amon")
+            # Uses monthly atmospheric table specifically
         """
 
         return Variable(name=name, project=self, **values)
@@ -248,17 +289,69 @@ class ProjectTables:
     def axis(self, name: str, **values: Any) -> Axis:
         """Create an axis with metadata from the loaded coordinate tables.
 
+        This factory method creates an ``Axis`` metadata record by resolving
+        the axis name against loaded coordinate and grid tables, merging table
+        metadata with user-provided values. The created axis is marked as
+        prepared by this ProjectTables instance for efficient validation later.
+
         Parameters
         ----------
-        name:
-            Axis or coordinate table entry name.
-        **values:
-            User-supplied axis metadata and coordinate values.
+        name
+            Axis or coordinate table entry name. Can be a standard coordinate
+            name (e.g., "time", "lat", "lon"), a generic level name (e.g.,
+            "alevel", "plev"), or a grid coordinate name.
+        **values
+            User-supplied axis metadata and coordinate values. Required keyword
+            is typically ``values`` for the coordinate array. Optional keywords
+            include bounds, units, standard_name, out_name, dimensions (for
+            auxiliary coordinates), scalar, valid_min, valid_max, and various
+            table entry selectors (table_entry, axis_entry, coordinate).
 
         Returns
         -------
         Axis
-            Axis metadata with table values merged.
+            Axis metadata record with table values merged and marked as
+            prepared by this ProjectTables instance.
+
+        Raises
+        ------
+        TableValidationError
+            If the axis name matches multiple generic level entries without
+            disambiguation, or if user-supplied metadata conflicts with table
+            requirements.
+        AxisValidationError
+            If coordinate values or bounds are invalid (non-monotonic,
+            out-of-range, inconsistent shapes).
+
+        Examples
+        --------
+        Create a time axis::
+
+            project = ProjectTables.from_directory(...)
+            time_axis = project.axis(
+                "time",
+                values=[0, 31, 59, 90],
+                bounds=[[0, 31], [31, 59], [59, 90], [90, 120]]
+            )
+
+        Create a latitude axis from table::
+
+            lat_axis = project.axis("lat", values=np.linspace(-90, 90, 180))
+
+        Create a pressure level axis::
+
+            plev_axis = project.axis(
+                "plev",
+                values=[100000, 92500, 85000, 70000, 50000, 25000, 10000]
+            )
+
+        Disambiguate generic level with standard_name::
+
+            alevel_axis = project.axis(
+                "alevel",
+                standard_name="altitude",
+                values=[10, 50, 100, 500, 1000]
+            )
         """
 
         return self._mark_prepared_axis(
@@ -292,7 +385,54 @@ class ProjectTables:
         variable: Variable,
         axes: Sequence[Axis] = (),
     ) -> tuple[Axis, ...]:
-        """Return fixed scalar axes required by a variable and not supplied."""
+        """Return fixed scalar axes required by a variable and not supplied.
+
+        Scalar axes are coordinates with fixed values defined in the coordinate
+        table (e.g., height2m = 2.0 meters). Variables that list these
+        coordinates in their dimensions require them in the output, but they
+        don't need explicit values from the user. This method identifies which
+        required scalar axes are missing from the provided axes list.
+
+        Parameters
+        ----------
+        variable
+            Variable whose dimensions are checked for required scalar axes.
+        axes
+            Already-provided axes to check against. Scalar axes present in
+            this list are not returned.
+
+        Returns
+        -------
+        tuple[Axis, ...]
+            Tuple of ``Axis`` records for scalar coordinates that are required
+            by the variable's dimensions but not present in the provided axes.
+            Each axis is marked as scalar and includes the table-defined value.
+
+        Notes
+        -----
+        This method is called automatically by ``create_dataset`` when using
+        project-backed metadata. It can also be called directly to preview
+        which scalar axes will be auto-added.
+
+        Examples
+        --------
+        Check which scalar axes a variable needs::
+
+            project = ProjectTables.from_directory(...)
+            variable = project.variable("tas")  # dimensions include "height2m"
+            lat = project.axis("lat", values=[...])
+            lon = project.axis("lon", values=[...])
+            time = project.axis("time", values=[...])
+
+            missing = project.scalar_axes_for(variable, [lat, lon, time])
+            # Returns tuple with height2m axis
+
+        Preview scalar axes before dataset creation::
+
+            variable = project.variable("tas")
+            scalar_axes = project.scalar_axes_for(variable)
+            # Returns all required scalar axes if no axes provided
+        """
 
         present = {
             str(value)
@@ -338,24 +478,101 @@ class ProjectTables:
         variable: Variable,
         axes: Sequence[Axis],
     ) -> tuple[Axis, ...]:
-        """Return supplied axes plus fixed scalar axes required by variable."""
+        """Return supplied axes plus fixed scalar axes required by variable.
+
+        This convenience method combines user-provided axes with any required
+        scalar axes, returning a complete set ready for dataset creation. It
+        ensures all axes are merged with project table metadata.
+
+        Parameters
+        ----------
+        variable
+            Variable whose dimensions determine which scalar axes are required.
+        axes
+            User-provided axes for the variable.
+
+        Returns
+        -------
+        tuple[Axis, ...]
+            Complete tuple of axes including both the provided axes (merged
+            with table metadata if needed) and any required scalar axes.
+
+        See Also
+        --------
+        scalar_axes_for : Get only the missing scalar axes without merging.
+
+        Examples
+        --------
+        Get complete axis set for a variable::
+
+            project = ProjectTables.from_directory(...)
+            variable = project.variable("tas")
+            time = project.axis("time", values=[...])
+            lat = project.axis("lat", values=[...])
+            lon = project.axis("lon", values=[...])
+
+            complete = project.complete_axes(variable, [time, lat, lon])
+            # Returns (time, lat, lon, height2m) with height2m auto-added
+        """
 
         return self._axes(axes, variable)
 
     def grid(self, name: str | None = None, **values: Any) -> Grid:
         """Create a grid with metadata from the loaded grid table.
 
+        This factory method creates a ``Grid`` metadata record for variables
+        on non-rectilinear grids or with coordinate reference systems. It
+        resolves grid mapping entries from the project's grid table and merges
+        projection parameters with user-provided values.
+
         Parameters
         ----------
-        name:
-            Optional grid mapping entry name.
-        **values:
-            User-supplied grid metadata overrides.
+        name
+            Optional grid mapping entry name (e.g., "lambert_conformal_conic",
+            "rotated_latitude_longitude"). If None, the grid must specify
+            mapping metadata via other parameters.
+        **values
+            User-supplied grid metadata. Common keywords include dimensions
+            (for grid dimension override), mapping_name or grid_mapping_name,
+            params (projection parameters dict), coordinates (auxiliary
+            coordinate names), mapping_var (grid mapping variable name), and
+            attrs for additional attributes.
 
         Returns
         -------
         Grid
-            Grid metadata with table values merged.
+            Grid metadata record with table values and projection parameters
+            merged.
+
+        Examples
+        --------
+        Create grid for Lambert Conformal Conic projection::
+
+            project = ProjectTables.from_directory(...)
+            grid = project.grid(
+                "lambert_conformal_conic",
+                params={
+                    "standard_parallel": ([30.0, 60.0], "degrees_north"),
+                    "longitude_of_central_meridian": (-100.0, "degrees_east")
+                }
+            )
+
+        Create grid with dimension override for curvilinear ocean::
+
+            grid = project.grid(
+                dimensions=("j", "i"),
+                coordinates=["nav_lat", "nav_lon"]
+            )
+
+        Create rotated pole grid::
+
+            grid = project.grid(
+                "rotated_latitude_longitude",
+                params={
+                    "grid_north_pole_latitude": (37.5, "degrees_north"),
+                    "grid_north_pole_longitude": (-177.5, "degrees_east")
+                }
+            )
         """
 
         return Grid(name=name, project=self, **values)
@@ -363,17 +580,71 @@ class ProjectTables:
     def zfactor(self, name: str, **values: Any) -> ZFactor:
         """Create a z-factor with metadata from formula-term tables.
 
+        This factory method creates a ``ZFactor`` metadata record for
+        hybrid-coordinate formula terms (e.g., coefficients for hybrid
+        sigma-pressure coordinates). It resolves the formula term name against
+        the loaded formula table and merges table metadata with user values.
+
         Parameters
         ----------
-        name:
-            Formula-term table entry name.
-        **values:
-            User-supplied formula-term metadata and values.
+        name
+            Formula-term table entry name (e.g., "ap", "b", "ps", "p0",
+            "orog").
+        **values
+            User-supplied formula-term metadata and values. Required keyword is
+            typically ``values`` or ``data`` for the formula term array.
+            Optional keywords include dimensions, bounds, out_name, valid_min,
+            valid_max, ok_min_mean_abs, ok_max_mean_abs, and attrs for
+            additional NetCDF attributes.
 
         Returns
         -------
         ZFactor
-            Z-factor metadata with table values merged.
+            Formula-term metadata record with table values merged and
+            validated.
+
+        Raises
+        ------
+        TableValidationError
+            If user-supplied metadata conflicts with table requirements.
+        VariableValidationError
+            If formula term values fail validation checks.
+
+        Notes
+        -----
+        Formula terms are required for variables on hybrid vertical
+        coordinates. The most common case is hybrid sigma-pressure coordinates
+        which require ``ap``, ``b``, ``ps``, and optionally ``p0`` terms.
+
+        Examples
+        --------
+        Create hybrid sigma-pressure formula terms::
+
+            project = ProjectTables.from_directory(...)
+
+            # Hybrid coefficient a (Pa)
+            ap = project.zfactor("ap", values=[0, 2000, 5000, 10000])
+
+            # Hybrid coefficient b (dimensionless)
+            b = project.zfactor("b", values=[1.0, 0.95, 0.90, 0.80])
+
+            # Surface pressure (Pa) - 3D field
+            ps = project.zfactor(
+                "ps",
+                values=surface_pressure_3d,
+                dimensions=("time", "lat", "lon")
+            )
+
+            # Reference pressure (Pa) - scalar
+            p0 = project.zfactor("p0", values=100000.0)
+
+        Create orography term for ocean coordinates::
+
+            orog = project.zfactor(
+                "orog",
+                values=ocean_depth,
+                dimensions=("lat", "lon")
+            )
         """
 
         return ZFactor(name=name, project=self, **values)
@@ -660,15 +931,36 @@ class ProjectTables:
     def validate_dataset(self, dataset: Mapping[str, Any]) -> None:
         """Validate user-supplied controlled values against the project CV.
 
+        This method performs controlled vocabulary validation on dataset-level
+        metadata, checking that CV-controlled attribute values (like
+        institution_id, source_id, experiment_id) are recognized and that
+        required attributes are present.
+
         Parameters
         ----------
-        dataset:
-            Dataset metadata to validate.
+        dataset
+            Dataset metadata dictionary containing global attributes to
+            validate against the project's controlled vocabulary.
 
-        Returns
-        -------
-        None
-            Raises ``ControlledVocabularyError`` if validation fails.
+        Raises
+        ------
+        ControlledVocabularyError
+            If required attributes are missing, if attribute values are not
+            found in the CV, or if attribute combinations are invalid.
+
+        Examples
+        --------
+        Validate dataset before creating variables::
+
+            project = ProjectTables.from_directory(...)
+            dataset_attrs = {
+                "mip_era": "CMIP7",
+                "institution_id": "NCAR",
+                "source_id": "CESM2",
+                "experiment_id": "historical"
+            }
+            project.validate_dataset(dataset_attrs)
+            # Raises ControlledVocabularyError if any value is invalid
         """
 
         self.cv.validate_dataset(dataset)
@@ -695,10 +987,31 @@ class ProjectTables:
     def required_global_attributes(self) -> tuple[str, ...]:
         """Return CV-listed required global attributes.
 
+        This method returns the list of global attribute names that are marked
+        as required in the project's controlled vocabulary. These attributes
+        must be present in dataset metadata before writing NetCDF output.
+
         Returns
         -------
         tuple[str, ...]
-            Required global attribute names.
+            Tuple of required global attribute names from the project CV.
+            Common examples include "mip_era", "institution_id", "source_id",
+            "experiment_id", "variant_label", "grid_label", etc.
+
+        Examples
+        --------
+        Check which attributes are required::
+
+            project = ProjectTables.from_directory(...)
+            required = project.required_global_attributes()
+            # Returns ("mip_era", "institution_id", "source_id", ...)
+
+        Validate that dataset has required attributes::
+
+            required = project.required_global_attributes()
+            for attr in required:
+                if attr not in dataset:
+                    print(f"Missing required attribute: {attr}")
         """
 
         return self.cv.required_global_attributes()
