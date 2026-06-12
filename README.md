@@ -1,82 +1,62 @@
-# CMOR4  (WORK IN PROGRESS)
+# CMOR4
 
-`cmor4` is a small, class-driven CMOR-like package for creating CF-style
-NetCDF datasets with `xarray`. It is designed for new drivers that can provide
-Python metadata objects directly instead of writing CMOR JSON input files.
+**Climate Model Output Rewriter (CMOR) - Version 4**
 
-The package does not try to preserve older CMOR or CMIP6-specific setup
-parameters. A driver provides dataset metadata, variable metadata, coordinate
-axes, optional grids or z-factors, and data arrays; `cmor4` creates an
-`xarray.Dataset` and can write the result to a CMOR-like output path.
+CMOR4 is a Python package for creating CF-compliant climate model output in NetCDF format. It validates metadata against project tables (CMIP7, obs4MIPs, DRCDP) and constructs xarray datasets from Python metadata objects, streamlining the production of standards-compliant climate datasets.
 
-## Project Tables
+## Key Features
 
-For table-backed validation, pass the project CV file and the variable table
-files that define the variables you want to write. Coordinate metadata is read
-from the project coordinate and grid tables. Formula-term metadata is read from
-the project formula terms table. These files come from the project table
-repositories, not from `cmor4`.
-
-The project object is the normal construction surface. The caller supplies
-data values, bounds, source-time units, missing values, and non-table custom
-metadata; `project.variable(...)`, `project.axis(...)`,
-`project.zfactor(...)`, `project.grid(...)`, and `project.dataset_info(...)`
-merge in metadata from the loaded tables. Scalar axes such as `height2m` are
-added during `cmor4.create_dataset(...)` or `cmor4.cmorize(...)` when a
-variable requires them and the
-table provides a fixed value. Coordinate entries tagged with
-`generic_level_name` satisfy matching generic vertical dimensions such as
-`alevel` or `olevel`; when multiple concrete coordinate entries advertise the
-same generic level, select one with `table_entry` or `axis_entry`.
-
-Examples:
-
-- CMIP7: `cmip7-cmor-tables/tables-cvs/cmor-cvs.json` and variable tables such
-  as `cmip7-cmor-tables/tables/CMIP7_ocean.json`
-- obs4MIPs: `obs4MIPs-cmor-tables/Tables/obs4MIPs_CV.json` and variable tables
-  such as `obs4MIPs-cmor-tables/Tables/obs4MIPs_Amon.json`
-- DRCDP: `PCMDI/DRCDP` table files such as `Tables/DRCDP_CV.json`,
-  `Tables/DRCDP_AP1hr.json`, and `Tables/DRCDP_APday.json`
-
-`project.dataset_info(...)` validates controlled dataset values against the CV.
-Variable names, dimensions, frequency, realm, and table identity are validated
-when the variable is used with the dataset by `cmor4.create_dataset(...)`,
-`cmor4.cmorize(...)`, or path-template helpers. Table-backed variable
-attributes such as units, standard names, long names, cell methods, cell
-measures, and comments are applied from the variable table entries.
-
-The test suite uses project table repositories checked out as git submodules
-under `project_tables/`:
-
-```bash
-git submodule update --init --recursive
-```
+- **Pythonic API**: Create datasets using Python objects instead of JSON configuration files
+- **Project table validation**: Ensures compliance with projects using CMOR table formats, currently supporting [CMIP7](https://wcrp-cmip.org/cmip7/), [obs4MIPs](https://esgf.llnl.gov/obs4mips/), and [DRCDP](https://github.com/PCMDI/DRCDP)
+- **xarray integration**: Built on xarray for modern, Pythonic data handling
+- **Minimal metadata entry**: Only specify variable names and data - CF attributes are applied automatically from tables
+- **CF compliance**: Produces Climate and Forecast conventions-compliant NetCDF files
 
 ## Installation
 
-From this repository:
+Install from source:
 
 ```bash
-python -m venv venv
-source venv/bin/activate
+git clone https://github.com/PCMDI/cmor4.git
+cd cmor4
 pip install -e .
 ```
 
-For development in this checkout, use the included environment:
+For development:
 
 ```bash
-./venv/bin/python -m pip install -e ".[dev]"
+pip install -e ".[dev]"
 git submodule update --init --recursive
-./venv/bin/python -m pycodestyle src tests
-./venv/bin/python -m unittest discover -s tests
 ```
 
-## Short Example
+## Testing
+
+Run the test suite:
+
+```bash
+python -m unittest discover -s tests
+```
+
+Run code style checks:
+
+```bash
+python -m pycodestyle src tests
+```
+
+## Workflow
+
+1. **Load project tables**: Initialize `ProjectTables` with CV and variable tables
+2. **Define metadata**: Use factory methods to create dataset, variable, and axis objects
+3. **Provide data**: Supply numpy arrays or xarray DataArrays
+4. **Create output**: Call `cmorize()` to validate and write CF-compliant NetCDF
+
+## Example CMOR4 program
 
 ```python
 import numpy as np
 import cmor4
 
+# Load project tables
 project = cmor4.ProjectTables.from_directory(
     "project_tables/cmip7-cmor-tables",
     cv_file="tables-cvs/cmor-cvs.json",
@@ -85,61 +65,46 @@ project = cmor4.ProjectTables.from_directory(
     formula_table="tables/CMIP7_formula_terms.json",
 )
 
-dataset = {
-    "activity_id": "CMIP",
+# Define dataset metadata
+dataset = project.dataset_info({
     "mip_era": "CMIP7",
+    "activity_id": "CMIP",
     "institution_id": "CCCma",
     "source_id": "DUMMY-MODEL",
     "experiment_id": "amip",
     "license_id": "CC-BY-4.0",
-    "nominal_resolution": "100 km",
-    "realization_index": "r9",
-    "initialization_index": "i1",
-    "physics_index": "p1",
-    "forcing_index": "f3",
-    "frequency": "mon",
-    "region": "glb",
-    "grid_label": "g999",
-    "outpath": "cmor_output",
-}
+    "variant_label": "r1i1p1f1",
+    "grid_label": "gn",
+})
 
-variable = project.variable(
-    "tas_tavg-h2m-hxy-u",
-    missing_value=np.float32(1.0e20),
-)
-dataset_info = project.dataset_info(dataset)
+# Create variable and axes
+variable = project.variable("tas", missing_value=1.0e20)
 
 axes = [
-    project.axis(
-        "time",
-        values=[15.0, 45.0],
-        bounds=[[0.0, 30.0], [30.0, 60.0]],
-        units="days since 2000-01-01",
-    ),
-    project.axis(
-        "latitude",
-        values=[-45.0, 45.0],
-        bounds=[[-90.0, 0.0], [0.0, 90.0]],
-    ),
-    project.axis(
-        "longitude",
-        values=[90.0, 270.0],
-        bounds=[[0.0, 180.0], [180.0, 360.0]],
-    ),
+    project.axis("time", values=[15.0, 45.0], 
+                 bounds=[[0.0, 30.0], [30.0, 60.0]],
+                 units="days since 2000-01-01"),
+    project.axis("lat", values=np.linspace(-90, 90, 180)),
+    project.axis("lon", values=np.linspace(0, 360, 360)),
 ]
-data = np.ones((2, 2, 2), dtype="f4") * 288.0
-result = cmor4.cmorize(dataset_info, variable, axes, data)
 
-print(result.path)
-print(result.dataset)
+# Prepare data
+data = np.random.randn(2, 180, 360) + 288.0
+
+# Write CMOR-compliant NetCDF file
+result = cmor4.cmorize(dataset, variable, axes, data)
+print(f"Created: {result.path}")
 ```
 
-Use `cmor4.create_dataset(dataset_info, variable, axes, data)` when you want the
-`xarray.Dataset` without writing a file, and `cmor4.open_dataset(path)` to
-read NetCDF output back with `xarray`.
+## Example notebooks
 
-## Notebooks
+Jupyter notebook examples with visualizations are available in [notebooks](./notebooks/)
 
-CMIP7 notebook examples with bundled synthetic NetCDF inputs live in
-`notebooks/`. They write cmor4 output files and include matplotlib
-visualizations.
+## Support
+
+- **Issues**: Report bugs and request features via [GitHub Issues](https://github.com/mauzey1/cmor4/issues)
+- **Discussions**: Join the community at [GitHub Discussions](https://github.com/mauzey1/cmor4/discussions)
+
+## Acknowledgments
+
+CMOR4 is developed and maintained by the Program for Climate Model Diagnosis and Intercomparison ([PCMDI](https://pcmdi.llnl.gov/)) at [Lawrence Livermore National Laboratory](https://www.llnl.gov/).
