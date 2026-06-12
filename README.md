@@ -17,7 +17,7 @@ CMOR4 is a Python package for creating CF-compliant climate model output in NetC
 Install from source:
 
 ```bash
-git clone https://github.com/PCMDI/cmor4.git
+git clone https://github.com/mauzey1/cmor4.git
 cd cmor4
 pip install -e .
 ```
