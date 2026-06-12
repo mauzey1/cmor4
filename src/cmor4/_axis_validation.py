@@ -440,11 +440,7 @@ def _time_unit_days(units: str) -> float:
 
 
 def _requires_bounds(axis: Axis) -> bool:
-    return str(axis.get("must_have_bounds", "")).lower() in {
-        "yes",
-        "true",
-        "1",
-    }
+    return _is_truthy(axis.get("must_have_bounds", ""))
 
 
 def _is_time_axis(axis: Axis) -> bool:
