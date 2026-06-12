@@ -103,7 +103,6 @@ Jupyter notebook examples with visualizations are available in [notebooks](./not
 ## Support
 
 - **Issues**: Report bugs and request features via [GitHub Issues](https://github.com/mauzey1/cmor4/issues)
-- **Discussions**: Join the community at [GitHub Discussions](https://github.com/mauzey1/cmor4/discussions)
 
 ## Acknowledgments
 
