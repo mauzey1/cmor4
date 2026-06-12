@@ -40,9 +40,9 @@ class Cmor4Result:
 
     Parameters
     ----------
-    dataset:
+    dataset
         In-memory xarray dataset that was written to disk.
-    path:
+    path
         Filesystem path where the NetCDF file was written.
     """
 

@@ -36,25 +36,29 @@ class Grid(_MetadataRecord):
 
     Parameters
     ----------
-    dimensions:
+    dimensions
         Output dimensions used for the data variable.
-    name:
+    name
         Requested grid mapping entry name.
-    table_entry, mapping_entry:
-        Grid table entry selectors.
-    mapping_var:
+    table_entry
+        Grid table entry name selector.
+    mapping_entry
+        Grid table entry name selector.
+    mapping_var
         Name of the scalar grid-mapping variable to write.
-    mapping_name, grid_mapping_name:
+    mapping_name
         CF grid mapping name.
-    coordinates:
+    grid_mapping_name
+        CF grid mapping name.
+    coordinates
         Auxiliary coordinate names associated with the grid.
-    params:
+    params
         Grid-mapping parameter values.
-    attrs:
+    attrs
         Extra NetCDF attributes for the grid-mapping variable.
-    extra:
+    extra
         Additional mapping keys preserved by the metadata record.
-    project:
+    project
         Optional project tables used to resolve and merge grid metadata during
         construction.
     """
@@ -84,7 +88,7 @@ class Grid(_MetadataRecord):
 
         Parameters
         ----------
-        project:
+        project
             Project table loader containing grid mapping entries.
 
         Returns

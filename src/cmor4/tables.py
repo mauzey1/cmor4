@@ -28,15 +28,15 @@ class ProjectTables:
 
     Parameters
     ----------
-    cv_file:
+    cv_file
         Path to the project controlled-vocabulary JSON file.
-    variable_tables:
+    variable_tables
         Paths to variable table JSON files.
-    coordinate_table:
+    coordinate_table
         Optional path to the coordinate table JSON file.
-    formula_table:
+    formula_table
         Optional path to the formula-terms table JSON file.
-    grid_table:
+    grid_table
         Optional path to the grids table JSON file.
     """
 
@@ -116,17 +116,17 @@ class ProjectTables:
 
         Parameters
         ----------
-        root:
+        root
             Project table root directory.
-        cv_file:
+        cv_file
             Controlled-vocabulary file path relative to ``root``.
-        variable_tables:
+        variable_tables
             Variable table paths relative to ``root``.
-        coordinate_table:
+        coordinate_table
             Optional coordinate table path relative to ``root``.
-        formula_table:
+        formula_table
             Optional formula-terms table path relative to ``root``.
-        grid_table:
+        grid_table
             Optional grids table path relative to ``root``.
 
         Returns
@@ -161,7 +161,7 @@ class ProjectTables:
 
         Parameters
         ----------
-        dataset:
+        dataset
             User-provided dataset-level metadata.
 
         Returns
@@ -676,22 +676,22 @@ class ProjectTables:
 
         Parameters
         ----------
-        dataset:
+        dataset
             Dataset metadata to validate. If provided, enables additional
             checks:
             - Frequency consistency between dataset and variable
             - Time axis validation with frequency context
             - Dataset global attribute completeness
-        variable:
+        variable
             Main variable metadata to validate against the loaded variable
             tables.
-        axes:
+        axes
             Coordinate axis metadata to validate against coordinate and grid
             coordinate tables.
-        grid:
+        grid
             Optional grid mapping metadata to validate against the loaded grid
             table.
-        zfactors:
+        zfactors
             Optional hybrid-coordinate formula-term metadata to validate
             against formula-term tables.
 
@@ -862,7 +862,7 @@ class ProjectTables:
 
         Parameters
         ----------
-        attrs:
+        attrs
             Global attributes from the generated dataset. These include
             dataset metadata, variable-derived global attributes, runtime
             defaults, and any user-supplied attribute overrides.
@@ -972,7 +972,7 @@ class ProjectTables:
 
         Parameters
         ----------
-        dataset:
+        dataset
             Dataset metadata to check.
 
         Returns
@@ -1021,7 +1021,7 @@ class ProjectTables:
 
         Parameters
         ----------
-        dataset:
+        dataset
             Dataset metadata containing an ``experiment_id``.
 
         Returns
@@ -1042,9 +1042,9 @@ class ProjectTables:
 
         Parameters
         ----------
-        dataset:
+        dataset
             Dataset metadata containing ``source_type``.
-        experiment_entry:
+        experiment_entry
             Experiment CV entry with required and allowed source types.
 
         Returns
@@ -1061,7 +1061,7 @@ class ProjectTables:
 
         Parameters
         ----------
-        dataset:
+        dataset
             Dataset metadata containing a ``source_id``.
 
         Returns
@@ -1078,7 +1078,7 @@ class ProjectTables:
 
         Parameters
         ----------
-        dataset:
+        dataset
             Dataset metadata containing experiment and parent metadata.
 
         Returns

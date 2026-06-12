@@ -21,15 +21,15 @@ class VariableEntry:
 
     Parameters
     ----------
-    name:
+    name
         Name of the variable entry in the table.
-    table_id:
+    table_id
         Identifier of the table that supplied the entry.
-    entry:
+    entry
         Raw variable-entry metadata from the table.
-    table_file:
+    table_file
         Path to the table file, if available.
-    table_header:
+    table_header
         Header metadata from the table file, if available.
     """
 
@@ -46,33 +46,59 @@ class Variable(_MetadataRecord):
 
     Parameters
     ----------
-    name:
+    name
         Requested variable name or branded variable name.
-    id, variable_id:
-        Output variable identifier overrides.
-    table_id:
+    id
+        Output variable identifier override.
+    variable_id
+        Output variable identifier override.
+    table_id
         Table identifier used to disambiguate variables.
-    dimensions:
+    dimensions
         Ordered logical variable dimensions.
-    units, standard_name, long_name, cell_methods, cell_measures, comment:
-        NetCDF variable metadata attributes.
-    missing_value, fill_value:
+    units
+        NetCDF units attribute.
+    standard_name
+        CF standard_name attribute.
+    long_name
+        NetCDF long_name attribute.
+    cell_methods
+        CF cell_methods attribute.
+    cell_measures
+        CF cell_measures attribute.
+    comment
+        NetCDF comment attribute.
+    missing_value
         Missing-value marker written to attributes and encoding.
-    chunksizes, chunks:
-        Optional NetCDF chunk sizes.
-    coordinates:
+    fill_value
+        Fill value marker written to attributes and encoding.
+    chunksizes
+        NetCDF chunk sizes for compression.
+    chunks
+        NetCDF chunk sizes for compression.
+    coordinates
         Explicit ``coordinates`` attribute value.
-    formula_terms:
+    formula_terms
         Explicit formula-term attribute value.
-    frequency, realm, table_info:
-        Table-derived metadata that may also be copied to global attributes.
-    valid_min, valid_max, ok_min_mean_abs, ok_max_mean_abs:
-        Value validation limits.
-    attrs:
+    frequency
+        Temporal frequency label (e.g., "mon", "day", "fx").
+    realm
+        Modeling realm (e.g., "atmos", "ocean", "land").
+    table_info
+        Table information metadata.
+    valid_min
+        Minimum valid data value.
+    valid_max
+        Maximum valid data value.
+    ok_min_mean_abs
+        Minimum acceptable absolute mean value.
+    ok_max_mean_abs
+        Maximum acceptable absolute mean value.
+    attrs
         Additional NetCDF attributes for the data variable.
-    extra:
+    extra
         Additional mapping keys preserved by the metadata record.
-    project:
+    project
         Optional project tables used to resolve and merge variable metadata
         during construction.
     """
@@ -296,7 +322,7 @@ class Variable(_MetadataRecord):
 
         Parameters
         ----------
-        variable_entry:
+        variable_entry
             Resolved table entry to merge into this variable.
 
         Returns

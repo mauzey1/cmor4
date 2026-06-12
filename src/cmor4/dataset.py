@@ -35,11 +35,11 @@ class DatasetInfo(Mapping[str, Any]):
 
     Parameters
     ----------
-    data:
+    data
         Prepared dataset metadata values.
-    project:
+    project
         Project table loader that prepared the metadata, if any.
-    user_info:
+    user_info
         Original user-provided dataset metadata.
     """
 

@@ -22,47 +22,69 @@ class Axis(_MetadataRecord):
 
     Parameters
     ----------
-    name:
+    name
         Logical axis name used by variable dimensions.
-    values:
+    values
         Coordinate values.
-    bounds:
+    bounds
         Optional coordinate bounds.
-    dimensions:
+    dimensions
         Underlying dimensions for auxiliary coordinates.
-    units, standard_name, long_name, axis, positive, formula:
-        NetCDF coordinate metadata attributes.
-    valid_min, valid_max:
-        Valid coordinate range limits.
-    out_name:
+    units
+        Coordinate units attribute.
+    standard_name
+        CF standard_name attribute.
+    long_name
+        Coordinate long_name attribute.
+    axis
+        CF axis attribute (X, Y, Z, or T).
+    positive
+        CF positive attribute for vertical coordinates (up or down).
+    formula
+        Formula for computing coordinate values.
+    valid_min
+        Minimum valid coordinate value.
+    valid_max
+        Maximum valid coordinate value.
+    out_name
         Output coordinate variable name.
-    table_entry, axis_entry, coordinate:
-        Coordinate table entry selectors.
-    grid_table_entry, grid_coordinate:
-        Grid coordinate table entry selectors.
-    scalar:
+    table_entry
+        Coordinate table entry name selector.
+    axis_entry
+        Coordinate table entry name selector.
+    coordinate
+        Coordinate table entry name selector.
+    grid_table_entry
+        Grid coordinate table entry name selector.
+    grid_coordinate
+        Grid coordinate table entry name selector.
+    scalar
         Whether this axis is written as a scalar coordinate.
-    auxiliary:
+    auxiliary
         Whether this axis is written as an auxiliary coordinate.
-    auxiliary_name:
+    auxiliary_name
         Output name for the auxiliary coordinate variable.
-    auxiliary_attrs:
+    auxiliary_attrs
         Extra attributes for the auxiliary coordinate variable.
-    climatology:
+    climatology
         Climatology bounds control.
-    generic_level_name:
+    generic_level_name
         Generic level selector from coordinate tables.
-    z_factors, z_bounds_factors:
-        Formula-term names associated with this axis or its bounds.
-    bounds_name, bounds_dim:
-        Output bounds variable and bounds dimension names.
-    bounds_attrs:
+    z_factors
+        Formula-term names associated with this axis.
+    z_bounds_factors
+        Formula-term names associated with this axis bounds.
+    bounds_name
+        Output bounds variable name.
+    bounds_dim
+        Output bounds dimension name.
+    bounds_attrs
         Extra attributes for the bounds variable.
-    attrs:
+    attrs
         Extra attributes for the coordinate variable.
-    extra:
+    extra
         Additional mapping keys preserved by the metadata record.
-    project:
+    project
         Optional project tables used to resolve and merge axis metadata during
         construction.
     """
@@ -119,7 +141,7 @@ class Axis(_MetadataRecord):
 
         Parameters
         ----------
-        project:
+        project
             Project table loader containing coordinate and grid entries.
 
         Returns

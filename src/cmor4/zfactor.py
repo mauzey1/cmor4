@@ -21,31 +21,47 @@ class ZFactor(_MetadataRecord):
 
     Parameters
     ----------
-    name:
+    name
         Requested formula-term name.
-    values, data:
+    values
         Formula-term data values.
-    dimensions:
+    data
+        Formula-term data values (alternative to values).
+    dimensions
         Logical dimensions for the formula-term variable.
-    units, standard_name, long_name:
-        NetCDF formula-term metadata attributes.
-    out_name:
+    units
+        Formula-term units attribute.
+    standard_name
+        CF standard_name attribute.
+    long_name
+        Formula-term long_name attribute.
+    out_name
         Output formula-term variable name.
-    table_entry, formula_entry:
-        Formula-term table entry selectors.
-    bounds:
+    table_entry
+        Formula-term table entry name selector.
+    formula_entry
+        Formula-term table entry name selector.
+    bounds
         Optional formula-term bounds values.
-    bounds_name, bounds_dim:
-        Output bounds variable and bounds dimension names.
-    bounds_attrs:
+    bounds_name
+        Output bounds variable name.
+    bounds_dim
+        Output bounds dimension name.
+    bounds_attrs
         Extra attributes for the bounds variable.
-    valid_min, valid_max, ok_min_mean_abs, ok_max_mean_abs:
-        Value validation limits.
-    attrs:
+    valid_min
+        Minimum valid value for formula term.
+    valid_max
+        Maximum valid value for formula term.
+    ok_min_mean_abs
+        Minimum acceptable absolute mean value.
+    ok_max_mean_abs
+        Maximum acceptable absolute mean value.
+    attrs
         Extra NetCDF attributes for the formula-term variable.
-    extra:
+    extra
         Additional mapping keys preserved by the metadata record.
-    project:
+    project
         Optional project tables used to resolve and merge formula-term
         metadata during construction.
     """
@@ -84,7 +100,7 @@ class ZFactor(_MetadataRecord):
 
         Parameters
         ----------
-        project:
+        project
             Project table loader containing formula-term entries.
 
         Returns
