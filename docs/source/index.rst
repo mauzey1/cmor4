@@ -1,17 +1,51 @@
-.. CMOR4 documentation master file, created by
-   sphinx-quickstart on Fri Jun 12 22:29:48 2026.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-CMOR4 documentation
+CMOR4 Documentation
 ===================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
+CMOR4 is a class-driven CMOR-like package for creating CF-compliant NetCDF datasets with xarray. It validates metadata against project tables (CMIP7, obs4MIPs, DRCDP) and constructs xarray datasets from Python metadata objects.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: API Reference:
 
+   api/classes
+   api/functions
+   api/exceptions
+
+Classes
+-------
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Core Classes:
+
+   api/ProjectTables
+   api/Cmor4Result
+   api/DatasetInfo
+   api/Variable
+   api/Axis
+   api/Grid
+   api/ZFactor
+   api/ControlledVocabulary
+
+Functions
+---------
+
+.. toctree::
+   :maxdepth: 1
+
+   api/functions
+
+Exceptions
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   api/exceptions
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
