@@ -37,7 +37,7 @@ class Grid(_MetadataRecord):
     Parameters
     ----------
     dimensions
-        Spatial dimensions for the grid (e.g., ``["x", "y"]`` or ``["j", "i"]``).
+        Spatial dimensions for grid (e.g., ``["x", "y"]`` or ``["j", "i"]``).
         Should not include time dimension. If provided, these override the
         variable's default dimensions for the data variable.
     name
@@ -133,11 +133,104 @@ class Grid(_MetadataRecord):
     project: InitVar[Any | None] = None
 
     def __post_init__(self, project: Any | None) -> None:
+        # Validate latitude/longitude array shapes
+        self._validate_spatial_arrays()
+
         if project is None:
             return
         merged = self._merge_table_entry(project)
         for key, value in merged.to_dict().items():
             object.__setattr__(self, key, value)
+
+    def _validate_spatial_arrays(self) -> None:
+        """Validate that latitude/longitude arrays are consistent.
+
+        Checks:
+        - If both latitude and longitude are provided, they must have the same
+          shape
+        - If dimensions are provided with lat/lon, array ndim must match
+          number of spatial dimensions
+        - If vertices are provided, they must have shape
+          (*base_shape, n_vertices)
+        """
+        import numpy as np
+
+        lat = self.latitude
+        lon = self.longitude
+        lat_verts = self.latitude_vertices
+        lon_verts = self.longitude_vertices
+
+        # Check that lat and lon have the same shape if both provided
+        if lat is not None and lon is not None:
+            lat_array = np.asarray(lat)
+            lon_array = np.asarray(lon)
+            if lat_array.shape != lon_array.shape:
+                raise ValueError(
+                    "Grid latitude and longitude arrays must have the same "
+                    f"shape. Got latitude shape {lat_array.shape} and "
+                    f"longitude shape {lon_array.shape}."
+                )
+
+        # Validate array ndim matches dimensions if both provided
+        if self.dimensions and lat is not None:
+            lat_array = np.asarray(lat)
+            # Filter out time from dimensions to get spatial dims
+            spatial_dims = [
+                d for d in self.dimensions
+                if str(d).lower() != "time"
+            ]
+            if lat_array.ndim != len(spatial_dims):
+                raise ValueError(
+                    f"Grid latitude array has {lat_array.ndim} dimensions but "
+                    f"grid spatial dimensions {spatial_dims} implies "
+                    f"{len(spatial_dims)} dimensions."
+                )
+
+        if self.dimensions and lon is not None:
+            lon_array = np.asarray(lon)
+            spatial_dims = [
+                d for d in self.dimensions
+                if str(d).lower() != "time"
+            ]
+            if lon_array.ndim != len(spatial_dims):
+                raise ValueError(
+                    f"Grid longitude array has {lon_array.ndim} dimensions "
+                    f"but grid spatial dimensions {spatial_dims} implies "
+                    f"{len(spatial_dims)} dimensions."
+                )
+
+        # Validate vertices have correct shape if provided
+        if lat is not None and lat_verts is not None:
+            lat_array = np.asarray(lat)
+            lat_verts_array = np.asarray(lat_verts)
+            expected_ndim = lat_array.ndim + 1
+            if lat_verts_array.ndim != expected_ndim:
+                raise ValueError(
+                    f"Grid latitude_vertices must have ndim={expected_ndim} "
+                    f"(latitude.ndim + 1), got {lat_verts_array.ndim}."
+                )
+            if lat_verts_array.shape[:-1] != lat_array.shape:
+                raise ValueError(
+                    f"Grid latitude_vertices shape {lat_verts_array.shape} "
+                    f"does not match latitude shape {lat_array.shape} "
+                    "in the first dimensions."
+                )
+
+        if lon is not None and lon_verts is not None:
+            lon_array = np.asarray(lon)
+            lon_verts_array = np.asarray(lon_verts)
+            expected_ndim = lon_array.ndim + 1
+            if lon_verts_array.ndim != expected_ndim:
+                raise ValueError(
+                    f"Grid longitude_vertices must have ndim={expected_ndim} "
+                    f"(longitude.ndim + 1), got {lon_verts_array.ndim}."
+                )
+            if lon_verts_array.shape[:-1] != lon_array.shape:
+                raise ValueError(
+                    f"Grid longitude_vertices shape {lon_verts_array.shape} "
+                    f"does not match longitude shape {lon_array.shape} "
+                    "in the first dimensions."
+                )
 
     def _merge_table_entry(self, project: Any) -> "Grid":
         """Merge grid-mapping metadata from the loaded grids table.
@@ -263,9 +356,9 @@ class Grid(_MetadataRecord):
 
         When a grid specifies spatial dimensions, this method returns the full
         set of variable dimensions by combining any time dimension from the
-        variable with the grid's spatial dimensions. This is useful for variables
-        on non-rectilinear grids where spatial dimension names differ from
-        coordinate table defaults.
+        variable with the grid's spatial dimensions. This is useful for
+        variables on non-rectilinear grids where spatial dimension names
+        differ from coordinate table defaults.
 
         Parameters
         ----------
@@ -320,7 +413,7 @@ class Grid(_MetadataRecord):
         """
 
         if self.dimensions:
-            # Grid dimensions are spatial only - combine with time from variable
+            # Spatial dimensions only - combine with time from variable
             grid_dims = tuple(str(name) for name in self.dimensions)
 
             # Extract time dimension from variable if present

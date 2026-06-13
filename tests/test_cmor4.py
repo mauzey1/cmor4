@@ -863,7 +863,9 @@ class Cmor4Test(unittest.TestCase):
         self.assertEqual(ds["sample"].dims, ("time", "x", "y"))
 
     def test_grid_owns_latitude_longitude_coordinates_and_vertices(self):
-        """Test that Grid can own lat/lon arrays and create auxiliary coordinates."""
+        """Test that Grid can own lat/lon arrays and create auxiliary
+        coordinates.
+        """
         with tempfile.TemporaryDirectory() as tmp_dir:
             latitude = np.array([[10.0, 20.0], [30.0, 40.0]], dtype="f8")
             longitude = np.array([[100.0, 110.0], [120.0, 130.0]], dtype="f8")
