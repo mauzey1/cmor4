@@ -850,7 +850,7 @@ class Cmor4Test(unittest.TestCase):
         info = cmor4.DatasetInfo.from_mapping(
             {"frequency": "mon"},
         )
-        grid = cmor4.Grid(dimensions=["time", "x", "y"])
+        grid = cmor4.Grid(dimensions=["x", "y"])
 
         ds = cmor4.create_dataset(
             info,
@@ -900,7 +900,7 @@ class Cmor4Test(unittest.TestCase):
                 cmor4.Axis(name="y", values=[2.0, 3.0]),
             ]
             grid = self.project.grid(
-                dimensions=["time", "x", "y"],
+                dimensions=["x", "y"],
                 mapping_name="lambert_azimuthal_equal_area",
                 params={
                     "latitude_of_projection_origin": [90.0, "degrees_north"],

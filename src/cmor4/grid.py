@@ -37,7 +37,9 @@ class Grid(_MetadataRecord):
     Parameters
     ----------
     dimensions
-        Output dimensions used for the data variable.
+        Spatial dimensions for the grid (e.g., ``["x", "y"]`` or ``["j", "i"]``).
+        Should not include time dimension. If provided, these override the
+        variable's default dimensions for the data variable.
     name
         Requested grid mapping entry name.
     table_entry
@@ -59,11 +61,11 @@ class Grid(_MetadataRecord):
     latitude
         Optional 2D array of latitude values on the grid. When provided, this
         will be added as an auxiliary coordinate with the grid's spatial
-        dimensions.
+        dimensions. Shape should match the spatial dimensions only.
     longitude
         Optional 2D array of longitude values on the grid. When provided, this
         will be added as an auxiliary coordinate with the grid's spatial
-        dimensions.
+        dimensions. Shape should match the spatial dimensions only.
     latitude_vertices
         Optional 3D array of latitude cell vertices. Shape should be
         ``(*latitude.shape, n_vertices)`` where n_vertices is typically 4.
@@ -78,12 +80,18 @@ class Grid(_MetadataRecord):
         Optional project tables used to resolve and merge grid metadata during
         construction.
 
+    Notes
+    -----
+    Grid dimensions should only include spatial axes (e.g., x, y or i, j), not
+    the time dimension. The latitude and longitude arrays are 2D spatial grids
+    that share only the spatial dimensions of the data variable.
+
     Examples
     --------
     Create a grid with embedded lat/lon coordinates for a projected grid::
 
         grid = project.grid(
-            dimensions=["time", "x", "y"],
+            dimensions=["x", "y"],
             mapping_name="lambert_azimuthal_equal_area",
             params={
                 "latitude_of_projection_origin": [90.0, "degrees_north"],
@@ -253,32 +261,48 @@ class Grid(_MetadataRecord):
     def variable_dimensions(self, variable: Any) -> tuple[str, ...] | None:
         """Return data-variable dimensions implied by this grid.
 
-        When a grid specifies dimensions, those dimensions override the
-        variable's default dimensions. This is useful for variables on
-        non-rectilinear grids where dimension names differ from coordinate
-        table defaults.
+        When a grid specifies spatial dimensions, this method returns the full
+        set of variable dimensions by combining any time dimension from the
+        variable with the grid's spatial dimensions. This is useful for variables
+        on non-rectilinear grids where spatial dimension names differ from
+        coordinate table defaults.
 
         Parameters
         ----------
         variable
-            Variable metadata used as a fallback source of dimensions when
-            the grid doesn't specify dimensions.
+            Variable metadata used as a source of time dimensions and as a
+            fallback when the grid doesn't specify spatial dimensions.
 
         Returns
         -------
         tuple[str, ...] | None
-            Ordered tuple of dimension names for the data variable. Returns
-            grid dimensions if defined, otherwise variable dimensions if
-            defined, otherwise ``None``.
+            Ordered tuple of dimension names for the data variable. If grid
+            dimensions are specified, returns time dimension (if present in
+            variable) followed by grid spatial dimensions. Otherwise returns
+            variable dimensions if defined, otherwise ``None``.
+
+        Notes
+        -----
+        Grid dimensions should only specify spatial axes. Time dimensions from
+        the variable metadata are automatically prepended when grid dimensions
+        are used.
 
         Examples
         --------
-        Grid with explicit dimensions::
+        Grid with explicit spatial dimensions::
+
+            grid = Grid(dimensions=("x", "y"))
+            variable = Variable(name="tos", dimensions=("time", "lat", "lon"))
+            dims = grid.variable_dimensions(variable)
+            # Returns ("time", "x", "y"), combining time from variable with
+            # spatial dims from grid
+
+        Grid spatial dimensions without time in variable::
 
             grid = Grid(dimensions=("j", "i"))
-            variable = Variable(name="tos", dimensions=("lat", "lon"))
+            variable = Variable(name="orog", dimensions=("lat", "lon"))
             dims = grid.variable_dimensions(variable)
-            # Returns ("j", "i"), overriding variable dimensions
+            # Returns ("j", "i"), using only grid spatial dimensions
 
         Grid without dimensions uses variable defaults::
 
@@ -296,7 +320,20 @@ class Grid(_MetadataRecord):
         """
 
         if self.dimensions:
-            return tuple(str(name) for name in self.dimensions)
+            # Grid dimensions are spatial only - combine with time from variable
+            grid_dims = tuple(str(name) for name in self.dimensions)
+
+            # Extract time dimension from variable if present
+            var_dims = variable.get("dimensions")
+            if var_dims:
+                time_dims = tuple(
+                    str(d) for d in var_dims
+                    if str(d).lower() == "time"
+                )
+                # Return time dimension(s) first, then grid spatial dimensions
+                return time_dims + grid_dims
+            return grid_dims
+
         dimensions = variable.get("dimensions")
         if dimensions:
             return tuple(str(name) for name in dimensions)

@@ -432,20 +432,24 @@ def _grid_axes(
 ) -> list[Axis]:
     """Create Axis objects for Grid latitude/longitude coordinates.
 
+    The latitude and longitude arrays from the grid are used to create auxiliary
+    coordinate axes with only the spatial dimensions (time is filtered out).
+
     Parameters
     ----------
     grid
         Grid object potentially containing latitude/longitude arrays.
     variable_dimensions
-        Variable dimensions to use for inferring grid spatial dimensions.
+        Variable dimensions to use for inferring grid spatial dimensions when
+        grid.dimensions is not specified. Time dimension will be filtered out.
     project
         Project tables used to merge coordinate metadata from tables.
 
     Returns
     -------
     list[Axis]
-        List of Axis objects for latitude and longitude grid coordinates.
-        Empty if grid has no latitude/longitude defined.
+        List of Axis objects for latitude and longitude grid coordinates with
+        spatial dimensions only. Empty if grid has no latitude/longitude defined.
     """
     if grid is None:
         return []
