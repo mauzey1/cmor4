@@ -894,7 +894,7 @@ class Cmor4Test(unittest.TestCase):
             axes = [
                 self.project.axis(
                     "time",
-                    values=[15.0],
+                    values=[15.5],
                     bounds=[0.0, 31.0],
                     units="days since 2000-01-01",
                 ),
