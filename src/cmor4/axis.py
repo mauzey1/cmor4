@@ -151,6 +151,17 @@ class Axis(_MetadataRecord):
         """
 
         merged = self.to_dict()
+
+        # For grid coordinates (auxiliary lat/lon with explicit grid_coordinate
+        # or grid_table_entry), skip coordinate table and use ONLY grid table
+        if self.grid_coordinate or self.grid_table_entry:
+            grid_entry_name, grid_entry = self.resolve_grid_coordinate(project)
+            if grid_entry is not None:
+                temp_axis = Axis.from_mapping(merged)
+                temp_axis._merge_grid_coordinate_metadata(project, merged)
+                return Axis.from_mapping(merged)
+
+        # For regular coordinates, use coordinate table
         entry_name, entry = self.resolve_table_entry(project)
         if entry is None:
             return Axis.from_mapping(merged)
@@ -657,7 +668,9 @@ class Axis(_MetadataRecord):
         ):
             value = entry.get(key)
             if is_table_value(value):
-                axis[key] = parse_table_value(value)
+                axis.setdefault(key, parse_table_value(value))
+        # Ensure out_name defaults to entry name if not in table
+        axis.setdefault("out_name", entry_name)
         bounds_name = axis.get("bounds_name")
         if bounds_name:
             bounds_entry = project.grid_coordinate_entries.get(

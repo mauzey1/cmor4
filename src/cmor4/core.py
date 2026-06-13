@@ -115,7 +115,9 @@ def create_dataset(
     axes = validate_and_normalize_axes(dataset, variable, axes)
 
     # Add lat/lon grid coordinates from Grid if provided
-    grid_lat_lon_axes = _grid_axes(grid, variable.get("dimensions") or ())
+    grid_lat_lon_axes = _grid_axes(
+        grid, variable.get("dimensions") or (), dataset.project
+    )
     axes = list(axes) + grid_lat_lon_axes
 
     coords: dict[str, Any] = {}
@@ -424,7 +426,9 @@ def string_from_template(
 
 
 def _grid_axes(
-    grid: Grid | None, variable_dimensions: tuple[str, ...]
+    grid: Grid | None,
+    variable_dimensions: tuple[str, ...],
+    project: Any | None,
 ) -> list[Axis]:
     """Create Axis objects for Grid latitude/longitude coordinates.
 
@@ -434,6 +438,8 @@ def _grid_axes(
         Grid object potentially containing latitude/longitude arrays.
     variable_dimensions
         Variable dimensions to use for inferring grid spatial dimensions.
+    project
+        Project tables used to merge coordinate metadata from tables.
 
     Returns
     -------
@@ -446,7 +452,7 @@ def _grid_axes(
 
     axes: list[Axis] = []
 
-    # Determine spatial dimensions (exclude time-like dimensions)
+    # Determine spatial dimensions (x and y only, exclude time)
     if grid.dimensions:
         spatial_dims = [
             str(d) for d in grid.dimensions
@@ -471,6 +477,7 @@ def _grid_axes(
             bounds_name="vertices_latitude",
             bounds_dim=grid.vertices_dim,
             auxiliary=True,
+            project=project,
         )
         axes.append(lat_axis)
 
@@ -485,6 +492,7 @@ def _grid_axes(
             bounds_name="vertices_longitude",
             bounds_dim=grid.vertices_dim,
             auxiliary=True,
+            project=project,
         )
         axes.append(lon_axis)
 

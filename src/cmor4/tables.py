@@ -734,33 +734,35 @@ class ProjectTables:
         # Axis validation: only validate axes not prepared by this instance
         for axis in axes:
             if not self._is_prepared_axis(axis):
-                # Validate axis against coordinate table entry
-                entry_name, entry = axis.resolve_table_entry(self)
-                if entry is not None:
-                    axis._validate_metadata(
-                        "axis",
-                        entry_name,
-                        entry,
-                        (
-                            "units",
-                            "standard_name",
-                            "long_name",
-                            "axis",
-                            "positive",
-                            "formula",
-                        ),
-                    )
-                # Validate axis against grid coordinate entry (if applicable)
+                # Check if this is a grid coordinate (auxiliary lat/lon)
                 grid_entry_name, grid_entry = (
                     axis.resolve_grid_coordinate(self)
                 )
                 if grid_entry is not None:
+                    # Grid coordinates are only validated against grid table
                     axis._validate_metadata(
                         "grid coordinate",
                         grid_entry_name,
                         grid_entry,
                         ("units", "standard_name", "long_name"),
                     )
+                else:
+                    # Regular coordinates validated against coordinate table
+                    entry_name, entry = axis.resolve_table_entry(self)
+                    if entry is not None:
+                        axis._validate_metadata(
+                            "axis",
+                            entry_name,
+                            entry,
+                            (
+                                "units",
+                                "standard_name",
+                                "long_name",
+                                "axis",
+                                "positive",
+                                "formula",
+                            ),
+                        )
 
         # Dataset-axis consistency checks (e.g., time axis needs frequency)
         if dataset is not None:
