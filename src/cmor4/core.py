@@ -114,6 +114,10 @@ def create_dataset(
     axes = _dataset_axes(dataset, axes, variable)
     axes = validate_and_normalize_axes(dataset, variable, axes)
 
+    # Add lat/lon grid coordinates from Grid if provided
+    grid_lat_lon_axes = _grid_axes(grid, variable.get("dimensions") or ())
+    axes = list(axes) + grid_lat_lon_axes
+
     coords: dict[str, Any] = {}
     data_vars: dict[str, Any] = {}
     axis_dims: dict[str, tuple[str, ...]] = {}
@@ -417,6 +421,74 @@ def string_from_template(
         _template_tokens(dataset, variable, ds),
         separator
     )
+
+
+def _grid_axes(
+    grid: Grid | None, variable_dimensions: tuple[str, ...]
+) -> list[Axis]:
+    """Create Axis objects for Grid latitude/longitude coordinates.
+
+    Parameters
+    ----------
+    grid
+        Grid object potentially containing latitude/longitude arrays.
+    variable_dimensions
+        Variable dimensions to use for inferring grid spatial dimensions.
+
+    Returns
+    -------
+    list[Axis]
+        List of Axis objects for latitude and longitude grid coordinates.
+        Empty if grid has no latitude/longitude defined.
+    """
+    if grid is None:
+        return []
+
+    axes: list[Axis] = []
+
+    # Determine spatial dimensions (exclude time-like dimensions)
+    if grid.dimensions:
+        spatial_dims = [
+            str(d) for d in grid.dimensions
+            if str(d).lower() not in ("time",)
+        ]
+    elif variable_dimensions:
+        spatial_dims = [
+            str(d) for d in variable_dimensions
+            if str(d).lower() not in ("time",)
+        ]
+    else:
+        spatial_dims = []
+
+    # Create latitude axis if provided
+    if grid.latitude is not None:
+        lat_axis = Axis(
+            name="latitude",
+            grid_coordinate="latitude",
+            values=grid.latitude,
+            dimensions=spatial_dims,
+            bounds=grid.latitude_vertices,
+            bounds_name="vertices_latitude",
+            bounds_dim=grid.vertices_dim,
+            auxiliary=True,
+        )
+        axes.append(lat_axis)
+
+    # Create longitude axis if provided
+    if grid.longitude is not None:
+        lon_axis = Axis(
+            name="longitude",
+            grid_coordinate="longitude",
+            values=grid.longitude,
+            dimensions=spatial_dims,
+            bounds=grid.longitude_vertices,
+            bounds_name="vertices_longitude",
+            bounds_dim=grid.vertices_dim,
+            auxiliary=True,
+        )
+        axes.append(lon_axis)
+
+    return axes
 
 
 def _add_axis(

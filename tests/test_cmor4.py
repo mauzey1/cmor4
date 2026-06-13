@@ -862,6 +862,89 @@ class Cmor4Test(unittest.TestCase):
 
         self.assertEqual(ds["sample"].dims, ("time", "x", "y"))
 
+    def test_grid_owns_latitude_longitude_coordinates_and_vertices(self):
+        """Test that Grid can own lat/lon arrays and create auxiliary coordinates."""
+        latitude = np.array([[10.0, 20.0], [30.0, 40.0]], dtype="f8")
+        longitude = np.array([[100.0, 110.0], [120.0, 130.0]], dtype="f8")
+        latitude_vertices = np.array(
+            [
+                [[9.0, 11.0, 11.0, 9.0], [19.0, 21.0, 21.0, 19.0]],
+                [[29.0, 31.0, 31.0, 29.0], [39.0, 41.0, 41.0, 39.0]],
+            ],
+            dtype="f8",
+        )
+        longitude_vertices = np.array(
+            [
+                [[99.0, 101.0, 101.0, 99.0], [109.0, 111.0, 111.0, 109.0]],
+                [[119.0, 121.0, 121.0, 119.0], [129.0, 131.0, 131.0, 129.0]],
+            ],
+            dtype="f8",
+        )
+
+        axes = [
+            cmor4.Axis(name="time", values=[15.0]),
+            cmor4.Axis(name="x", values=[0.0, 1.0]),
+            cmor4.Axis(name="y", values=[2.0, 3.0]),
+        ]
+        variable = cmor4.Variable(
+            name="sample",
+            dimensions=["time", "x", "y"],
+        )
+        info = cmor4.DatasetInfo.from_mapping(
+            {"frequency": "mon"},
+        )
+        grid = cmor4.Grid(
+            dimensions=["time", "x", "y"],
+            mapping_name="lambert_azimuthal_equal_area",
+            params={
+                "latitude_of_projection_origin": [90.0, "degrees_north"],
+                "longitude_of_projection_origin": [0.0, "degrees_east"],
+            },
+            latitude=latitude,
+            longitude=longitude,
+            latitude_vertices=latitude_vertices,
+            longitude_vertices=longitude_vertices,
+        )
+
+        ds = cmor4.create_dataset(
+            info,
+            variable,
+            axes,
+            np.ones((1, 2, 2), dtype="f4"),
+            grid=grid,
+        )
+
+        # Verify lat/lon auxiliary coordinates were created
+        self.assertIn("latitude", ds.coords)
+        self.assertIn("longitude", ds.coords)
+        self.assertEqual(ds["latitude"].dims, ("x", "y"))
+        self.assertEqual(ds["longitude"].dims, ("x", "y"))
+        np.testing.assert_array_equal(ds["latitude"].values, latitude)
+        np.testing.assert_array_equal(ds["longitude"].values, longitude)
+
+        # Verify vertices were created
+        self.assertIn("vertices_latitude", ds.data_vars)
+        self.assertIn("vertices_longitude", ds.data_vars)
+        self.assertEqual(ds["vertices_latitude"].dims, ("x", "y", "vertices"))
+        self.assertEqual(ds["vertices_longitude"].dims, ("x", "y", "vertices"))
+        np.testing.assert_array_equal(
+            ds["vertices_latitude"].values, latitude_vertices
+        )
+        np.testing.assert_array_equal(
+            ds["vertices_longitude"].values, longitude_vertices
+        )
+
+        # Verify grid mapping was created
+        self.assertIn("crs", ds.data_vars)
+        self.assertEqual(
+            ds["crs"].attrs["grid_mapping_name"],
+            "lambert_azimuthal_equal_area",
+        )
+
+        # Verify coordinates attribute includes lat/lon
+        self.assertIn("latitude", ds["sample"].attrs["coordinates"])
+        self.assertIn("longitude", ds["sample"].attrs["coordinates"])
+
     def test_filename_time_ranges_follow_cmor_frequency_formats(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_info = dataset_info(Path(tmp_dir))

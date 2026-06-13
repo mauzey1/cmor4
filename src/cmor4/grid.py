@@ -56,11 +56,54 @@ class Grid(_MetadataRecord):
         Grid-mapping parameter values.
     attrs
         Extra NetCDF attributes for the grid-mapping variable.
+    latitude
+        Optional 2D array of latitude values on the grid. When provided, this
+        will be added as an auxiliary coordinate with the grid's spatial
+        dimensions.
+    longitude
+        Optional 2D array of longitude values on the grid. When provided, this
+        will be added as an auxiliary coordinate with the grid's spatial
+        dimensions.
+    latitude_vertices
+        Optional 3D array of latitude cell vertices. Shape should be
+        ``(*latitude.shape, n_vertices)`` where n_vertices is typically 4.
+    longitude_vertices
+        Optional 3D array of longitude cell vertices. Shape should be
+        ``(*longitude.shape, n_vertices)`` where n_vertices is typically 4.
+    vertices_dim
+        Name for the vertices dimension. Defaults to ``"vertices"``.
     extra
         Additional mapping keys preserved by the metadata record.
     project
         Optional project tables used to resolve and merge grid metadata during
         construction.
+
+    Examples
+    --------
+    Create a grid with embedded lat/lon coordinates for a projected grid::
+
+        grid = project.grid(
+            dimensions=["time", "x", "y"],
+            mapping_name="lambert_azimuthal_equal_area",
+            params={
+                "latitude_of_projection_origin": [90.0, "degrees_north"],
+                "longitude_of_projection_origin": [0.0, "degrees_east"],
+            },
+            latitude=lat_values,  # shape: (nx, ny)
+            longitude=lon_values,
+            latitude_vertices=lat_verts,  # shape: (nx, ny, 4)
+            longitude_vertices=lon_verts,
+        )
+
+        # Now just pass x, y, time axes - grid handles lat/lon
+        axes = [
+            project.axis("time", ...),
+            project.axis("x", ...),
+            project.axis("y", ...),
+        ]
+        ds = cmor4.create_dataset(
+            dataset_info, variable, axes, data, grid=grid
+        )
     """
 
     dimensions: tuple[str, ...] | list[str] | None = None
@@ -73,6 +116,11 @@ class Grid(_MetadataRecord):
     coordinates: tuple[str, ...] | list[str] | None = None
     params: Mapping[str, Any] = field(default_factory=dict)
     attrs: Mapping[str, Any] = field(default_factory=dict)
+    latitude: Any = None
+    longitude: Any = None
+    latitude_vertices: Any = None
+    longitude_vertices: Any = None
+    vertices_dim: str = "vertices"
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
     project: InitVar[Any | None] = None
 
