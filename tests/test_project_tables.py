@@ -1514,7 +1514,9 @@ class DatasetInfoMethodTest(unittest.TestCase):
             )
 
     def test_validate_dataset_enforces_required_attributes(self):
-        """validate_dataset (not dataset_info) raises when required attrs are missing."""
+        """
+        validate_dataset (not dataset_info) raises when required attrs are missing.
+        """
         with self.assertRaises(ControlledVocabularyError) as ctx:
             self.project.validate_dataset({"activity_id": "CMIP"})
         self.assertIn("institution_id", str(ctx.exception))
@@ -2994,7 +2996,8 @@ class ValidateExperimentTest(unittest.TestCase):
         self.assertIn("source_type", str(ctx.exception))
 
     def test_disallowed_source_type_raises(self):
-        # BGC is defined in source_type CV but is NOT in additional_allowed_model_components
+        # BGC is defined in source_type CV but is NOT in
+        # additional_allowed_model_components
         # for historical. validate_source_type (called by validate_experiment)
         # checks allowed tokens via the experiment's additional_allowed list.
         # Build a project where BGC is excluded from additional_allowed:
@@ -3344,7 +3347,9 @@ class ValidateComponentsIntegrationTest(unittest.TestCase):
         ]
 
     def test_factory_produced_components_pass_validation(self):
-        """All components produced by project factory methods pass validate_components."""
+        """
+        All components produced by project factory methods pass validate_components.
+        """
         variable = self.project.variable("pr")
         axes = self._base_axes()
         grid = self.project.grid("rotated_latitude_longitude")
@@ -3797,7 +3802,9 @@ class MIPCalendarTest(unittest.TestCase):
         ]
 
     def _validate_with_calendar(self, calendar):
-        """Run validate_components with the given calendar and return any MIP warnings."""
+        """
+        Run validate_components with the given calendar and return any MIP warnings.
+        """
         var = self.project.variable("pr")
         dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": calendar})
         with warnings.catch_warnings(record=True) as caught:
@@ -3973,7 +3980,9 @@ class ValidateComponentsTest(unittest.TestCase):
     # ==================================================================
 
     def test_variable_with_wrong_units_raises(self):
-        """Variable units conflicting with the table entry raise TableValidationError."""
+        """
+        Variable units conflicting with the table entry raise TableValidationError.
+        """
         # Bypass project.variable() to get a Variable without pre-validation
         bad_var = Variable(name="pr", units="m s-1")
         with self.assertRaises(TableValidationError) as ctx:
@@ -4469,7 +4478,9 @@ class ValidateComponentsMinimalProjectTest(unittest.TestCase):
         self._tmp_ctx.cleanup()
 
     def test_minimal_project_with_no_optional_tables(self):
-        """validate_components works when coordinate, formula, and grid tables are absent."""
+        """
+        validate_components works when coordinate, formula, and grid tables are absent.
+        """
         variable = self.project.variable("sample")
         axis = Axis(name="time", values=[1.0, 2.0])
         self.project.validate_components(None, variable, [axis])
