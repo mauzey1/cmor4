@@ -1102,7 +1102,7 @@ class ProjectTablesTest(unittest.TestCase):
                 "nominal_resolution": "500 km",
                 "outpath": tmp_dir,
                 "output_file_template": (
-                    "<variable_id><frequency><source_id><variant_label>" "<grid_label>"
+                    "<variable_id><frequency><source_id><variant_label><grid_label>"
                 ),
                 "output_path_template": (
                     "<activity_id><institution_id><source_id><frequency>"

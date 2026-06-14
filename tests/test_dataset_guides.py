@@ -119,7 +119,7 @@ def obs4mips_info(
         "nominal_resolution": "250 km",
         "outpath": str(tmp_path),
         "output_file_template": (
-            "<variable_id><frequency><source_id><variant_label>" "<grid_label>"
+            "<variable_id><frequency><source_id><variant_label><grid_label>"
         ),
         "output_path_template": (
             "<activity_id><institution_id><source_id><frequency>"
@@ -420,7 +420,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
             self.assertEqual(
                 result.path.name,
-                "pr_1hr_ARMBE-atm-c1-1-8_CMORGuide_gn_" "201801010030-201801010130.nc",
+                "pr_1hr_ARMBE-atm-c1-1-8_CMORGuide_gn_201801010030-201801010130.nc",
             )
             self.assertEqual(result.dataset.attrs["site_id"], "AR-SLu")
             self.assertEqual(result.dataset["pr"].dims, ("time", "lat", "lon"))

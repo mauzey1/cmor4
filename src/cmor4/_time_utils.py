@@ -27,7 +27,7 @@ def decode_time_value(value: Any, units: Any, calendar: Any = "standard") -> Any
         except Exception:
             pass
     match = re.match(
-        r"^(days|hours|minutes|seconds) since " r"(\d{1,4})-(\d{1,2})-(\d{1,2})",
+        r"^(days|hours|minutes|seconds) since (\d{1,4})-(\d{1,2})-(\d{1,2})",
         units_text,
     )
     if not match:

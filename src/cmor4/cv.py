@@ -293,7 +293,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         if missing:
             missing_text = ", ".join(missing)
             raise ControlledVocabularyError(
-                "Required global attributes are missing: " f"{missing_text}."
+                f"Required global attributes are missing: {missing_text}."
             )
 
     def required_global_attributes(self) -> tuple[str, ...]:
@@ -533,7 +533,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             str(dataset["parent_time_units"]),
         ):
             raise ControlledVocabularyError(
-                f"parent_time_units={dataset['parent_time_units']!r} " "is invalid."
+                f"parent_time_units={dataset['parent_time_units']!r} is invalid."
             )
         if not re.fullmatch(r"r\d+i\d+p\d+f\d+", str(dataset["parent_variant_label"])):
             raise ControlledVocabularyError(

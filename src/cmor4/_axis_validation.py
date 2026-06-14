@@ -169,7 +169,7 @@ def _validate_requested_values(axis: Axis, values: np.ndarray, name: str) -> Non
             eps = min(eps, abs(expected - requested[index - 1]) * tolerance)
         if not np.any(np.abs(flat_values - expected) <= eps):
             raise AxisValidationError(
-                f"requested value {expected:g} for axis {name!r} was " "not found."
+                f"requested value {expected:g} for axis {name!r} was not found."
             )
 
 
@@ -255,7 +255,7 @@ def _validate_monotonic(
             if np.any(overlap):
                 index = int(np.nonzero(overlap)[0][0])
                 raise AxisValidationError(
-                    f"axis {name!r} has overlapping bounds values at " f"index {index}."
+                    f"axis {name!r} has overlapping bounds values at index {index}."
                 )
             gaps = np.abs(deltas) > 1.0e-12
             if np.any(gaps):

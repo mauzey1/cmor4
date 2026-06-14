@@ -941,7 +941,7 @@ class Cmor4Test(unittest.TestCase):
             base_info.update(
                 {
                     "output_file_template": (
-                        "<variable_id>_<frequency>_<source_id>_" "<variant_label>"
+                        "<variable_id>_<frequency>_<source_id>_<variant_label>"
                     ),
                     "output_path_template": "<activity_id>",
                     "version": "v20200101",
@@ -966,7 +966,7 @@ class Cmor4Test(unittest.TestCase):
                     "1hr",
                     [12.6, 77.4],
                     "minutes since 2000-01-01 00:00:00",
-                    "sample_1hr_DUMMY-MODEL_r9i1p1f3_" "200001010013-200001010117.nc",
+                    "sample_1hr_DUMMY-MODEL_r9i1p1f3_200001010013-200001010117.nc",
                 ),
                 (
                     "subhr",

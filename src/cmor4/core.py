@@ -672,7 +672,7 @@ def _validate_final_components(
     if grid is not None and grid.has_mapping:
         if grid.variable_name not in ds.data_vars:
             raise ValueError(
-                f"Grid mapping variable {grid.variable_name!r} " "was not created."
+                f"Grid mapping variable {grid.variable_name!r} was not created."
             )
         if ds[var_name].attrs.get("grid_mapping") != grid.variable_name:
             raise ValueError(
@@ -858,19 +858,19 @@ def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
         else ""
     )
     if "yr" in freq or "dec" in freq:
-        return f"{date_part(first, 'year')}-{date_part(last, 'year')}" f"{clim_suffix}"
+        return f"{date_part(first, 'year')}-{date_part(last, 'year')}{clim_suffix}"
     if "monc" in freq or "mon" in freq or climatology:
         return (
-            f"{date_part(first, 'month')}-{date_part(last, 'month')}" f"{clim_suffix}"
+            f"{date_part(first, 'month')}-{date_part(last, 'month')}{clim_suffix}"
         )
     if "day" in freq:
-        return f"{date_part(first, 'day')}-{date_part(last, 'day')}" f"{clim_suffix}"
+        return f"{date_part(first, 'day')}-{date_part(last, 'day')}{clim_suffix}"
     if "subhr" in freq:
         return (
-            f"{date_part(first, 'second')}-{date_part(last, 'second')}" f"{clim_suffix}"
+            f"{date_part(first, 'second')}-{date_part(last, 'second')}{clim_suffix}"
         )
     if "hr" in freq or freq in {"hour", "hourly"}:
         return (
-            f"{date_part(first, 'minute')}-{date_part(last, 'minute')}" f"{clim_suffix}"
+            f"{date_part(first, 'minute')}-{date_part(last, 'minute')}{clim_suffix}"
         )
-    return f"{date_part(first, 'month')}-{date_part(last, 'month')}" f"{clim_suffix}"
+    return f"{date_part(first, 'month')}-{date_part(last, 'month')}{clim_suffix}"
