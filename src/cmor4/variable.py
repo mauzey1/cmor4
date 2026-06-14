@@ -120,6 +120,7 @@ class Variable(_MetadataRecord):
     chunks: tuple[int, ...] | list[int] | None = None
     coordinates: str | tuple[str, ...] | list[str] | None = None
     formula_terms: str | None = None
+    positive: str | None = None
     frequency: str | None = None
     realm: str | None = None
     table_info: str | None = None
@@ -371,6 +372,7 @@ class Variable(_MetadataRecord):
             "cell_methods",
             "cell_measures",
             "comment",
+            "positive",
         ):
             if entry.get(key) not in (None, ""):
                 merged[key] = entry[key]
@@ -435,6 +437,7 @@ class Variable(_MetadataRecord):
             "cell_methods",
             "cell_measures",
             "comment",
+            "positive",
         ):
             if key in self:
                 attrs[key] = self[key]
@@ -542,6 +545,32 @@ class Variable(_MetadataRecord):
                     f"{key}={values[key]!r} does not match "
                     f"{variable_entry.table_id}:{variable_entry.name} "
                     f"value {expected!r}."
+                )
+
+        # Validate positive: value must be "up" or "down", and must be
+        # present when the table's required field names it.
+        required_attrs = set(str(entry.get("required", "")).split())
+        table_positive = entry.get("positive")
+        user_positive = values.get("positive")
+        _VALID_POSITIVE = {"up", "down"}
+        if user_positive not in (None, ""):
+            if str(user_positive).lower() not in _VALID_POSITIVE:
+                raise TableValidationError(
+                    f"positive={user_positive!r} is not valid; "
+                    f"allowed values are 'up' and 'down'."
+                )
+            if is_table_value(table_positive) and str(user_positive).lower() != str(table_positive).lower():
+                raise TableValidationError(
+                    f"positive={user_positive!r} does not match "
+                    f"{variable_entry.table_id}:{variable_entry.name} "
+                    f"value {table_positive!r}."
+                )
+        if "positive" in required_attrs and is_table_value(table_positive):
+            if user_positive in (None, ""):
+                raise TableValidationError(
+                    f"variable {variable_entry.table_id}:{variable_entry.name} "
+                    f"requires 'positive' to be provided "
+                    f"(expected {table_positive!r})."
                 )
         expected_values = {
             "frequency": entry.get("frequency"),

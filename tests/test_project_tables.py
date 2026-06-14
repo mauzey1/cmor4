@@ -1622,6 +1622,228 @@ class VariableMethodTest(unittest.TestCase):
         # Table says "kg m-2 s-1" — must win
         self.assertEqual(var.units, "kg m-2 s-1")
 
+    def test_positive_merged_from_table_entry(self):
+        """positive from the table entry is applied to the Variable."""
+        tmp2 = Path(self._ctx.name) / "pos"
+        tmp2.mkdir()
+        project = _build_project(tmp2, variable_entries={
+            "wap": {"dimensions": [], "out_name": "wap",
+                    "units": "Pa s-1", "positive": "down"},
+        })
+        var = project.variable("wap")
+        self.assertEqual(var.positive, "down")
+
+    def test_positive_in_netcdf_attributes(self):
+        """positive from the table is written to NetCDF output attributes."""
+        tmp2 = Path(self._ctx.name) / "posattr"
+        tmp2.mkdir()
+        project = _build_project(tmp2, variable_entries={
+            "wap": {"dimensions": [], "out_name": "wap",
+                    "units": "Pa s-1", "positive": "down"},
+        })
+        var = project.variable("wap")
+        _, labels = var.names()
+        attrs = var.attributes(labels)
+        self.assertEqual(attrs["positive"], "down")
+
+    def test_variable_without_positive_has_none(self):
+        """Variables whose table entry has no positive have positive=None."""
+        self.assertIsNone(self.project.variable("pr").positive)
+
+
+# ---------------------------------------------------------------------------
+# positive field validation
+# ---------------------------------------------------------------------------
+
+class PositiveValidationTest(unittest.TestCase):
+    """Tests for the 'positive' attribute validation in validate_against_entry
+    and validate_components.
+
+    Covers:
+    * positive is merged from the table entry
+    * positive is written to output NetCDF attributes
+    * invalid positive values ('sideways', '') are rejected
+    * positive conflicting with the table entry value is rejected
+    * required positive (listed in entry 'required' field) must be supplied
+    * optional positive (not in 'required') may be omitted
+    * correct positive passes all checks
+    * variable with no positive table entry is unaffected
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+
+        # Project with three variable types:
+        #   wap  – positive="down", listed in required → must be supplied
+        #   ua   – positive="up",   not in required    → optional
+        #   tas  – no positive entry at all
+        self.project = _build_project(
+            self.tmp,
+            variable_entries={
+                "wap": {
+                    "dimensions": [],
+                    "out_name": "wap",
+                    "units": "Pa s-1",
+                    "positive": "down",
+                    "required": "positive",
+                },
+                "ua": {
+                    "dimensions": [],
+                    "out_name": "ua",
+                    "units": "m s-1",
+                    "positive": "up",
+                },
+                "tas": {
+                    "dimensions": [],
+                    "out_name": "tas",
+                    "units": "K",
+                },
+            },
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    # ------------------------------------------------------------------
+    # Merging and output
+    # ------------------------------------------------------------------
+
+    def test_positive_merged_into_variable(self):
+        self.assertEqual(self.project.variable("wap").positive, "down")
+
+    def test_positive_up_merged_into_variable(self):
+        self.assertEqual(self.project.variable("ua").positive, "up")
+
+    def test_no_positive_entry_gives_none(self):
+        self.assertIsNone(self.project.variable("tas").positive)
+
+    def test_positive_written_to_netcdf_attrs(self):
+        var = self.project.variable("wap")
+        _, labels = var.names()
+        self.assertEqual(var.attributes(labels)["positive"], "down")
+
+    def test_no_positive_not_written_to_attrs(self):
+        var = self.project.variable("tas")
+        _, labels = var.names()
+        self.assertNotIn("positive", var.attributes(labels))
+
+    # ------------------------------------------------------------------
+    # validate_against_entry / validate_components: value validity
+    # ------------------------------------------------------------------
+
+    def test_invalid_positive_value_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, Variable(name="wap", positive="sideways"), []
+            )
+        self.assertIn("positive", str(ctx.exception))
+        self.assertIn("sideways", str(ctx.exception))
+
+    def test_invalid_positive_empty_string_raises(self):
+        # Empty string is invalid; None means not provided
+        with self.assertRaises(TableValidationError):
+            self.project.validate_components(
+                None, Variable(name="wap", positive=""), []
+            )
+
+    def test_positive_wrong_direction_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, Variable(name="wap", positive="up"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("positive", msg)
+        self.assertIn("up", msg)
+        self.assertIn("down", msg)
+
+    def test_correct_positive_passes(self):
+        self.project.validate_components(
+            None, Variable(name="wap", positive="down"), []
+        )
+
+    def test_correct_positive_case_insensitive(self):
+        """Case-insensitive matching ('Down' == 'down')."""
+        self.project.validate_components(
+            None, Variable(name="wap", positive="Down"), []
+        )
+
+    # ------------------------------------------------------------------
+    # required positive
+    # ------------------------------------------------------------------
+
+    def test_required_positive_absent_raises(self):
+        """positive in required field → must be provided."""
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, Variable(name="wap"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("positive", msg)
+        self.assertIn("requires", msg)
+
+    def test_required_positive_error_names_table_and_variable(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, Variable(name="wap"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("wap", msg)
+        self.assertIn("Amon", msg)
+
+    def test_required_positive_none_raises(self):
+        """Explicit None counts as not provided."""
+        with self.assertRaises(TableValidationError):
+            self.project.validate_components(
+                None, Variable(name="wap", positive=None), []
+            )
+
+    # ------------------------------------------------------------------
+    # optional positive
+    # ------------------------------------------------------------------
+
+    def test_optional_positive_absent_passes(self):
+        """positive not in required → omitting it is fine."""
+        self.project.validate_components(
+            None, Variable(name="ua"), []
+        )
+
+    def test_optional_positive_correct_value_passes(self):
+        self.project.validate_components(
+            None, Variable(name="ua", positive="up"), []
+        )
+
+    def test_optional_positive_wrong_value_raises(self):
+        """Even for optional positive, the value must match the table."""
+        with self.assertRaises(TableValidationError):
+            self.project.validate_components(
+                None, Variable(name="ua", positive="down"), []
+            )
+
+    # ------------------------------------------------------------------
+    # no positive in table
+    # ------------------------------------------------------------------
+
+    def test_no_positive_in_table_no_positive_provided_passes(self):
+        self.project.validate_components(
+            None, Variable(name="tas"), []
+        )
+
+    def test_no_positive_in_table_positive_provided_passes(self):
+        """No table constraint → any valid value is accepted."""
+        self.project.validate_components(
+            None, Variable(name="tas", positive="up"), []
+        )
+
+    # ------------------------------------------------------------------
+    # project.variable() round-trip through validate_components
+    # ------------------------------------------------------------------
+
+    def test_project_variable_with_positive_passes_validate(self):
+        """Variable from project.variable() already has positive merged in."""
+        var = self.project.variable("wap")
+        self.project.validate_components(None, var, [])
+
 
 # ---------------------------------------------------------------------------
 # 5. axis
