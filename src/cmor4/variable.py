@@ -535,7 +535,6 @@ class Variable(_MetadataRecord):
                 f"dimensions {expected_dims!r}."
             )
 
-        # --- Gap 2: units must be dimensionally convertible, not just equal ---
         # The table value "?" means any units are acceptable.
         # When cf_units is available we check dimensional compatibility so that
         # equivalent units (e.g. "degC" for a table that lists "K") are
@@ -576,7 +575,6 @@ class Variable(_MetadataRecord):
                     f"value {expected!r}."
                 )
 
-        # --- Gap 1 (positive) validation (already present) ---
         required_attrs = set(str(entry.get("required", "")).split())
         table_positive = entry.get("positive")
         user_positive = values.get("positive")
@@ -587,7 +585,9 @@ class Variable(_MetadataRecord):
                     f"positive={user_positive!r} is not valid; "
                     f"allowed values are 'up' and 'down'."
                 )
-            if is_table_value(table_positive) and str(user_positive).lower() != str(table_positive).lower():
+            if (is_table_value(table_positive)
+                    and str(user_positive).lower()
+                    != str(table_positive).lower()):
                 raise TableValidationError(
                     f"positive={user_positive!r} does not match "
                     f"{variable_entry.table_id}:{variable_entry.name} "
@@ -596,12 +596,12 @@ class Variable(_MetadataRecord):
         if "positive" in required_attrs and is_table_value(table_positive):
             if user_positive in (None, ""):
                 raise TableValidationError(
-                    f"variable {variable_entry.table_id}:{variable_entry.name} "
+                    f"variable {variable_entry.table_id}:"
+                    f"{variable_entry.name} "
                     f"requires 'positive' to be provided "
                     f"(expected {table_positive!r})."
                 )
 
-        # --- Gap 3: required attributes must be present ---
         # The table's "required" field is a space-separated list of attribute
         # names that must be supplied by the caller.  We check each one that
         # also has a table-defined value (attributes with no table value cannot
@@ -614,12 +614,12 @@ class Variable(_MetadataRecord):
             user_val = values.get(attr)
             if user_val in (None, ""):
                 raise TableValidationError(
-                    f"variable {variable_entry.table_id}:{variable_entry.name} "
+                    f"variable {variable_entry.table_id}:"
+                    f"{variable_entry.name} "
                     f"requires attribute {attr!r} to be provided "
                     f"(expected {table_val!r})."
                 )
 
-        # --- Gap 4: flag_values / flag_meanings consistency ---
         table_flag_values = entry.get("flag_values")
         table_flag_meanings = entry.get("flag_meanings")
         _has_flag_values = is_table_value(table_flag_values)

@@ -1846,12 +1846,8 @@ class PositiveValidationTest(unittest.TestCase):
         self.project.validate_components(None, var, [])
 
 
-# ---------------------------------------------------------------------------
-# Units convertibility (gap 2)
-# ---------------------------------------------------------------------------
-
 class UnitsConvertibilityTest(unittest.TestCase):
-    """Tests for gap 2: user units must be dimensionally convertible to the
+    """User units must be dimensionally convertible to the
     table units, not necessarily identical strings.
 
     Relies on cf_units when available; tests that require it are skipped
@@ -1953,12 +1949,8 @@ class UnitsConvertibilityTest(unittest.TestCase):
         )
 
 
-# ---------------------------------------------------------------------------
-# Required attributes (gap 3)
-# ---------------------------------------------------------------------------
-
 class RequiredAttributesTest(unittest.TestCase):
-    """Tests for gap 3: attributes listed in the table 'required' field must
+    """Attributes listed in the table 'required' field must
     be present on the Variable.
 
     The 'required' field is a space-separated list of attribute names.
@@ -2073,12 +2065,8 @@ class RequiredAttributesTest(unittest.TestCase):
         self.project.validate_components(None, var, [])
 
 
-# ---------------------------------------------------------------------------
-# flag_values / flag_meanings consistency (gap 4)
-# ---------------------------------------------------------------------------
-
 class FlagConsistencyTest(unittest.TestCase):
-    """Tests for gap 4: flag_values and flag_meanings must both be present
+    """flag_values and flag_meanings must both be present
     in the table entry and have the same number of space-separated tokens.
 
     Also covers that flag fields are merged from the table into Variable and

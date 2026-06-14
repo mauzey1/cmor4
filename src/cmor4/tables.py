@@ -768,9 +768,11 @@ class ProjectTables:
                             ),
                         )
 
-        # Dataset-axis consistency checks (must_have_bounds, time interval, etc.)
+        # Dataset-axis consistency checks
+        # (must_have_bounds, time interval,etc.)
         # Run unconditionally so that must_have_bounds and the variable's
-        # table-declared frequency are enforced even when no dataset is provided.
+        # table-declared frequency are enforced even when no dataset is
+        # provided.
         _validate_axes(dataset if dataset is not None else {}, variable, axes)
 
         # Calendar validation: warn if the dataset specifies a calendar that
@@ -836,7 +838,7 @@ class ProjectTables:
             if entry is None:
                 continue
 
-            # Gap 13: units must be dimensionally convertible, not just equal.
+            # Units must be dimensionally convertible, not just equal.
             # Use the same cf_units-based check as Variable units validation.
             user_values = zfactor.to_dict()
             table_units = entry.get("units")
@@ -846,15 +848,17 @@ class ProjectTables:
                 and str(table_units) != "?"
                 and user_units not in (None, "")
                 and str(user_units) != str(table_units)
-                and not _units_are_convertible(str(user_units), str(table_units))
+                and not _units_are_convertible(str(user_units),
+                                               str(table_units))
             ):
                 raise TableValidationError(
-                    f"formula term {entry_name!r} units={user_units!r} does not "
-                    f"match table value {table_units!r} and the two are not "
-                    f"dimensionally convertible."
+                    f"formula term {entry_name!r} units={user_units!r} does "
+                    f"not match table value {table_units!r} and the two are "
+                    f"not dimensionally convertible."
                 )
 
-            # Validate remaining metadata (standard_name, long_name) by exact match.
+            # Validate remaining metadata (standard_name, long_name)
+            # by exact match.
             zfactor._validate_metadata(
                 "formula term",
                 entry_name,
@@ -862,16 +866,16 @@ class ProjectTables:
                 ("standard_name", "long_name"),
             )
 
-            # Gap 14: when the formula-term table entry has no declared
+            # When the formula-term table entry has no declared
             # dimensions the term is expected to be a scalar.  Reject arrays.
             entry_dims = entry.get("dimensions")
             if not _is_table_value(entry_dims) and zfactor.values is not None:
                 arr = np.asarray(zfactor.values)
                 if arr.ndim > 0:
                     raise TableValidationError(
-                        f"formula term {entry_name!r} has no declared dimensions "
-                        f"(expected a scalar value) but values with shape "
-                        f"{arr.shape} were provided."
+                        f"formula term {entry_name!r} has no declared "
+                        "dimensions (expected a scalar value) but values "
+                        f"with shape {arr.shape} were provided."
                     )
 
     def _validate_dataset_variable_consistency(
@@ -1165,7 +1169,8 @@ def _validate_grid_dimensions(
     grid: Grid,
     axes: Sequence[Axis],
 ) -> None:
-    """Validate that grid dimensions correspond to spatial axes in the right order.
+    """Validate that grid dimensions correspond to spatial axes in the right
+    order.
 
     For each name in ``grid.dimensions`` (in order) there must be a matching
     axis among *axes*.  When ``grid.latitude`` or ``grid.longitude`` is also

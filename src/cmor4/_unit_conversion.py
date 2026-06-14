@@ -2,7 +2,8 @@ from __future__ import annotations
 
 
 def units_are_convertible(user_units: str, table_units: str) -> bool:
-    """Return True if *user_units* and *table_units* are dimensionally compatible.
+    """Return True if *user_units* and *table_units* are dimensionally
+    compatible.
 
     Uses ``cf_units`` (a required dependency) for a proper udunits-based check,
     so that physically equivalent unit strings such as ``"degC"`` and ``"K"``
