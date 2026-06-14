@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+import numpy as np
 
 from ._table_utils import (
     is_table_value as _is_table_value,
@@ -816,6 +817,11 @@ class ProjectTables:
                             f"{expected!r}."
                         )
 
+            # Validate that grid dimensions correspond to spatial axes and
+            # that the lat/lon array shape matches the axis lengths in order.
+            if grid.dimensions:
+                _validate_grid_dimensions(grid, axes)
+
         # ZFactor validation: ensure stored attributes match tables
         for zfactor in zfactors:
             entry_name, entry = zfactor.resolve_table_entry(self)
@@ -1112,6 +1118,80 @@ class ProjectTables:
             self._variable_entries_by_name.setdefault(name, []).append(
                 variable_entry
             )
+
+
+def _validate_grid_dimensions(
+    grid: "Grid",
+    axes: "Sequence[Axis]",
+) -> None:
+    """Validate that grid dimensions correspond to spatial axes in the right
+    order.
+
+    For each name in ``grid.dimensions`` (in order) there must be a matching
+    axis among *axes*.  When ``grid.latitude`` or ``grid.longitude`` is also
+    provided, the size of the array along dimension *i* must equal the number
+    of coordinate values on the corresponding axis.
+
+    Parameters
+    ----------
+    grid
+        Grid whose ``dimensions`` list is to be validated.
+    axes
+        The axis objects supplied alongside the grid.
+
+    Raises
+    ------
+    TableValidationError
+        If a grid dimension name cannot be matched to any axis, or if the
+        lat/lon array size along a given axis index does not match the axis
+        length.
+    """
+
+    # Build a lookup from every recognised name variant to the axis object.
+    name_to_axis: dict[str, "Axis"] = {}
+    for axis in axes:
+        for value in (
+            axis.name,
+            axis.table_entry,
+            axis.axis_entry,
+            axis.coordinate,
+            axis.out_name,
+            axis.generic_level_name,
+        ):
+            if value:
+                name_to_axis.setdefault(str(value), axis)
+
+    grid_dims = [str(d) for d in grid.dimensions]
+
+    # --- 1. Every dimension name must resolve to an axis -------------------
+    for dim_name in grid_dims:
+        if dim_name not in name_to_axis:
+            raise TableValidationError(
+                f"Grid dimension {dim_name!r} does not correspond to any "
+                "of the supplied axes. Each grid spatial dimension must "
+                "match an axis by name, out_name, or table_entry."
+            )
+
+    # --- 2. Array shapes must match axis lengths in declared order ---------
+    lat = grid.latitude
+    lon = grid.longitude
+
+    for array, label in ((lat, "latitude"), (lon, "longitude")):
+        if array is None:
+            continue
+        arr = np.asarray(array)
+        for i, dim_name in enumerate(grid_dims):
+            axis = name_to_axis[dim_name]
+            axis_len = len(axis.values_array())
+            if arr.shape[i] != axis_len:
+                raise TableValidationError(
+                    f"Grid {label} array shape {arr.shape} does not match "
+                    f"the axis lengths implied by grid dimensions "
+                    f"{grid_dims!r}. "
+                    f"Dimension {dim_name!r} (index {i}) has {axis_len} "
+                    f"coordinate values but {label} has size "
+                    f"{arr.shape[i]} along that axis."
+                )
 
 
 def _generic_level_entries(

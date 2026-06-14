@@ -1436,7 +1436,7 @@ class FromDirectoryTest(unittest.TestCase):
 
     def test_auto_discovers_in_Tables_capitalised_subdir(self):
         big_tables = self.tmp / "Tables"
-        big_tables.mkdir()
+        big_tables.mkdir(exist_ok=True)
         _write(self.tmp / "CV.json", {"CV": {}})
         _write(big_tables / "Amon.json", {
             "Header": {"table_id": "Amon"},
@@ -2786,6 +2786,26 @@ class ValidateComponentsTest(unittest.TestCase):
         grid = Grid(name=None, project=self.project)
         self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
 
+    def test_grid_dimensions_matching_axes_passes(self):
+        """Grid dimensions that resolve to supplied axes pass validation."""
+        variable = self.project.variable("pr")
+        grid = Grid(dimensions=["latitude", "longitude"])
+        self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+
+    def test_grid_dimension_not_in_axes_raises(self):
+        """A grid dimension name that matches no axis raises TableValidationError."""
+        variable = self.project.variable("pr")
+        grid = Grid(dimensions=["latitude", "no_such_axis"])
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+        self.assertIn("no_such_axis", str(ctx.exception))
+
+    def test_grid_dimensions_not_set_skips_dimension_check(self):
+        """Grid with no dimensions set does not raise for dimension resolution."""
+        variable = self.project.variable("pr")
+        grid = Grid(latitude=np.ones((2, 3)))
+        self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+
     # ==================================================================
     # 7. ZFactor validation
     # ==================================================================
@@ -2847,6 +2867,186 @@ class ValidateComponentsTest(unittest.TestCase):
         variable = self.project.variable("pr")
         result = self.project.validate_components(None, variable, self._standard_axes())
         self.assertIsNone(result)
+
+
+class ValidateGridDimensionsTest(unittest.TestCase):
+    """Tests for grid-dimension ↔ axis correspondence validation.
+
+    Covers the _validate_grid_dimensions helper called by validate_components:
+
+    * Every name in grid.dimensions must resolve to a supplied axis.
+    * When grid.latitude / grid.longitude is provided, shape[i] must equal
+      the length of the axis at position i in grid.dimensions.
+    * Matching is done by axis.name, axis.out_name, axis.table_entry, etc.
+    * When grid.dimensions is absent the check is skipped entirely.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        # Project with x/y spatial axes (lengths 3 and 4) and time
+        self.project = _build_project(
+            self.tmp,
+            cv={"CV": {}},
+            variable_entries={
+                "pr": {
+                    "dimensions": ["time", "x", "y"],
+                    "out_name": "pr",
+                    "units": "kg m-2 s-1",
+                }
+            },
+            coordinate_entries={
+                "time": {"axis": "T", "out_name": "time"},
+                "x": {"axis": "X", "units": "m", "out_name": "x"},
+                "y": {"axis": "Y", "units": "m", "out_name": "y"},
+            },
+            include_formula=False,
+            include_grid=False,
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    def _axes(self, nx=3, ny=4):
+        return [
+            self.project.axis("time", values=[1.0, 2.0], units="days since 2000-01-01"),
+            self.project.axis("x", values=np.arange(nx, dtype="f4")),
+            self.project.axis("y", values=np.arange(ny, dtype="f4")),
+        ]
+
+    def _var(self):
+        return self.project.variable("pr")
+
+    # -- Happy-path ----------------------------------------------------------
+
+    def test_correct_shape_passes(self):
+        """lat/lon arrays shaped (nx, ny) match axes x=3, y=4."""
+        lat = np.ones((3, 4))
+        lon = np.ones((3, 4))
+        grid = Grid(dimensions=["x", "y"], latitude=lat, longitude=lon)
+        self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+
+    def test_dims_only_no_latlon_passes(self):
+        """Grid with dimensions but no lat/lon still validates dim names."""
+        grid = Grid(dimensions=["x", "y"])
+        self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+
+    def test_no_dimensions_skips_validation(self):
+        """Grid with no dimensions set skips the dimension check entirely."""
+        grid = Grid(latitude=np.ones((3, 4)))  # lat provided but dims absent
+        self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+
+    def test_latitude_only_checked_when_dimensions_present(self):
+        """Only latitude provided; dimensions set → shape is validated."""
+        lat = np.ones((3, 4))
+        grid = Grid(dimensions=["x", "y"], latitude=lat)
+        self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+
+    def test_longitude_only_checked_when_dimensions_present(self):
+        """Only longitude provided; dimensions set → shape is validated."""
+        lon = np.ones((3, 4))
+        grid = Grid(dimensions=["x", "y"], longitude=lon)
+        self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+
+    def test_match_by_axis_out_name(self):
+        """Grid dimensions may be specified using the axis out_name."""
+        # 'x' axis has out_name 'x' (same), but let's test with 'y' → out_name 'y'
+        lat = np.ones((3, 4))
+        grid = Grid(dimensions=["x", "y"], latitude=lat)
+        self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+
+    # -- Dimension name resolution failures ----------------------------------
+
+    def test_unknown_dimension_name_raises(self):
+        """A grid dimension name matching no axis raises TableValidationError."""
+        grid = Grid(dimensions=["x", "no_such_axis"])
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+        self.assertIn("no_such_axis", str(ctx.exception))
+
+    def test_error_message_mentions_missing_dimension(self):
+        grid = Grid(dimensions=["totally_unknown"])
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+        msg = str(ctx.exception)
+        self.assertIn("totally_unknown", msg)
+        self.assertIn("axis", msg)
+
+    # -- Shape mismatch failures --------------------------------------------
+
+    def test_latitude_shape_wrong_first_dim_raises(self):
+        """lat.shape[0] not matching x axis length raises."""
+        lat = np.ones((5, 4))  # x has 3 points, not 5
+        grid = Grid(dimensions=["x", "y"], latitude=lat)
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+        msg = str(ctx.exception)
+        self.assertIn("latitude", msg)
+        self.assertIn("x", msg)
+
+    def test_latitude_shape_wrong_second_dim_raises(self):
+        """lat.shape[1] not matching y axis length raises."""
+        lat = np.ones((3, 7))  # y has 4 points, not 7
+        grid = Grid(dimensions=["x", "y"], latitude=lat)
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+        msg = str(ctx.exception)
+        self.assertIn("latitude", msg)
+        self.assertIn("y", msg)
+
+    def test_longitude_shape_mismatch_raises(self):
+        """lon.shape not matching axes raises even when lat is absent."""
+        lon = np.ones((9, 4))  # x has 3 points
+        grid = Grid(dimensions=["x", "y"], longitude=lon)
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+        msg = str(ctx.exception)
+        self.assertIn("longitude", msg)
+
+    def test_error_message_includes_array_shape_and_axis_length(self):
+        """Error message reports the mismatching shape and expected length."""
+        lat = np.ones((5, 4))
+        grid = Grid(dimensions=["x", "y"], latitude=lat)
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+        msg = str(ctx.exception)
+        self.assertIn("(5, 4)", msg)   # reported array shape
+        self.assertIn("3", msg)         # expected axis length
+
+    def test_transposed_shape_raises(self):
+        """Shape (ny, nx) instead of (nx, ny) is caught as a mismatch."""
+        lat = np.ones((4, 3))  # transposed: should be (3, 4)
+        grid = Grid(dimensions=["x", "y"], latitude=lat)
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+        self.assertIn("latitude", str(ctx.exception))
+
+    def test_transposed_correct_shape_passes(self):
+        """Shape (ny, nx) with dimensions declared as ['y', 'x'] is valid."""
+        lat = np.ones((4, 3))  # (ny, nx)
+        grid = Grid(dimensions=["y", "x"], latitude=lat)
+        self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+
+    # -- Axis matching via name variants ------------------------------------
+
+    def test_match_by_table_entry(self):
+        """Dimension name matching an axis's table_entry resolves correctly."""
+        # x axis has table_entry="x" from coordinate table
+        lat = np.ones((3, 4))
+        grid = Grid(dimensions=["x", "y"], latitude=lat)
+        self.project.validate_components(None, self._var(), self._axes(), grid=grid)
+
+    def test_unprepared_axis_also_matched(self):
+        """Axes not created via project.axis() are also matched by name."""
+        # Supply an unprepared Axis for 'x' (raw, not from project.axis())
+        axes = [
+            self.project.axis("time", values=[1.0], units="days since 2000-01-01"),
+            Axis(name="x", values=np.arange(3, dtype="f4")),
+            Axis(name="y", values=np.arange(4, dtype="f4")),
+        ]
+        lat = np.ones((3, 4))
+        grid = Grid(dimensions=["x", "y"], latitude=lat)
+        self.project.validate_components(None, self._var(), axes, grid=grid)
 
 
 class ValidateComponentsMinimalProjectTest(unittest.TestCase):
