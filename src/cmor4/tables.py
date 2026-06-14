@@ -1121,8 +1121,8 @@ class ProjectTables:
 
 
 def _validate_grid_dimensions(
-    grid: "Grid",
-    axes: "Sequence[Axis]",
+    grid: Grid,
+    axes: Sequence[Axis],
 ) -> None:
     """Validate that grid dimensions correspond to spatial axes in the right
     order.
