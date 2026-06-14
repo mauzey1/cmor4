@@ -860,17 +860,11 @@ def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
     if "yr" in freq or "dec" in freq:
         return f"{date_part(first, 'year')}-{date_part(last, 'year')}{clim_suffix}"
     if "monc" in freq or "mon" in freq or climatology:
-        return (
-            f"{date_part(first, 'month')}-{date_part(last, 'month')}{clim_suffix}"
-        )
+        return f"{date_part(first, 'month')}-{date_part(last, 'month')}{clim_suffix}"
     if "day" in freq:
         return f"{date_part(first, 'day')}-{date_part(last, 'day')}{clim_suffix}"
     if "subhr" in freq:
-        return (
-            f"{date_part(first, 'second')}-{date_part(last, 'second')}{clim_suffix}"
-        )
+        return f"{date_part(first, 'second')}-{date_part(last, 'second')}{clim_suffix}"
     if "hr" in freq or freq in {"hour", "hourly"}:
-        return (
-            f"{date_part(first, 'minute')}-{date_part(last, 'minute')}{clim_suffix}"
-        )
+        return f"{date_part(first, 'minute')}-{date_part(last, 'minute')}{clim_suffix}"
     return f"{date_part(first, 'month')}-{date_part(last, 'month')}{clim_suffix}"
