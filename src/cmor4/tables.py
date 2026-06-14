@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import numpy as np
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -17,6 +18,7 @@ from .dataset import DatasetInfo
 from .exceptions import TableValidationError
 from .grid import Grid
 from .variable import Variable, VariableEntry
+from ._unit_conversion import units_are_convertible as _units_are_convertible
 from .zfactor import ZFactor
 
 
@@ -831,13 +833,46 @@ class ProjectTables:
         # ZFactor validation: ensure stored attributes match tables
         for zfactor in zfactors:
             entry_name, entry = zfactor.resolve_table_entry(self)
-            if entry is not None:
-                zfactor._validate_metadata(
-                    "formula term",
-                    entry_name,
-                    entry,
-                    ("units", "standard_name", "long_name"),
+            if entry is None:
+                continue
+
+            # Gap 13: units must be dimensionally convertible, not just equal.
+            # Use the same cf_units-based check as Variable units validation.
+            user_values = zfactor.to_dict()
+            table_units = entry.get("units")
+            user_units = user_values.get("units")
+            if (
+                _is_table_value(table_units)
+                and str(table_units) != "?"
+                and user_units not in (None, "")
+                and str(user_units) != str(table_units)
+                and not _units_are_convertible(str(user_units), str(table_units))
+            ):
+                raise TableValidationError(
+                    f"formula term {entry_name!r} units={user_units!r} does not "
+                    f"match table value {table_units!r} and the two are not "
+                    f"dimensionally convertible."
                 )
+
+            # Validate remaining metadata (standard_name, long_name) by exact match.
+            zfactor._validate_metadata(
+                "formula term",
+                entry_name,
+                entry,
+                ("standard_name", "long_name"),
+            )
+
+            # Gap 14: when the formula-term table entry has no declared
+            # dimensions the term is expected to be a scalar.  Reject arrays.
+            entry_dims = entry.get("dimensions")
+            if not _is_table_value(entry_dims) and zfactor.values is not None:
+                arr = np.asarray(zfactor.values)
+                if arr.ndim > 0:
+                    raise TableValidationError(
+                        f"formula term {entry_name!r} has no declared dimensions "
+                        f"(expected a scalar value) but values with shape "
+                        f"{arr.shape} were provided."
+                    )
 
     def _validate_dataset_variable_consistency(
         self,

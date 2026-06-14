@@ -2546,6 +2546,181 @@ class ZFactorMethodTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# ZFactor units convertibility
+# ---------------------------------------------------------------------------
+
+class ZFactorUnitsConvertibilityTest(unittest.TestCase):
+    """Tests for ZFactor units validation using dimensional convertibility.
+
+    ZFactor units are validated by dimensional equivalence (via cf_units) rather
+    than exact string equality, mirroring the behaviour for Variable units.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            formula_entries={
+                "ps": {"units": "Pa", "standard_name": "surface_air_pressure",
+                       "out_name": "ps"},
+                "temp": {"units": "K", "standard_name": "air_temperature",
+                         "out_name": "temp"},
+            },
+        )
+        self.var = self.project.variable("pr")
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    def test_exact_units_match_passes(self):
+        self.project.validate_components(
+            None, self.var, [], zfactors=[ZFactor(name="ps", units="Pa")]
+        )
+
+    def test_no_user_units_skips_check(self):
+        self.project.validate_components(
+            None, self.var, [], zfactors=[ZFactor(name="ps")]
+        )
+
+    def test_convertible_units_passes(self):
+        """hPa is dimensionally equivalent to Pa — should be accepted."""
+        self.project.validate_components(
+            None, self.var, [], zfactors=[ZFactor(name="ps", units="hPa")]
+        )
+
+    def test_convertible_temperature_units_passes(self):
+        self.project.validate_components(
+            None, self.var, [], zfactors=[ZFactor(name="temp", units="degC")]
+        )
+
+    def test_incompatible_units_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.var, [], zfactors=[ZFactor(name="ps", units="m s-1")]
+            )
+        msg = str(ctx.exception)
+        self.assertIn("m s-1", msg)
+        self.assertIn("Pa", msg)
+        self.assertIn("convertible", msg)
+
+    def test_incompatible_units_error_names_formula_term(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.var, [], zfactors=[ZFactor(name="ps", units="K")]
+            )
+        self.assertIn("ps", str(ctx.exception))
+
+    def test_unknown_formula_term_skips_units_check(self):
+        """ZFactor not in the formula table is not validated."""
+        self.project.validate_components(
+            None, self.var, [], zfactors=[ZFactor(name="unknown", units="furlong")]
+        )
+
+
+# ---------------------------------------------------------------------------
+# ZFactor scalar enforcement (p0)
+# ---------------------------------------------------------------------------
+
+class ZFactorScalarTest(unittest.TestCase):
+    """Tests for the rule that formula terms with no declared dimensions must
+    supply scalar (0-dimensional) values.
+
+    The canonical example is the reference pressure p0 in hybrid
+    sigma-pressure coordinates: it is a single constant, not a profile.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            formula_entries={
+                # p0: no dimensions — must be scalar
+                "p0": {"units": "Pa", "standard_name": "reference_air_pressure",
+                       "out_name": "p0"},
+                # ap: has dimensions — array is fine
+                "ap": {"units": "Pa", "standard_name": "vertical_pressure",
+                       "out_name": "ap", "dimensions": "lev"},
+            },
+        )
+        self.var = self.project.variable("pr")
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    # --- scalar values pass ---
+
+    def test_python_float_passes(self):
+        self.project.validate_components(
+            None, self.var, [], zfactors=[ZFactor(name="p0", values=100000.0)]
+        )
+
+    def test_zero_dimensional_array_passes(self):
+        self.project.validate_components(
+            None, self.var, [],
+            zfactors=[ZFactor(name="p0", values=np.float64(100000.0))]
+        )
+
+    def test_no_values_provided_skips_check(self):
+        """Without values there is nothing to validate."""
+        self.project.validate_components(
+            None, self.var, [], zfactors=[ZFactor(name="p0")]
+        )
+
+    def test_formula_term_with_dimensions_accepts_array(self):
+        """ap declares dimensions in the table — a 1-D array is correct."""
+        self.project.validate_components(
+            None, self.var, [],
+            zfactors=[ZFactor(name="ap", values=np.ones(5), units="Pa")]
+        )
+
+    def test_unknown_formula_term_accepts_array(self):
+        """ZFactor not in the formula table is not checked."""
+        self.project.validate_components(
+            None, self.var, [],
+            zfactors=[ZFactor(name="unknown", values=np.ones((3, 4)))]
+        )
+
+    # --- array values raise ---
+
+    def test_one_dimensional_array_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.var, [],
+                zfactors=[ZFactor(name="p0", values=np.ones(3))]
+            )
+        msg = str(ctx.exception)
+        self.assertIn("p0", msg)
+        self.assertIn("scalar", msg)
+
+    def test_two_dimensional_array_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.var, [],
+                zfactors=[ZFactor(name="p0", values=np.ones((2, 3)))]
+            )
+        msg = str(ctx.exception)
+        self.assertIn("(2, 3)", msg)
+
+    def test_error_names_the_formula_term(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.var, [],
+                zfactors=[ZFactor(name="p0", values=np.ones(3))]
+            )
+        self.assertIn("p0", str(ctx.exception))
+
+    def test_error_reports_actual_shape(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.var, [],
+                zfactors=[ZFactor(name="p0", values=np.ones((4,)))]
+            )
+        self.assertIn("(4,)", str(ctx.exception))
+
+
+# ---------------------------------------------------------------------------
 # 10. validate_global_attributes
 # ---------------------------------------------------------------------------
 

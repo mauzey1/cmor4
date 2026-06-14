@@ -13,24 +13,7 @@ from ._table_utils import (
 )
 from .exceptions import TableValidationError
 from .metadata import _MetadataRecord
-
-
-def _units_are_convertible(user_units: str, table_units: str) -> bool:
-    """Return True if *user_units* and *table_units* are dimensionally compatible.
-
-    Uses ``cf_units`` (a required dependency) for a proper udunits-based check.
-    """
-    if user_units == table_units:
-        return True
-    try:
-        import cf_units
-        a = cf_units.Unit(user_units)
-        b = cf_units.Unit(table_units)
-        return a.is_convertible(b)
-    except Exception:
-        # Unit strings not parseable by cf_units (e.g. non-standard strings):
-        # require exact equality.
-        return False
+from ._unit_conversion import units_are_convertible as _units_are_convertible
 
 
 @dataclass(frozen=True)
