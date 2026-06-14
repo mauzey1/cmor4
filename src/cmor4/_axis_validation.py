@@ -5,6 +5,7 @@ from typing import Any, Mapping, Sequence
 import re
 import warnings
 
+import cftime
 import numpy as np
 
 from ._time_utils import cftime_interval_days
@@ -107,6 +108,7 @@ def _validate_and_normalize_axis(
             values, bounds = _normalize_longitude(axis, values, bounds)
         _validate_requested_values(axis, values, name)
         _validate_valid_range(axis, values, name, is_bounds=False)
+        _validate_stored_direction(axis, values, name)
         _validate_monotonic(axis, values, name, is_bounds=False)
 
     if bounds is not None and _is_numeric(bounds):
@@ -455,6 +457,109 @@ def _time_unit_days(units: str) -> float:
         "year": 365.0,
         "years": 365.0,
     }.get(unit, 1.0)
+
+
+def _validate_stored_direction(
+    axis: Axis, values: np.ndarray, name: str
+) -> None:
+    """Raise if axis values conflict with the declared stored_direction.
+
+    The coordinate table may declare ``stored_direction = "increasing"`` or
+    ``"decreasing"`` to specify the expected ordering of coordinate values.
+    For example, pressure levels are conventionally stored from surface to
+    model top (decreasing pressure).  When the user provides values in the
+    opposite order the axis will produce physically incorrect output.
+
+    Longitude axes are excluded because they wrap around and may start
+    anywhere within their valid range.
+
+    Parameters
+    ----------
+    axis
+        Axis metadata record, which may carry a ``stored_direction`` entry
+        from the coordinate table.
+    values
+        1-D array of coordinate values already converted to float64.
+    name
+        Axis name for use in error messages.
+    """
+    if _is_longitude(axis):
+        return
+    direction = str(axis.get("stored_direction", "") or "").lower().strip()
+    if direction not in ("increasing", "decreasing"):
+        return
+    flat = values.reshape(-1)
+    if flat.size < 2:
+        return
+    # Use the overall direction of the sequence (first vs. last value) rather
+    # than strict monotonicity so that a single out-of-order value does not
+    # produce a false negative from this check.
+    actual_increasing = flat[-1] > flat[0]
+    if direction == "increasing" and not actual_increasing:
+        raise AxisValidationError(
+            f"axis {name!r} has stored_direction='increasing' but values "
+            f"run from {flat[0]:g} to {flat[-1]:g} (decreasing)."
+        )
+    if direction == "decreasing" and actual_increasing:
+        raise AxisValidationError(
+            f"axis {name!r} has stored_direction='decreasing' but values "
+            f"run from {flat[0]:g} to {flat[-1]:g} (increasing)."
+        )
+
+
+# Calendars recognised by cftime but inappropriate for MIP data, mirroring
+# the check in CMOR3's cmor_calendar_c2i().
+_MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset({
+    "all_leap",
+    "366_day",
+})
+
+
+def _validate_calendar(dataset: Mapping[str, Any]) -> None:
+    """Validate the calendar declared in the dataset metadata.
+
+    Uses ``cftime`` (a required dependency) to distinguish three cases:
+
+    * Empty / absent calendar — no check.
+    * Calendar unknown to cftime (e.g. ``"utc"``, ``"tai"``) — raises
+      ``AxisValidationError``: the string is not a recognised CF calendar.
+    * Calendar known to cftime but inappropriate for MIP data
+      (``"all_leap"`` or ``"366_day"``) — issues a ``RuntimeWarning``.
+    * All other cftime-recognised calendars — accepted silently.
+
+    Parameters
+    ----------
+    dataset
+        Dataset metadata mapping, which may contain a ``calendar`` key.
+    """
+
+    calendar = str(dataset.get("calendar", "") or "").strip()
+    if not calendar:
+        return
+
+    # Use cftime to decide whether the string is a valid CF calendar at all.
+    try:
+        cftime.datetime(2000, 1, 1, calendar=calendar)
+    except ValueError:
+        raise AxisValidationError(
+            f"calendar={calendar!r} is not a recognised CF calendar. "
+            "Valid calendars include 'standard', 'gregorian', "
+            "'proleptic_gregorian', 'noleap', '365_day', '360_day', "
+            "'julian', 'all_leap', and '366_day'."
+        )
+    except Exception:
+        # Unexpected error from cftime — leave the calendar unchecked.
+        return
+
+    if calendar.lower() in _MIP_INAPPROPRIATE_CALENDARS:
+        warnings.warn(
+            f"calendar={calendar!r} is not appropriate for MIP data. "
+            "Please use a more common climate-study calendar such as "
+            "'standard', 'gregorian', 'proleptic_gregorian', 'noleap', "
+            "'365_day', '360_day', or 'julian'.",
+            RuntimeWarning,
+            stacklevel=4,
+        )
 
 
 def _requires_bounds(axis: Axis) -> bool:

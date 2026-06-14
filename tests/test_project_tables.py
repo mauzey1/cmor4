@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ from cmor4 import (
     Variable,
     ZFactor,
 )
-from cmor4.exceptions import ControlledVocabularyError, TableValidationError
+from cmor4.exceptions import ControlledVocabularyError, TableValidationError, AxisValidationError
 from table_helpers import (
     CMIP7_TABLE_ROOT,
     DRCDP_TABLE_ROOT,
@@ -1846,7 +1847,7 @@ class PositiveValidationTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Units convertibility
+# Units convertibility (gap 2)
 # ---------------------------------------------------------------------------
 
 class UnitsConvertibilityTest(unittest.TestCase):
@@ -1953,7 +1954,7 @@ class UnitsConvertibilityTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Required attributes
+# Required attributes (gap 3)
 # ---------------------------------------------------------------------------
 
 class RequiredAttributesTest(unittest.TestCase):
@@ -2073,7 +2074,7 @@ class RequiredAttributesTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# flag_values / flag_meanings consistency
+# flag_values / flag_meanings consistency (gap 4)
 # ---------------------------------------------------------------------------
 
 class FlagConsistencyTest(unittest.TestCase):
@@ -3124,6 +3125,463 @@ class ValidateComponentsIntegrationTest(unittest.TestCase):
         self.project.validate_components(
             None, pr, self._base_axes(), zfactors=[zf_ps, zf_p0]
         )
+
+
+class StoredDirectionTest(unittest.TestCase):
+    """Tests for stored_direction enforcement on coordinate axes.
+
+    The coordinate table may declare ``stored_direction = "increasing"`` or
+    ``"decreasing"`` to specify the expected ordering of values (e.g. pressure
+    levels are conventionally stored surface-to-top, i.e. decreasing).  When
+    user-supplied values contradict this declaration the axis will produce
+    physically incorrect output.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            coordinate_entries={
+                "time": {"axis": "T", "out_name": "time"},
+                "plev": {
+                    "axis": "Z", "units": "Pa",
+                    "standard_name": "air_pressure", "out_name": "plev",
+                    "positive": "down", "stored_direction": "decreasing",
+                    "valid_min": "100.0", "valid_max": "92500.0",
+                },
+                "lev": {
+                    "axis": "Z", "units": "m",
+                    "standard_name": "depth", "out_name": "lev",
+                    "stored_direction": "increasing",
+                },
+                "lat": {
+                    "axis": "Y", "units": "degrees_north",
+                    "standard_name": "latitude", "out_name": "lat",
+                },
+            },
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    # --- correct direction passes ---
+
+    def test_decreasing_values_with_decreasing_direction_passes(self):
+        """Pressure values from surface to top (decreasing) are correct."""
+        ax = self.project.axis("plev", values=[92500.0, 50000.0, 10000.0])
+        self.assertIsNotNone(ax)
+
+    def test_increasing_values_with_increasing_direction_passes(self):
+        ax = self.project.axis("lev", values=[0.0, 10.0, 50.0])
+        self.assertIsNotNone(ax)
+
+    def test_two_value_axis_correct_direction_passes(self):
+        ax = self.project.axis("plev", values=[92500.0, 10000.0])
+        self.assertIsNotNone(ax)
+
+    def test_single_value_axis_not_checked(self):
+        """Direction cannot be determined from a single coordinate value."""
+        ax = self.project.axis("plev", values=[50000.0])
+        self.assertIsNotNone(ax)
+
+    def test_no_stored_direction_in_table_always_passes(self):
+        """Axes without stored_direction declared are not checked."""
+        ax = self.project.axis("lat", values=[45.0, -45.0])
+        self.assertIsNotNone(ax)
+
+    # --- wrong direction raises at construction time ---
+
+    def test_increasing_values_with_decreasing_direction_raises(self):
+        """Increasing pressure values violate stored_direction='decreasing'."""
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.axis("plev", values=[10000.0, 50000.0, 92500.0])
+        msg = str(ctx.exception)
+        self.assertIn("stored_direction", msg)
+        self.assertIn("decreasing", msg)
+
+    def test_decreasing_values_with_increasing_direction_raises(self):
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.axis("lev", values=[50.0, 10.0, 0.0])
+        msg = str(ctx.exception)
+        self.assertIn("stored_direction", msg)
+        self.assertIn("increasing", msg)
+
+    def test_error_message_contains_axis_name(self):
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.axis("plev", values=[10000.0, 50000.0, 92500.0])
+        self.assertIn("plev", str(ctx.exception))
+
+    def test_error_message_contains_actual_values(self):
+        """Error message shows the first and last values for diagnosis."""
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.axis("plev", values=[10000.0, 92500.0])
+        msg = str(ctx.exception)
+        self.assertIn("10000", msg)
+        self.assertIn("92500", msg)
+
+    # --- validate_axis_values_early catches raw axes too ---
+
+    def test_raw_axis_with_wrong_direction_raises_on_early_validation(self):
+        """An unprepared Axis with stored_direction set is also validated."""
+        from cmor4._axis_validation import validate_axis_values_early
+        raw = Axis(
+            name="plev",
+            values=[10000.0, 50000.0, 92500.0],
+            units="Pa",
+            stored_direction="decreasing",
+        )
+        with self.assertRaises(AxisValidationError):
+            validate_axis_values_early(raw)
+
+    def test_raw_axis_correct_direction_passes_early_validation(self):
+        from cmor4._axis_validation import validate_axis_values_early
+        raw = Axis(
+            name="plev",
+            values=[92500.0, 50000.0, 10000.0],
+            units="Pa",
+            stored_direction="decreasing",
+        )
+        validate_axis_values_early(raw)  # must not raise
+
+
+class MustHaveBoundsTest(unittest.TestCase):
+    """Tests for must_have_bounds enforcement in validate_components.
+
+    The coordinate table field ``must_have_bounds`` requires that bounds are
+    always supplied for an axis.  Previously this was only enforced when a
+    dataset was provided; it is now enforced unconditionally.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            variable_entries={
+                "pr": {
+                    "dimensions": ["time", "lat", "lon"],
+                    "out_name": "pr", "units": "kg m-2 s-1",
+                }
+            },
+            coordinate_entries={
+                "time": {"axis": "T", "out_name": "time"},
+                "lat": {
+                    "axis": "Y", "units": "degrees_north",
+                    "standard_name": "latitude", "out_name": "lat",
+                    "must_have_bounds": "1",
+                },
+                "lon": {
+                    "axis": "X", "units": "degrees_east",
+                    "standard_name": "longitude", "out_name": "lon",
+                },
+            },
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    def _base_axes(self, lat_bounds=True):
+        time = self.project.axis(
+            "time", values=[15.0], bounds=[[0.0, 30.0]],
+            units="days since 2000-01-01",
+        )
+        lat_kwargs = dict(values=[-45.0, 45.0])
+        if lat_bounds:
+            lat_kwargs["bounds"] = [[-90.0, 0.0], [0.0, 90.0]]
+        lat = self.project.axis("lat", **lat_kwargs)
+        lon = self.project.axis(
+            "lon", values=[90.0, 270.0], bounds=[[0.0, 180.0], [180.0, 360.0]],
+        )
+        return [time, lat, lon]
+
+    # --- passes when bounds are provided ---
+
+    def test_lat_with_bounds_passes_without_dataset(self):
+        var = self.project.variable("pr")
+        self.project.validate_components(None, var, self._base_axes(lat_bounds=True))
+
+    def test_lat_with_bounds_passes_with_dataset(self):
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        self.project.validate_components(dataset, var, self._base_axes(lat_bounds=True))
+
+    # --- fails without bounds regardless of whether dataset is provided ---
+
+    def test_lat_without_bounds_raises_without_dataset(self):
+        """must_have_bounds is enforced even when dataset=None."""
+        var = self.project.variable("pr")
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.validate_components(None, var, self._base_axes(lat_bounds=False))
+        self.assertIn("must have bounds", str(ctx.exception))
+        self.assertIn("lat", str(ctx.exception))
+
+    def test_lat_without_bounds_raises_with_dataset(self):
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.validate_components(dataset, var, self._base_axes(lat_bounds=False))
+        self.assertIn("must have bounds", str(ctx.exception))
+
+    def test_axis_without_must_have_bounds_needs_no_bounds(self):
+        """lon has no must_have_bounds — omitting its bounds is fine."""
+        var = self.project.variable("pr")
+        time = self.project.axis("time", values=[15.0], bounds=[[0.0, 30.0]],
+                                  units="days since 2000-01-01")
+        lat = self.project.axis("lat", values=[-45.0, 45.0],
+                                 bounds=[[-90.0, 0.0], [0.0, 90.0]])
+        lon_no_bounds = self.project.axis("lon", values=[90.0, 270.0])
+        self.project.validate_components(None, var, [time, lat, lon_no_bounds])
+
+
+class TimeIntervalWithoutDatasetTest(unittest.TestCase):
+    """Tests for time-axis interval validation when no dataset is provided.
+
+    The variable's table-declared frequency is used to derive the expected
+    time-step interval.  Previously this check only fired when a dataset was
+    explicitly passed to validate_components; it now runs unconditionally so
+    that a daily time axis paired with a monthly variable is caught regardless.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            variable_entries={
+                "pr": {
+                    "dimensions": ["time", "lat", "lon"],
+                    "out_name": "pr", "units": "kg m-2 s-1",
+                    "frequency": "mon",
+                },
+                "tas_fx": {
+                    "dimensions": ["lat", "lon"],
+                    "out_name": "tas_fx", "units": "K",
+                    # no frequency in table
+                },
+            },
+            coordinate_entries={
+                "time": {"axis": "T", "out_name": "time"},
+                "lat": {
+                    "axis": "Y", "units": "degrees_north",
+                    "standard_name": "latitude", "out_name": "lat",
+                    "must_have_bounds": "1",
+                },
+                "lon": {
+                    "axis": "X", "units": "degrees_east",
+                    "standard_name": "longitude", "out_name": "lon",
+                },
+            },
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    def _spatial_axes(self):
+        return [
+            self.project.axis("lat", values=[-45.0, 45.0],
+                               bounds=[[-90.0, 0.0], [0.0, 90.0]]),
+            self.project.axis("lon", values=[90.0, 270.0],
+                               bounds=[[0.0, 180.0], [180.0, 360.0]]),
+        ]
+
+    def _monthly_time(self):
+        return self.project.axis(
+            "time", values=[15.0, 45.0],
+            bounds=[[0.0, 30.0], [30.0, 60.0]],
+            units="days since 2000-01-01",
+        )
+
+    def _daily_time(self):
+        return self.project.axis(
+            "time", values=[0.5, 1.5, 2.5],
+            bounds=[[0.0, 1.0], [1.0, 2.0], [2.0, 3.0]],
+            units="days since 2000-01-01",
+        )
+
+    # --- correct interval passes ---
+
+    def test_monthly_time_with_monthly_variable_passes_without_dataset(self):
+        var = self.project.variable("pr")
+        self.project.validate_components(
+            None, var, [self._monthly_time()] + self._spatial_axes()
+        )
+
+    def test_monthly_time_with_monthly_variable_passes_with_dataset(self):
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        self.project.validate_components(
+            dataset, var, [self._monthly_time()] + self._spatial_axes()
+        )
+
+    # --- wrong interval is caught without a dataset ---
+
+    def test_daily_time_with_monthly_variable_raises_without_dataset(self):
+        """Table frequency 'mon' is used to validate spacing even without dataset."""
+        var = self.project.variable("pr")
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.validate_components(
+                None, var, [self._daily_time()] + self._spatial_axes()
+            )
+        msg = str(ctx.exception)
+        self.assertIn("mon", msg)
+        self.assertIn("interval", msg.lower())
+
+    def test_daily_time_with_monthly_variable_also_raises_with_dataset(self):
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        with self.assertRaises(AxisValidationError):
+            self.project.validate_components(
+                dataset, var, [self._daily_time()] + self._spatial_axes()
+            )
+
+    def test_no_variable_frequency_in_table_skips_interval_check(self):
+        """When the table declares no frequency there is no expected interval."""
+        var = self.project.variable("tas_fx")
+        daily = self.project.axis(
+            "time", values=[0.5, 1.5], bounds=[[0.0, 1.0], [1.0, 2.0]],
+            units="days since 2000-01-01",
+        )
+        # Should not raise — no table frequency to validate against
+        self.project.validate_components(None, var, [daily])
+
+
+class MIPCalendarTest(unittest.TestCase):
+    """Tests for the warning issued when a dataset specifies a calendar that
+    is valid per the CF convention but inappropriate for MIP data.
+
+    CMOR3 rejects 'utc', 'tai', 'all_leap', and '366_day' with a warning.
+    CMOR4 mirrors this behaviour.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            variable_entries={
+                "pr": {
+                    "dimensions": ["time", "lat", "lon"],
+                    "out_name": "pr", "units": "kg m-2 s-1",
+                    "frequency": "mon",
+                }
+            },
+            coordinate_entries={
+                "time": {"axis": "T", "out_name": "time"},
+                "lat": {
+                    "axis": "Y", "units": "degrees_north",
+                    "standard_name": "latitude", "out_name": "lat",
+                    "must_have_bounds": "1",
+                },
+                "lon": {
+                    "axis": "X", "units": "degrees_east",
+                    "standard_name": "longitude", "out_name": "lon",
+                },
+            },
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    def _base_axes(self):
+        return [
+            self.project.axis("time", values=[15.0, 45.0],
+                               bounds=[[0.0, 30.0], [30.0, 60.0]],
+                               units="days since 2000-01-01"),
+            self.project.axis("lat", values=[-45.0, 45.0],
+                               bounds=[[-90.0, 0.0], [0.0, 90.0]]),
+            self.project.axis("lon", values=[90.0, 270.0],
+                               bounds=[[0.0, 180.0], [180.0, 360.0]]),
+        ]
+
+    def _validate_with_calendar(self, calendar):
+        """Run validate_components with the given calendar and return any MIP warnings."""
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": calendar})
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            self.project.validate_components(dataset, var, self._base_axes())
+        return [w for w in caught if "appropriate for MIP" in str(w.message)]
+
+    # --- invalid calendars (not recognised by cftime at all) raise ---
+
+    def test_utc_calendar_raises(self):
+        """'utc' is not a CF calendar — raises AxisValidationError."""
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": "utc"})
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.validate_components(dataset, var, self._base_axes())
+        self.assertIn("utc", str(ctx.exception))
+
+    def test_tai_calendar_raises(self):
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": "tai"})
+        with self.assertRaises(AxisValidationError):
+            self.project.validate_components(dataset, var, self._base_axes())
+
+    def test_completely_unknown_calendar_raises(self):
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": "martian"})
+        with self.assertRaises(AxisValidationError):
+            self.project.validate_components(dataset, var, self._base_axes())
+
+    def test_invalid_calendar_error_lists_valid_options(self):
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": "utc"})
+        with self.assertRaises(AxisValidationError) as ctx:
+            self.project.validate_components(dataset, var, self._base_axes())
+        self.assertIn("standard", str(ctx.exception))
+
+    # --- MIP-inappropriate but cftime-valid calendars warn ---
+
+    def test_all_leap_calendar_warns(self):
+        self.assertTrue(self._validate_with_calendar("all_leap"))
+
+    def test_366_day_calendar_warns(self):
+        self.assertTrue(self._validate_with_calendar("366_day"))
+
+    def test_warning_message_names_the_calendar(self):
+        warns = self._validate_with_calendar("all_leap")
+        self.assertIn("all_leap", str(warns[0].message))
+
+    def test_warning_message_suggests_alternatives(self):
+        warns = self._validate_with_calendar("all_leap")
+        msg = str(warns[0].message)
+        self.assertIn("standard", msg)
+
+    # --- appropriate calendars do not warn ---
+
+    def test_standard_calendar_no_warning(self):
+        self.assertFalse(self._validate_with_calendar("standard"))
+
+    def test_gregorian_calendar_no_warning(self):
+        self.assertFalse(self._validate_with_calendar("gregorian"))
+
+    def test_proleptic_gregorian_calendar_no_warning(self):
+        self.assertFalse(self._validate_with_calendar("proleptic_gregorian"))
+
+    def test_noleap_calendar_no_warning(self):
+        self.assertFalse(self._validate_with_calendar("noleap"))
+
+    def test_365_day_calendar_no_warning(self):
+        self.assertFalse(self._validate_with_calendar("365_day"))
+
+    def test_360_day_calendar_no_warning(self):
+        self.assertFalse(self._validate_with_calendar("360_day"))
+
+    def test_julian_calendar_no_warning(self):
+        self.assertFalse(self._validate_with_calendar("julian"))
+
+    # --- no calendar in dataset means no check ---
+
+    def test_no_calendar_in_dataset_no_warning(self):
+        var = self.project.variable("pr")
+        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            self.project.validate_components(dataset, var, self._base_axes())
+        mip_warns = [w for w in caught if "appropriate for MIP" in str(w.message)]
+        self.assertFalse(mip_warns)
 
 
 class ValidateComponentsTest(unittest.TestCase):

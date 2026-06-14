@@ -647,8 +647,8 @@ class Cmor4Test(unittest.TestCase):
                 time_axis(self.project),
                 self.project.axis(
                     "standard_hybrid_sigma",
-                    values=[0.1, 0.9],
-                    bounds=[[0.0, 0.5], [0.5, 1.0]],
+                    values=[0.9, 0.1],
+                    bounds=[[1.0, 0.5], [0.5, 0.0]],
                 ),
                 *horizontal_axes(self.project),
             ]
@@ -660,8 +660,8 @@ class Cmor4Test(unittest.TestCase):
             zfactors = [
                 self.project.zfactor(
                     "a",
-                    values=[0.1, 0.9],
-                    bounds=[[0.0, 0.5], [0.5, 1.0]],
+                    values=[0.9, 0.1],
+                    bounds=[[1.0, 0.5], [0.5, 0.0]],
                 ),
                 self.project.zfactor(
                     "b",

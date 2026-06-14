@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
-import numpy as np
 
 from ._table_utils import (
     is_table_value as _is_table_value,
@@ -11,6 +10,7 @@ from ._table_utils import (
 )
 from ._templates import is_unresolved_template as _is_unresolved_template
 from ._axis_validation import validate_axes as _validate_axes
+from ._axis_validation import _validate_calendar
 from .axis import Axis
 from .cv import ControlledVocabulary
 from .dataset import DatasetInfo
@@ -766,9 +766,15 @@ class ProjectTables:
                             ),
                         )
 
-        # Dataset-axis consistency checks (e.g., time axis needs frequency)
+        # Dataset-axis consistency checks (must_have_bounds, time interval, etc.)
+        # Run unconditionally so that must_have_bounds and the variable's
+        # table-declared frequency are enforced even when no dataset is provided.
+        _validate_axes(dataset if dataset is not None else {}, variable, axes)
+
+        # Calendar validation: warn if the dataset specifies a calendar that
+        # is technically valid per CF but inappropriate for MIP data.
         if dataset is not None:
-            _validate_axes(dataset, variable, axes)
+            _validate_calendar(dataset)
 
         # Check that required scalar axes are present (if not auto-added)
         present_names = {
@@ -1124,8 +1130,7 @@ def _validate_grid_dimensions(
     grid: Grid,
     axes: Sequence[Axis],
 ) -> None:
-    """Validate that grid dimensions correspond to spatial axes in the right
-    order.
+    """Validate that grid dimensions correspond to spatial axes in the right order.
 
     For each name in ``grid.dimensions`` (in order) there must be a matching
     axis among *axes*.  When ``grid.latitude`` or ``grid.longitude`` is also
@@ -1146,6 +1151,7 @@ def _validate_grid_dimensions(
         lat/lon array size along a given axis index does not match the axis
         length.
     """
+    import numpy as np
 
     # Build a lookup from every recognised name variant to the axis object.
     name_to_axis: dict[str, "Axis"] = {}
