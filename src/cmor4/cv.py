@@ -31,9 +31,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         Path to the source CV file, if loaded from disk.
     """
 
-    def __init__(
-        self, data: Mapping[str, Any], path: str | Path | None = None
-    ):
+    def __init__(self, data: Mapping[str, Any], path: str | Path | None = None):
         self.path = Path(path) if path is not None else None
         self._data = dict(data.get("CV", data))
 
@@ -105,11 +103,11 @@ class ControlledVocabulary(Mapping[str, Any]):
         """Fill scalar CV defaults that are not templated."""
 
         for key, value in self.items():
-            templated = isinstance(value, str) and (
-                "<" in value or ">" in value
-            )
-            if key not in dataset and not templated and isinstance(
-                value, (str, int, float)
+            templated = isinstance(value, str) and ("<" in value or ">" in value)
+            if (
+                key not in dataset
+                and not templated
+                and isinstance(value, (str, int, float))
             ):
                 dataset[key] = value
 
@@ -272,9 +270,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                     f"{key}={value!r} is not allowed by {self.filename}."
                 )
 
-    def validate_required_global_attributes(
-        self, dataset: Mapping[str, Any]
-    ) -> None:
+    def validate_required_global_attributes(self, dataset: Mapping[str, Any]) -> None:
         """Require every CV-listed global attribute that CMOR4 can write.
 
         Parameters
@@ -353,9 +349,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                 )
         expected_activity = experiment_entry.get("activity_id")
         if _is_table_value(expected_activity) and "activity_id" in dataset:
-            if not _metadata_value_matches(
-                dataset["activity_id"], expected_activity
-            ):
+            if not _metadata_value_matches(dataset["activity_id"], expected_activity):
                 raise ControlledVocabularyError(
                     f"activity_id={dataset['activity_id']!r} does not match "
                     f"experiment_id={dataset.get('experiment_id')!r} "
@@ -402,10 +396,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                 )
         allowed = (*required, *additional)
         for token in tokens:
-            if not any(
-                _source_type_pattern_matches(token, item)
-                for item in allowed
-            ):
+            if not any(_source_type_pattern_matches(token, item) for item in allowed):
                 raise ControlledVocabularyError(
                     f"source_type={source_type!r} contains source type "
                     f"{token!r} that is not allowed by experiment_id="
@@ -542,12 +533,9 @@ class ControlledVocabulary(Mapping[str, Any]):
             str(dataset["parent_time_units"]),
         ):
             raise ControlledVocabularyError(
-                f"parent_time_units={dataset['parent_time_units']!r} "
-                "is invalid."
+                f"parent_time_units={dataset['parent_time_units']!r} " "is invalid."
             )
-        if not re.fullmatch(
-            r"r\d+i\d+p\d+f\d+", str(dataset["parent_variant_label"])
-        ):
+        if not re.fullmatch(r"r\d+i\d+p\d+f\d+", str(dataset["parent_variant_label"])):
             raise ControlledVocabularyError(
                 f"parent_variant_label={dataset['parent_variant_label']!r} "
                 "is invalid."
@@ -623,16 +611,12 @@ class ControlledVocabulary(Mapping[str, Any]):
             return True
         if isinstance(allowed, Mapping):
             if key in {"realm", "source_type"}:
-                return all(
-                    token in allowed for token in str(value).split() if token
-                )
+                return all(token in allowed for token in str(value).split() if token)
             return str(value) in allowed
         if isinstance(allowed, str):
             return str(value) == allowed
         if isinstance(allowed, list):
-            return any(
-                _allowed_list_item(str(value), item) for item in allowed
-            )
+            return any(_allowed_list_item(str(value), item) for item in allowed)
         return True
 
     def definition_for(self, key: str) -> Any:
@@ -656,9 +640,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             return license_cv.get("license_id")
         return None
 
-    def experiment_entry(
-        self, dataset: Mapping[str, Any]
-    ) -> Mapping[str, Any] | None:
+    def experiment_entry(self, dataset: Mapping[str, Any]) -> Mapping[str, Any] | None:
         """Return the CV entry for the dataset experiment.
 
         Parameters
@@ -709,9 +691,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         value = dataset.get(key)
         if value in (None, ""):
             raise ControlledVocabularyError(f"{key} is required.")
-        if _is_table_value(expected) and not _metadata_value_matches(
-            value, expected
-        ):
+        if _is_table_value(expected) and not _metadata_value_matches(value, expected):
             raise ControlledVocabularyError(
                 f"{key}={value!r} does not match experiment_id="
                 f"{dataset.get('experiment_id')!r} CV value {expected!r}."

@@ -40,6 +40,7 @@ def units_are_convertible(user_units: str, table_units: str) -> bool:
         return True
     try:
         import cf_units
+
         a = cf_units.Unit(user_units)
         b = cf_units.Unit(table_units)
         return a.is_convertible(b)

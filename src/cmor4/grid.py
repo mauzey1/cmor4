@@ -7,7 +7,6 @@ import warnings
 from ._table_utils import is_table_value
 from .metadata import _MetadataRecord
 
-
 _LATITUDE_PARAMETERS = {
     "grid_north_pole_latitude",
     "latitude_of_projection_origin",
@@ -175,10 +174,7 @@ class Grid(_MetadataRecord):
         if self.dimensions and lat is not None:
             lat_array = np.asarray(lat)
             # Filter out time from dimensions to get spatial dims
-            spatial_dims = [
-                d for d in self.dimensions
-                if str(d).lower() != "time"
-            ]
+            spatial_dims = [d for d in self.dimensions if str(d).lower() != "time"]
             if lat_array.ndim != len(spatial_dims):
                 raise ValueError(
                     f"Grid latitude array has {lat_array.ndim} dimensions but "
@@ -188,10 +184,7 @@ class Grid(_MetadataRecord):
 
         if self.dimensions and lon is not None:
             lon_array = np.asarray(lon)
-            spatial_dims = [
-                d for d in self.dimensions
-                if str(d).lower() != "time"
-            ]
+            spatial_dims = [d for d in self.dimensions if str(d).lower() != "time"]
             if lon_array.ndim != len(spatial_dims):
                 raise ValueError(
                     f"Grid longitude array has {lon_array.ndim} dimensions "
@@ -308,12 +301,7 @@ class Grid(_MetadataRecord):
             # Returns ("rotated_latitude_longitude", {...})
         """
 
-        requested = str(
-            self.table_entry
-            or self.mapping_entry
-            or self.name
-            or ""
-        )
+        requested = str(self.table_entry or self.mapping_entry or self.name or "")
         if requested in project.grid_mapping_entries:
             return requested, project.grid_mapping_entries[requested]
         return None, None
@@ -419,10 +407,7 @@ class Grid(_MetadataRecord):
             # Extract time dimension from variable if present
             var_dims = variable.get("dimensions")
             if var_dims:
-                time_dims = tuple(
-                    str(d) for d in var_dims
-                    if str(d).lower() == "time"
-                )
+                time_dims = tuple(str(d) for d in var_dims if str(d).lower() == "time")
                 # Return time dimension(s) first, then grid spatial dimensions
                 return time_dims + grid_dims
             return grid_dims
@@ -473,10 +458,7 @@ class Grid(_MetadataRecord):
         """
 
         return bool(
-            self.mapping_name
-            or self.grid_mapping_name
-            or self.params
-            or self.attrs
+            self.mapping_name or self.grid_mapping_name or self.params or self.attrs
         )
 
     def mapping_attributes(self) -> dict[str, Any]:

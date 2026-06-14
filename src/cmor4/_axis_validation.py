@@ -12,7 +12,6 @@ from ._time_utils import cftime_interval_days
 from .axis import Axis
 from .exceptions import AxisValidationError
 
-
 DEFAULT_INTERVAL_WARNING = 0.1
 DEFAULT_INTERVAL_ERROR = 0.2
 
@@ -43,16 +42,11 @@ def validate_and_normalize_axes(
 ) -> tuple[Axis, ...]:
     """Return axes after CMOR-style coordinate validation."""
 
-    return tuple(
-        _validate_and_normalize_axis(dataset, variable, axis)
-        for axis in axes
-    )
+    return tuple(_validate_and_normalize_axis(dataset, variable, axis) for axis in axes)
 
 
 def validate_axes(
-    dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
-    axes: Sequence[Axis]
+    dataset: Mapping[str, Any], variable: Mapping[str, Any], axes: Sequence[Axis]
 ) -> None:
     """Validate axis values with dataset and frequency-dependent checks."""
 
@@ -115,9 +109,7 @@ def _validate_and_normalize_axis(
         _validate_valid_range(axis, bounds, name, is_bounds=True)
         if bounds.shape[-1] == 2:
             _validate_requested_bounds(axis, bounds, name)
-            if include_time_checks or (
-                not _is_time_axis(axis) and not climatology
-            ):
+            if include_time_checks or (not _is_time_axis(axis) and not climatology):
                 _validate_monotonic(axis, bounds, name, is_bounds=True)
             if include_time_checks or not _is_time_axis(axis):
                 _validate_values_inside_bounds(values, bounds, name)
@@ -153,14 +145,8 @@ def _normalize_bounds_shape(
     if axis.get("scalar", False) and values.size == 1:
         if bounds.size == 2:
             return values, bounds.reshape(2)
-        raise AxisValidationError(
-            "Scalar coordinate bounds must have 2 values."
-        )
-    if (
-        bounds.ndim == 1
-        and values.ndim == 1
-        and bounds.size == values.size + 1
-    ):
+        raise AxisValidationError("Scalar coordinate bounds must have 2 values.")
+    if bounds.ndim == 1 and values.ndim == 1 and bounds.size == values.size + 1:
         pairs = np.stack((bounds[:-1], bounds[1:]), axis=-1)
         return values, pairs
     if bounds.shape[:-1] == values_shape and bounds.shape[-1] >= 2:
@@ -171,9 +157,7 @@ def _normalize_bounds_shape(
     )
 
 
-def _validate_requested_values(
-    axis: Axis, values: np.ndarray, name: str
-) -> None:
+def _validate_requested_values(axis: Axis, values: np.ndarray, name: str) -> None:
     requested = _numeric_list(axis.get("requested"))
     if not requested:
         return
@@ -185,17 +169,12 @@ def _validate_requested_values(
             eps = min(eps, abs(expected - requested[index - 1]) * tolerance)
         if not np.any(np.abs(flat_values - expected) <= eps):
             raise AxisValidationError(
-                f"requested value {expected:g} for axis {name!r} was "
-                "not found."
+                f"requested value {expected:g} for axis {name!r} was " "not found."
             )
 
 
-def _validate_requested_bounds(
-    axis: Axis, bounds: np.ndarray, name: str
-) -> None:
-    requested = _numeric_list(
-        axis.get("requested_bounds", axis.get("bounds_values"))
-    )
+def _validate_requested_bounds(axis: Axis, bounds: np.ndarray, name: str) -> None:
+    requested = _numeric_list(axis.get("requested_bounds", axis.get("bounds_values")))
     if not requested:
         requested = _numeric_list(axis.get("bounds_values"))
     if not requested:
@@ -208,9 +187,7 @@ def _validate_requested_bounds(
         neighbor = (
             requested[index + 1]
             if index % 2 == 0 and index + 1 < len(requested)
-            else requested[index - 1]
-            if index > 0
-            else expected
+            else requested[index - 1] if index > 0 else expected
         )
         eps = min(
             abs(1.0e-3 * tolerance * expected),
@@ -278,8 +255,7 @@ def _validate_monotonic(
             if np.any(overlap):
                 index = int(np.nonzero(overlap)[0][0])
                 raise AxisValidationError(
-                    f"axis {name!r} has overlapping bounds values at "
-                    f"index {index}."
+                    f"axis {name!r} has overlapping bounds values at " f"index {index}."
                 )
             gaps = np.abs(deltas) > 1.0e-12
             if np.any(gaps):
@@ -377,9 +353,7 @@ def _validate_time_interval(
     warnings.warn(message, RuntimeWarning, stacklevel=3)
 
 
-def _time_interval_days(
-    values: np.ndarray, units: str, calendar: str
-) -> np.ndarray:
+def _time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.ndarray:
     cftime_intervals = cftime_interval_days(values, units, calendar)
     if cftime_intervals is not None:
         return cftime_intervals
@@ -429,9 +403,10 @@ def _normalize_longitude(
     if bounds is not None:
         bounds = bounds.copy()
         shift = adjusted.reshape(-1) - values.reshape(-1)
-        if bounds.shape[-1] >= 2 and shift.size == bounds.reshape(
-            -1, bounds.shape[-1]
-        ).shape[0]:
+        if (
+            bounds.shape[-1] >= 2
+            and shift.size == bounds.reshape(-1, bounds.shape[-1]).shape[0]
+        ):
             pairs = bounds.reshape(-1, bounds.shape[-1])
             pairs[:, :2] = pairs[:, :2] + shift[:, None]
             bounds = pairs.reshape(bounds.shape)
@@ -459,9 +434,7 @@ def _time_unit_days(units: str) -> float:
     }.get(unit, 1.0)
 
 
-def _validate_stored_direction(
-    axis: Axis, values: np.ndarray, name: str
-) -> None:
+def _validate_stored_direction(axis: Axis, values: np.ndarray, name: str) -> None:
     """Raise if axis values conflict with the declared stored_direction.
 
     The coordinate table may declare ``stored_direction = "increasing"`` or
@@ -509,10 +482,12 @@ def _validate_stored_direction(
 
 # Calendars recognised by cftime but inappropriate for MIP data, mirroring
 # the check in CMOR3's cmor_calendar_c2i().
-_MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset({
-    "all_leap",
-    "366_day",
-})
+_MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset(
+    {
+        "all_leap",
+        "366_day",
+    }
+)
 
 
 def _validate_calendar(dataset: Mapping[str, Any]) -> None:

@@ -53,18 +53,14 @@ class ProjectTables:
         grid_table: str | Path | None = None,
     ):
         self.cv_file = Path(cv_file)
-        self.variable_table_files = tuple(
-            Path(path) for path in variable_tables
-        )
+        self.variable_table_files = tuple(Path(path) for path in variable_tables)
         self.coordinate_table_file = (
             Path(coordinate_table) if coordinate_table is not None else None
         )
         self.formula_table_file = (
             Path(formula_table) if formula_table is not None else None
         )
-        self.grid_table_file = (
-            Path(grid_table) if grid_table is not None else None
-        )
+        self.grid_table_file = Path(grid_table) if grid_table is not None else None
         self.cv = ControlledVocabulary.from_file(self.cv_file)
         self.variable_entries: dict[str, VariableEntry] = {}
         self._variable_entries_by_name: dict[str, list[VariableEntry]] = {}
@@ -96,9 +92,7 @@ class ProjectTables:
             for name, entry in self.coordinate_entries.items()
             if _is_table_value(entry.get("value"))
         }
-        self.generic_level_entries = _generic_level_entries(
-            self.coordinate_entries
-        )
+        self.generic_level_entries = _generic_level_entries(self.coordinate_entries)
         self.formula_entries: dict[str, Mapping[str, Any]] = {}
         if self.formula_table_file is not None:
             self.formula_entries = self._read_entries(
@@ -146,9 +140,7 @@ class ProjectTables:
         resolved_formula_table = _resolve_optional_table(
             root_path, formula_table, "formula_terms"
         )
-        resolved_grid_table = _resolve_optional_table(
-            root_path, grid_table, "grids"
-        )
+        resolved_grid_table = _resolve_optional_table(root_path, grid_table, "grids")
         return cls(
             root_path / cv_file,
             [root_path / table_file for table_file in variable_tables],
@@ -174,11 +166,7 @@ class ProjectTables:
             Validated and defaulted dataset metadata.
         """
 
-        user_info = (
-            dataset.user_info
-            if isinstance(dataset, DatasetInfo)
-            else dataset
-        )
+        user_info = dataset.user_info if isinstance(dataset, DatasetInfo) else dataset
         normalized_dataset = self.cv.get_dataset_info(dataset)
         self.cv.validate_dataset_values(normalized_dataset)
         self.validate_source_attributes(normalized_dataset)
@@ -205,9 +193,7 @@ class ProjectTables:
         normalized_dataset = self.cv.get_dataset_info(dataset)
         variable_entry = variable.resolve_table_entry(self)
         self._add_table_header_defaults(normalized_dataset, variable_entry)
-        self._add_variable_global_defaults(
-            normalized_dataset, variable
-        )
+        self._add_variable_global_defaults(normalized_dataset, variable)
         self.validate_dataset(normalized_dataset)
         self.validate_source_attributes(normalized_dataset)
         self.validate_experiment(normalized_dataset)
@@ -358,9 +344,7 @@ class ProjectTables:
             )
         """
 
-        return self._mark_prepared_axis(
-            Axis(name=name, project=self, **values)
-        )
+        return self._mark_prepared_axis(Axis(name=name, project=self, **values))
 
     def _axes(
         self,
@@ -376,8 +360,7 @@ class ProjectTables:
         """
 
         merged_axes = [
-            axis if self._is_prepared_axis(axis)
-            else axis._merge_table_entry(self)
+            axis if self._is_prepared_axis(axis) else axis._merge_table_entry(self)
             for axis in axes
         ]
         if variable is not None:
@@ -739,9 +722,7 @@ class ProjectTables:
         for axis in axes:
             if not self._is_prepared_axis(axis):
                 # Check if this is a grid coordinate (auxiliary lat/lon)
-                grid_entry_name, grid_entry = (
-                    axis.resolve_grid_coordinate(self)
-                )
+                grid_entry_name, grid_entry = axis.resolve_grid_coordinate(self)
                 if grid_entry is not None:
                     # Grid coordinates are only validated against grid table
                     axis._validate_metadata(
@@ -848,8 +829,7 @@ class ProjectTables:
                 and str(table_units) != "?"
                 and user_units not in (None, "")
                 and str(user_units) != str(table_units)
-                and not _units_are_convertible(str(user_units),
-                                               str(table_units))
+                and not _units_are_convertible(str(user_units), str(table_units))
             ):
                 raise TableValidationError(
                     f"formula term {entry_name!r} units={user_units!r} does "
@@ -959,9 +939,7 @@ class ProjectTables:
             "area_label",
         ):
             if key in labels:
-                if key not in dataset or _is_unresolved_template(
-                    dataset[key]
-                ):
+                if key not in dataset or _is_unresolved_template(dataset[key]):
                     dataset[key] = labels[key]
         for key in ("frequency", "realm", "table_id"):
             value = variable.get(key)
@@ -1005,9 +983,7 @@ class ProjectTables:
 
         self.cv.validate_dataset(dataset)
 
-    def validate_required_global_attributes(
-        self, dataset: Mapping[str, Any]
-    ) -> None:
+    def validate_required_global_attributes(self, dataset: Mapping[str, Any]) -> None:
         """Require every CV-listed global attribute that CMOR4 can write.
 
         Parameters
@@ -1131,9 +1107,7 @@ class ProjectTables:
         self.cv.validate_parent_attributes(dataset)
 
     @staticmethod
-    def _read_entries(
-        table_file: Path, key: str
-    ) -> dict[str, Mapping[str, Any]]:
+    def _read_entries(table_file: Path, key: str) -> dict[str, Mapping[str, Any]]:
         with table_file.open() as handle:
             data = json.load(handle)
         return {
@@ -1146,9 +1120,7 @@ class ProjectTables:
         with table_file.open() as handle:
             data = json.load(handle)
         entries = data.get("variable_entry", {})
-        table_id = str(
-            data.get("Header", {}).get("table_id") or table_file.stem
-        )
+        table_id = str(data.get("Header", {}).get("table_id") or table_file.stem)
         if table_id.startswith("Table "):
             table_id = table_id.removeprefix("Table ")
         for name, entry in entries.items():
@@ -1160,9 +1132,7 @@ class ProjectTables:
                 table_header=data.get("Header", {}),
             )
             self.variable_entries.setdefault(name, variable_entry)
-            self._variable_entries_by_name.setdefault(name, []).append(
-                variable_entry
-            )
+            self._variable_entries_by_name.setdefault(name, []).append(variable_entry)
 
 
 def _validate_grid_dimensions(
@@ -1241,15 +1211,13 @@ def _validate_grid_dimensions(
 
 
 def _generic_level_entries(
-    entries: Mapping[str, Mapping[str, Any]]
+    entries: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, dict[str, Mapping[str, Any]]]:
     generic_entries: dict[str, dict[str, Mapping[str, Any]]] = {}
     for name, entry in entries.items():
         generic_level_name = entry.get("generic_level_name")
         if _is_table_value(generic_level_name):
-            generic_entries.setdefault(str(generic_level_name), {})[
-                str(name)
-            ] = entry
+            generic_entries.setdefault(str(generic_level_name), {})[str(name)] = entry
     return generic_entries
 
 

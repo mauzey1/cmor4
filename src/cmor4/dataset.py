@@ -7,7 +7,6 @@ from typing import Any
 
 from .metadata import _MetadataRecord
 
-
 INTERNAL_DATASET_KEYS = {
     "_history_template",
     "outpath",
@@ -224,9 +223,7 @@ class DatasetInfo(Mapping[str, Any]):
         if "table_info" in variable:
             attrs.setdefault("table_info", variable["table_info"])
         attrs.setdefault("variant_label", self.variant_label())
-        attrs.setdefault(
-            "creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        )
+        attrs.setdefault("creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
         if extra_attrs:
             attrs.update(_MetadataRecord.netcdf_attrs(extra_attrs))
         return attrs

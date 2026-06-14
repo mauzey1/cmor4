@@ -210,9 +210,7 @@ class Variable(_MetadataRecord):
             self.get("name") or self.get("id") or self.get("variable_id")
         )
         variable_id = str(
-            self.get("id")
-            or self.get("variable_id")
-            or branded_name.split("_", 1)[0]
+            self.get("id") or self.get("variable_id") or branded_name.split("_", 1)[0]
         )
         labels = {"branded_name": branded_name, "variable_id": variable_id}
         if "_" in branded_name:
@@ -285,9 +283,7 @@ class Variable(_MetadataRecord):
             entries = entries_by_name[requested]
             if self.table_id:
                 matches = [
-                    entry
-                    for entry in entries
-                    if entry.table_id == str(self.table_id)
+                    entry for entry in entries if entry.table_id == str(self.table_id)
                 ]
                 if len(matches) == 1:
                     return matches[0]
@@ -297,9 +293,7 @@ class Variable(_MetadataRecord):
                 )
             if len(entries) == 1:
                 return entries[0]
-            choices = ", ".join(
-                f"{entry.table_id}:{entry.name}" for entry in entries
-            )
+            choices = ", ".join(f"{entry.table_id}:{entry.name}" for entry in entries)
             raise TableValidationError(
                 f"Variable {requested!r} is ambiguous across loaded tables; "
                 "specify table_id. "
@@ -344,19 +338,13 @@ class Variable(_MetadataRecord):
         )
         merged.setdefault("variable_id", merged["id"])
         merged.setdefault("dimensions", table_dims)
-        merged.setdefault(
-            "table_id", entry.get("table_id", variable_entry.table_id)
-        )
+        merged.setdefault("table_id", entry.get("table_id", variable_entry.table_id))
         if variable_entry.table_file is not None:
-            merged.setdefault(
-                "table_info", f"Name: {variable_entry.table_file.name};"
-            )
+            merged.setdefault("table_info", f"Name: {variable_entry.table_file.name};")
         if "frequency" in entry:
             merged.setdefault("frequency", entry["frequency"])
         if "modeling_realm" in entry:
-            merged.setdefault(
-                "realm", single_or_original(entry["modeling_realm"])
-            )
+            merged.setdefault("realm", single_or_original(entry["modeling_realm"]))
         for key in (
             "valid_min",
             "valid_max",
@@ -515,9 +503,7 @@ class Variable(_MetadataRecord):
 
         entry = variable_entry.entry
         values = self.to_dict()
-        out_name = str(
-            entry.get("out_name", variable_entry.name.split("_", 1)[0])
-        )
+        out_name = str(entry.get("out_name", variable_entry.name.split("_", 1)[0]))
         for key in ("id", "variable_id"):
             if key in values and str(values[key]) != out_name:
                 raise TableValidationError(
@@ -525,10 +511,7 @@ class Variable(_MetadataRecord):
                     f"out_name {out_name!r}."
                 )
         expected_dims = table_dimensions(entry)
-        if (
-            self.dimensions is not None
-            and tuple(self.dimensions) != expected_dims
-        ):
+        if self.dimensions is not None and tuple(self.dimensions) != expected_dims:
             raise TableValidationError(
                 f"dimensions={tuple(self.dimensions)!r} does not match "
                 f"{variable_entry.table_id}:{variable_entry.name} "
@@ -585,9 +568,10 @@ class Variable(_MetadataRecord):
                     f"positive={user_positive!r} is not valid; "
                     f"allowed values are 'up' and 'down'."
                 )
-            if (is_table_value(table_positive)
-                    and str(user_positive).lower()
-                    != str(table_positive).lower()):
+            if (
+                is_table_value(table_positive)
+                and str(user_positive).lower() != str(table_positive).lower()
+            ):
                 raise TableValidationError(
                     f"positive={user_positive!r} does not match "
                     f"{variable_entry.table_id}:{variable_entry.name} "

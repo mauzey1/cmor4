@@ -10,11 +10,7 @@ import xarray as xr
 
 from ._axis_validation import validate_and_normalize_axes
 from ._templates import render_template
-from ._time_utils import (
-    decode_time_value,
-    add_time_delta,
-    date_part
-)
+from ._time_utils import decode_time_value, add_time_delta, date_part
 from ._variable_validation import validate_variable_values
 from .axis import Axis
 from .dataset import DatasetInfo, INTERNAL_DATASET_KEYS
@@ -148,9 +144,7 @@ def create_dataset(
 
     zfactor_names: list[str] = []
     for zfactor in zfactors or ():
-        zfactor_names.append(
-            _add_zfactor(zfactor, axes, data_vars, axis_dims)
-        )
+        zfactor_names.append(_add_zfactor(zfactor, axes, data_vars, axis_dims))
 
     data_array = np.asarray(data)
     var_name, var_labels = variable.names()
@@ -163,9 +157,7 @@ def create_dataset(
             dim_names = tuple(str(name) for name in variable["dimensions"])
         else:
             dim_names = tuple(
-                str(axis["name"])
-                for axis in axes
-                if not axis.get("auxiliary", False)
+                str(axis["name"]) for axis in axes if not axis.get("auxiliary", False)
             )
     dims = tuple(dim for name in dim_names for dim in axis_dims.get(name, ()))
 
@@ -210,9 +202,7 @@ def create_dataset(
 
     chunksizes = variable.get("chunksizes", variable.get("chunks"))
     if chunksizes:
-        ds[var_name].encoding["chunksizes"] = tuple(
-            int(value) for value in chunksizes
-        )
+        ds[var_name].encoding["chunksizes"] = tuple(int(value) for value in chunksizes)
 
     _validate_final_components(
         ds,
@@ -258,9 +248,7 @@ def write_netcdf(
     """
 
     output_path = (
-        Path(path)
-        if path is not None
-        else build_output_path(dataset, variable, ds)
+        Path(path) if path is not None else build_output_path(dataset, variable, ds)
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ds.to_netcdf(output_path, **to_netcdf_kwargs)
@@ -319,9 +307,7 @@ def cmorize(
         grid=grid,
         attrs=attrs,
     )
-    output_path = write_netcdf(
-        ds, dataset, variable, path=path, **to_netcdf_kwargs
-    )
+    output_path = write_netcdf(ds, dataset, variable, path=path, **to_netcdf_kwargs)
     return Cmor4Result(dataset=ds, path=output_path)
 
 
@@ -418,11 +404,7 @@ def string_from_template(
     """
 
     dataset = _dataset_for_variable(dataset, variable)
-    return render_template(
-        template,
-        _template_tokens(dataset, variable, ds),
-        separator
-    )
+    return render_template(template, _template_tokens(dataset, variable, ds), separator)
 
 
 def _grid_axes(
@@ -461,13 +443,11 @@ def _grid_axes(
     # Determine spatial dimensions (x and y only, exclude time)
     if grid.dimensions:
         spatial_dims = [
-            str(d) for d in grid.dimensions
-            if str(d).lower() not in ("time",)
+            str(d) for d in grid.dimensions if str(d).lower() not in ("time",)
         ]
     elif variable_dimensions:
         spatial_dims = [
-            str(d) for d in variable_dimensions
-            if str(d).lower() not in ("time",)
+            str(d) for d in variable_dimensions if str(d).lower() not in ("time",)
         ]
     else:
         spatial_dims = []
@@ -524,9 +504,7 @@ def _add_axis(
         elif values.size == 1:
             scalar_value = values.reshape(()).item()
         else:
-            raise ValueError(
-                "Scalar coordinates must contain exactly one value."
-            )
+            raise ValueError("Scalar coordinates must contain exactly one value.")
         coords[out_name] = ((), scalar_value, coord_attrs)
         axis_dims[name] = ()
         _add_axis_dim_aliases(axis, axis_dims, ())
@@ -563,9 +541,11 @@ def _add_axis(
             axis_dims.setdefault(out_name, dims)
 
     if "bounds" in axis:
-        climatology_axis = str(
-            axis.get("climatology", "")
-        ).lower() in {"1", "true", "yes"}
+        climatology_axis = str(axis.get("climatology", "")).lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         bounds_name = str(
             axis.get("bounds_name")
             or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
@@ -641,9 +621,7 @@ def _set_formula_terms(
     variable_dims = set(variable.get("dimensions", ()))
     for axis in axes:
         formula_terms = variable.get("formula_terms") or axis.get("z_factors")
-        if not formula_terms and set(zfactor_names).issuperset(
-            {"a", "b", "p0", "ps"}
-        ):
+        if not formula_terms and set(zfactor_names).issuperset({"a", "b", "p0", "ps"}):
             formula_terms = "a: a b: b p0: p0 ps: ps"
         if not formula_terms:
             continue
@@ -651,9 +629,7 @@ def _set_formula_terms(
         generic_level_name = axis.get("generic_level_name")
         out_name = str(axis.get("out_name") or axis["name"])
         if {
-            str(value)
-            for value in (axis_name, generic_level_name, out_name)
-            if value
+            str(value) for value in (axis_name, generic_level_name, out_name) if value
         } & variable_dims:
             coord_name = str(axis.get("out_name") or axis["name"])
             if coord_name in ds.coords:
@@ -696,8 +672,7 @@ def _validate_final_components(
     if grid is not None and grid.has_mapping:
         if grid.variable_name not in ds.data_vars:
             raise ValueError(
-                f"Grid mapping variable {grid.variable_name!r} "
-                "was not created."
+                f"Grid mapping variable {grid.variable_name!r} " "was not created."
             )
         if ds[var_name].attrs.get("grid_mapping") != grid.variable_name:
             raise ValueError(
@@ -801,9 +776,7 @@ def _template_tokens(
     ds: xr.Dataset | None,
 ) -> dict[str, Any]:
     var_name, labels = variable.names()
-    frequency = str(
-        dataset.get("frequency", variable.get("frequency", "fx"))
-    )
+    frequency = str(dataset.get("frequency", variable.get("frequency", "fx")))
     variant_label = dataset.variant_label()
     version = str(dataset.get("version") or f"v{date.today():%Y%m%d}")
     time_range = _time_range(ds, frequency) if frequency != "fx" else None
@@ -817,10 +790,7 @@ def _template_tokens(
         {
             str(key): value
             for key, value in dataset.items()
-            if (
-                key not in INTERNAL_DATASET_KEYS
-                and not str(key).startswith("_")
-            )
+            if (key not in INTERNAL_DATASET_KEYS and not str(key).startswith("_"))
         }
     )
     tokens.update(
@@ -830,9 +800,7 @@ def _template_tokens(
             "branded_variable_name": labels["branded_name"],
             "branding_suffix": labels.get("branding_suffix", ""),
             "frequency": frequency,
-            "grid_label": dataset.get(
-                "grid_label", tokens.get("grid_label", "gn")
-            ),
+            "grid_label": dataset.get("grid_label", tokens.get("grid_label", "gn")),
             "member_id": dataset.get("member_id", variant_label),
             "region": dataset.get("region", tokens.get("region", "glb")),
             "time-range": time_range or "",
@@ -890,31 +858,19 @@ def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
         else ""
     )
     if "yr" in freq or "dec" in freq:
-        return (
-            f"{date_part(first, 'year')}-{date_part(last, 'year')}"
-            f"{clim_suffix}"
-        )
+        return f"{date_part(first, 'year')}-{date_part(last, 'year')}" f"{clim_suffix}"
     if "monc" in freq or "mon" in freq or climatology:
         return (
-            f"{date_part(first, 'month')}-{date_part(last, 'month')}"
-            f"{clim_suffix}"
+            f"{date_part(first, 'month')}-{date_part(last, 'month')}" f"{clim_suffix}"
         )
     if "day" in freq:
-        return (
-            f"{date_part(first, 'day')}-{date_part(last, 'day')}"
-            f"{clim_suffix}"
-        )
+        return f"{date_part(first, 'day')}-{date_part(last, 'day')}" f"{clim_suffix}"
     if "subhr" in freq:
         return (
-            f"{date_part(first, 'second')}-{date_part(last, 'second')}"
-            f"{clim_suffix}"
+            f"{date_part(first, 'second')}-{date_part(last, 'second')}" f"{clim_suffix}"
         )
     if "hr" in freq or freq in {"hour", "hourly"}:
         return (
-            f"{date_part(first, 'minute')}-{date_part(last, 'minute')}"
-            f"{clim_suffix}"
+            f"{date_part(first, 'minute')}-{date_part(last, 'minute')}" f"{clim_suffix}"
         )
-    return (
-        f"{date_part(first, 'month')}-{date_part(last, 'month')}"
-        f"{clim_suffix}"
-    )
+    return f"{date_part(first, 'month')}-{date_part(last, 'month')}" f"{clim_suffix}"

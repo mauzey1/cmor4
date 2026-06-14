@@ -6,7 +6,6 @@ from typing import Any, TypeVar
 
 import numpy as np
 
-
 MetadataRecordT = TypeVar("MetadataRecordT", bound="_MetadataRecord")
 
 
@@ -108,9 +107,7 @@ class _MetadataRecord(Mapping[str, Any]):
             ``True`` for scalar string, bytes, integer, or floating values.
         """
 
-        return isinstance(
-            value, (str, bytes, int, float, np.integer, np.floating)
-        )
+        return isinstance(value, (str, bytes, int, float, np.integer, np.floating))
 
     @staticmethod
     def netcdf_attrs(values: Mapping[str, Any]) -> dict[str, Any]:

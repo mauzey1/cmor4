@@ -133,14 +133,11 @@ class ZFactor(_MetadataRecord):
             value = entry.get(key)
             if is_table_value(value):
                 merged.setdefault(key, parse_table_value(value))
-        if "dimensions" not in merged and is_table_value(
-            entry.get("dimensions")
-        ):
+        if "dimensions" not in merged and is_table_value(entry.get("dimensions")):
             merged["dimensions"] = table_dimensions(entry)
         if "bounds" in merged:
             bounds_name = str(
-                merged.get("bounds_name")
-                or f"{merged.get('out_name', self.name)}_bnds"
+                merged.get("bounds_name") or f"{merged.get('out_name', self.name)}_bnds"
             )
             bounds_entry = project.formula_entries.get(bounds_name)
             if bounds_entry:
@@ -196,9 +193,7 @@ class ZFactor(_MetadataRecord):
             # Returns ("ap", {...}) matching the formula_entry
         """
 
-        requested = str(
-            self.table_entry or self.formula_entry or self.name or ""
-        )
+        requested = str(self.table_entry or self.formula_entry or self.name or "")
         if requested in project.formula_entries:
             return requested, project.formula_entries[requested]
         matches = [

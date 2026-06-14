@@ -212,9 +212,7 @@ class Axis(_MetadataRecord):
             bounds = entry_bounds(entry)
             if bounds is not None:
                 merged["bounds"] = bounds
-        Axis.from_mapping(merged)._merge_grid_coordinate_metadata(
-            project, merged
-        )
+        Axis.from_mapping(merged)._merge_grid_coordinate_metadata(project, merged)
         return Axis.from_mapping(merged)
 
     def resolve_table_entry(
@@ -281,17 +279,11 @@ class Axis(_MetadataRecord):
         """
 
         requested = str(
-            self.table_entry
-            or self.axis_entry
-            or self.coordinate
-            or self.name
-            or ""
+            self.table_entry or self.axis_entry or self.coordinate or self.name or ""
         )
         if requested in project.coordinate_entries:
             return requested, project.coordinate_entries[requested]
-        generic_matches = self._matching_generic_level_entries(
-            project, requested
-        )
+        generic_matches = self._matching_generic_level_entries(project, requested)
         if len(generic_matches) == 1:
             return generic_matches[0]
         if len(generic_matches) > 1:
@@ -673,9 +665,7 @@ class Axis(_MetadataRecord):
         axis.setdefault("out_name", entry_name)
         bounds_name = axis.get("bounds_name")
         if bounds_name:
-            bounds_entry = project.grid_coordinate_entries.get(
-                str(bounds_name)
-            )
+            bounds_entry = project.grid_coordinate_entries.get(str(bounds_name))
             if bounds_entry:
                 bounds_attrs = dict(axis.get("bounds_attrs", {}))
                 for key in ("units", "standard_name", "long_name"):

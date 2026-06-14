@@ -4,9 +4,9 @@ import re
 from typing import Any, Mapping
 
 
-def render_template(template: str,
-                    tokens: Mapping[str, Any],
-                    separator: str | None = None) -> str:
+def render_template(
+    template: str, tokens: Mapping[str, Any], separator: str | None = None
+) -> str:
     """Render a template string by replacing tokens with values.
 
     Template tokens are placeholders in the form <token_name> that get replaced

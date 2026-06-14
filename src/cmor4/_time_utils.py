@@ -8,9 +8,7 @@ import numpy as np
 import cftime
 
 
-def decode_time_value(
-    value: Any, units: Any, calendar: Any = "standard"
-) -> Any | None:
+def decode_time_value(value: Any, units: Any, calendar: Any = "standard") -> Any | None:
     if np.issubdtype(np.asarray(value).dtype, np.datetime64):
         text = np.datetime_as_string(value, unit="s")
         return datetime.fromisoformat(text)
@@ -29,8 +27,7 @@ def decode_time_value(
         except Exception:
             pass
     match = re.match(
-        r"^(days|hours|minutes|seconds) since "
-        r"(\d{1,4})-(\d{1,2})-(\d{1,2})",
+        r"^(days|hours|minutes|seconds) since " r"(\d{1,4})-(\d{1,2})-(\d{1,2})",
         units_text,
     )
     if not match:
