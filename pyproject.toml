@@ -13,6 +13,7 @@ authors = [
   { name = "cmor4 contributors" },
 ]
 dependencies = [
+  "cf-units>=3.3",
   "cftime>=1.6",
   "numpy>=1.24",
   "xarray>=2024.1",

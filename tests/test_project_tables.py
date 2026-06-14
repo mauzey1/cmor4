@@ -1846,6 +1846,386 @@ class PositiveValidationTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Units convertibility
+# ---------------------------------------------------------------------------
+
+class UnitsConvertibilityTest(unittest.TestCase):
+    """Tests for gap 2: user units must be dimensionally convertible to the
+    table units, not necessarily identical strings.
+
+    Relies on cf_units when available; tests that require it are skipped
+    gracefully when the library is absent.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            variable_entries={
+                "tas": {"dimensions": [], "out_name": "tas", "units": "K"},
+                "pr":  {"dimensions": [], "out_name": "pr",  "units": "kg m-2 s-1"},
+                "wap": {"dimensions": [], "out_name": "wap", "units": "Pa s-1"},
+                "wc":  {"dimensions": [], "out_name": "wc",  "units": "?"},
+            },
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    @staticmethod
+    def _cf_units_available():
+        return True
+
+    # --- exact-match always works ---
+
+    def test_exact_unit_match_passes(self):
+        self.project.validate_components(
+            None, Variable(name="tas", units="K"), []
+        )
+
+    def test_no_user_units_skips_check(self):
+        self.project.validate_components(
+            None, Variable(name="tas"), []
+        )
+
+    def test_wildcard_table_units_accepts_any_user_units(self):
+        """Table units '?' means accept any user-supplied units."""
+        self.project.validate_components(
+            None, Variable(name="wc", units="hPa"), []
+        )
+
+    def test_wildcard_table_units_accepts_no_user_units(self):
+        self.project.validate_components(
+            None, Variable(name="wc"), []
+        )
+
+    # --- incompatible units always fail ---
+
+    def test_incompatible_units_raises(self):
+        """Units from a different physical dimension are always rejected."""
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, Variable(name="tas", units="m s-1"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("m s-1", msg)
+        self.assertIn("K", msg)
+        self.assertIn("Amon:tas", msg)
+
+    def test_error_message_mentions_convertibility(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, Variable(name="tas", units="m s-1"), []
+            )
+        self.assertIn("convertible", str(ctx.exception))
+
+    def test_pressure_incompatible_with_temperature_raises(self):
+        with self.assertRaises(TableValidationError):
+            self.project.validate_components(
+                None, Variable(name="tas", units="Pa"), []
+            )
+
+    # --- equivalent units pass when cf_units is available ---
+
+    def test_degC_accepted_for_K_table(self):
+        """degC and K are dimensionally convertible (temperature offset)."""
+        if not self._cf_units_available():
+            self.skipTest("cf_units not installed")
+        self.project.validate_components(
+            None, Variable(name="tas", units="degC"), []
+        )
+
+    def test_hPa_accepted_for_Pa_table(self):
+        if not self._cf_units_available():
+            self.skipTest("cf_units not installed")
+        self.project.validate_components(
+            None, Variable(name="wap", units="hPa s-1"), []
+        )
+
+    def test_equivalent_units_different_string_passes(self):
+        """K and kelvin are the same unit with different string representations."""
+        if not self._cf_units_available():
+            self.skipTest("cf_units not installed")
+        self.project.validate_components(
+            None, Variable(name="tas", units="kelvin"), []
+        )
+
+
+# ---------------------------------------------------------------------------
+# Required attributes
+# ---------------------------------------------------------------------------
+
+class RequiredAttributesTest(unittest.TestCase):
+    """Tests for gap 3: attributes listed in the table 'required' field must
+    be present on the Variable.
+
+    The 'required' field is a space-separated list of attribute names.
+    Each attribute that has a table-defined value and appears in 'required'
+    must be supplied by the user; those without table values are skipped
+    (there is nothing to validate against).
+
+    'positive' is handled by its own existing logic and excluded here.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            variable_entries={
+                # two required attrs
+                "ua": {
+                    "dimensions": [], "out_name": "ua", "units": "m s-1",
+                    "required": "standard_name long_name",
+                    "standard_name": "eastward_wind",
+                    "long_name": "Eastward Wind",
+                },
+                # required attr with no table value → no check possible
+                "va": {
+                    "dimensions": [], "out_name": "va", "units": "m s-1",
+                    "required": "comment",
+                    # comment has no value in the table entry
+                },
+                # no required field at all
+                "tas": {
+                    "dimensions": [], "out_name": "tas", "units": "K",
+                    "standard_name": "air_temperature",
+                },
+            },
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    # --- happy paths ---
+
+    def test_all_required_attrs_present_passes(self):
+        self.project.validate_components(
+            None,
+            Variable(name="ua",
+                     standard_name="eastward_wind",
+                     long_name="Eastward Wind"),
+            [],
+        )
+
+    def test_no_required_field_in_table_always_passes(self):
+        self.project.validate_components(
+            None, Variable(name="tas"), []
+        )
+
+    def test_required_attr_without_table_value_not_enforced(self):
+        """'required: comment' when the table has no comment value → no check."""
+        self.project.validate_components(
+            None, Variable(name="va"), []
+        )
+
+    # --- missing required attr raises ---
+
+    def test_missing_required_standard_name_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None,
+                Variable(name="ua", long_name="Eastward Wind"),
+                [],
+            )
+        msg = str(ctx.exception)
+        self.assertIn("standard_name", msg)
+
+    def test_missing_required_long_name_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None,
+                Variable(name="ua", standard_name="eastward_wind"),
+                [],
+            )
+        self.assertIn("long_name", str(ctx.exception))
+
+    def test_error_names_table_and_variable(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, Variable(name="ua"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("Amon", msg)
+        self.assertIn("ua", msg)
+
+    def test_error_names_expected_value(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None,
+                Variable(name="ua", long_name="Eastward Wind"),
+                [],
+            )
+        self.assertIn("eastward_wind", str(ctx.exception))
+
+    def test_all_missing_raises_on_first(self):
+        """When both required attrs are missing only the first is reported."""
+        with self.assertRaises(TableValidationError):
+            self.project.validate_components(
+                None, Variable(name="ua"), []
+            )
+
+    def test_project_variable_includes_required_attrs(self):
+        """project.variable() merges table attrs so required check passes."""
+        var = self.project.variable("ua")
+        self.project.validate_components(None, var, [])
+
+
+# ---------------------------------------------------------------------------
+# flag_values / flag_meanings consistency
+# ---------------------------------------------------------------------------
+
+class FlagConsistencyTest(unittest.TestCase):
+    """Tests for gap 4: flag_values and flag_meanings must both be present
+    in the table entry and have the same number of space-separated tokens.
+
+    Also covers that flag fields are merged from the table into Variable and
+    written to output NetCDF attributes.
+    """
+
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            variable_entries={
+                # valid: counts match
+                "biome": {
+                    "dimensions": [], "out_name": "biome", "units": "1",
+                    "flag_values": "1 2 3",
+                    "flag_meanings": "forest grassland desert",
+                },
+                # invalid: 3 values but 2 meanings
+                "biome_short": {
+                    "dimensions": [], "out_name": "biome_short", "units": "1",
+                    "flag_values": "1 2 3",
+                    "flag_meanings": "forest grassland",
+                },
+                # invalid: flag_values present, flag_meanings absent
+                "biome_no_meanings": {
+                    "dimensions": [], "out_name": "biome_no_meanings",
+                    "units": "1",
+                    "flag_values": "1 2 3",
+                },
+                # invalid: flag_meanings present, flag_values absent
+                "biome_no_values": {
+                    "dimensions": [], "out_name": "biome_no_values",
+                    "units": "1",
+                    "flag_meanings": "forest grassland desert",
+                },
+                # no flags at all — unaffected
+                "tas": {"dimensions": [], "out_name": "tas", "units": "K"},
+                # single-flag edge case
+                "binary": {
+                    "dimensions": [], "out_name": "binary", "units": "1",
+                    "flag_values": "0",
+                    "flag_meanings": "off",
+                },
+            },
+        )
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    # --- merging into Variable ---
+
+    def test_flag_values_merged_from_table(self):
+        var = self.project.variable("biome")
+        self.assertEqual(var.flag_values, "1 2 3")
+
+    def test_flag_meanings_merged_from_table(self):
+        var = self.project.variable("biome")
+        self.assertEqual(var.flag_meanings, "forest grassland desert")
+
+    def test_no_flags_in_table_gives_none(self):
+        var = self.project.variable("tas")
+        self.assertIsNone(var.flag_values)
+        self.assertIsNone(var.flag_meanings)
+
+    # --- output attributes ---
+
+    def test_flag_values_in_netcdf_attrs(self):
+        var = self.project.variable("biome")
+        _, labels = var.names()
+        self.assertIn("flag_values", var.attributes(labels))
+
+    def test_flag_meanings_in_netcdf_attrs(self):
+        var = self.project.variable("biome")
+        _, labels = var.names()
+        self.assertIn("flag_meanings", var.attributes(labels))
+
+    def test_no_flags_not_in_attrs(self):
+        var = self.project.variable("tas")
+        _, labels = var.names()
+        attrs = var.attributes(labels)
+        self.assertNotIn("flag_values", attrs)
+        self.assertNotIn("flag_meanings", attrs)
+
+    # --- happy paths ---
+
+    def test_matching_token_counts_passes(self):
+        self.project.validate_components(
+            None, self.project.variable("biome"), []
+        )
+
+    def test_single_flag_pair_passes(self):
+        self.project.validate_components(
+            None, self.project.variable("binary"), []
+        )
+
+    def test_no_flags_in_table_passes(self):
+        self.project.validate_components(
+            None, self.project.variable("tas"), []
+        )
+
+    # --- mismatch raises ---
+
+    def test_mismatched_token_counts_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.project.variable("biome_short"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("flag_meanings", msg)
+        self.assertIn("flag_values", msg)
+
+    def test_mismatch_error_reports_counts(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.project.variable("biome_short"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("3", msg)   # flag_values count
+        self.assertIn("2", msg)   # flag_meanings count
+
+    def test_flag_values_without_flag_meanings_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.project.variable("biome_no_meanings"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("flag_meanings", msg)
+
+    def test_flag_meanings_without_flag_values_raises(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.project.variable("biome_no_values"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("flag_values", msg)
+
+    def test_missing_raises_names_table_and_variable(self):
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_components(
+                None, self.project.variable("biome_no_meanings"), []
+            )
+        msg = str(ctx.exception)
+        self.assertIn("Amon", msg)
+        self.assertIn("biome_no_meanings", msg)
+
+
+# ---------------------------------------------------------------------------
 # 5. axis
 # ---------------------------------------------------------------------------
 

@@ -15,6 +15,24 @@ from .exceptions import TableValidationError
 from .metadata import _MetadataRecord
 
 
+def _units_are_convertible(user_units: str, table_units: str) -> bool:
+    """Return True if *user_units* and *table_units* are dimensionally compatible.
+
+    Uses ``cf_units`` (a required dependency) for a proper udunits-based check.
+    """
+    if user_units == table_units:
+        return True
+    try:
+        import cf_units
+        a = cf_units.Unit(user_units)
+        b = cf_units.Unit(table_units)
+        return a.is_convertible(b)
+    except Exception:
+        # Unit strings not parseable by cf_units (e.g. non-standard strings):
+        # require exact equality.
+        return False
+
+
 @dataclass(frozen=True)
 class VariableEntry:
     """Resolved variable table entry.
@@ -114,6 +132,8 @@ class Variable(_MetadataRecord):
     cell_methods: str | None = None
     cell_measures: str | None = None
     comment: str | None = None
+    flag_values: str | None = None
+    flag_meanings: str | None = None
     missing_value: Any = None
     fill_value: Any = None
     chunksizes: tuple[int, ...] | list[int] | None = None
@@ -373,6 +393,8 @@ class Variable(_MetadataRecord):
             "cell_measures",
             "comment",
             "positive",
+            "flag_values",
+            "flag_meanings",
         ):
             if entry.get(key) not in (None, ""):
                 merged[key] = entry[key]
@@ -438,6 +460,8 @@ class Variable(_MetadataRecord):
             "cell_measures",
             "comment",
             "positive",
+            "flag_values",
+            "flag_meanings",
         ):
             if key in self:
                 attrs[key] = self[key]
@@ -527,8 +551,30 @@ class Variable(_MetadataRecord):
                 f"{variable_entry.table_id}:{variable_entry.name} "
                 f"dimensions {expected_dims!r}."
             )
+
+        # --- Gap 2: units must be dimensionally convertible, not just equal ---
+        # The table value "?" means any units are acceptable.
+        # When cf_units is available we check dimensional compatibility so that
+        # equivalent units (e.g. "degC" for a table that lists "K") are
+        # accepted; incompatible units (e.g. "m s-1" for "K") are rejected.
+        # When cf_units is not installed we fall back to exact string equality.
+        table_units = entry.get("units")
+        user_units = values.get("units")
+        if (
+            is_table_value(table_units)
+            and str(table_units) != "?"
+            and user_units not in (None, "")
+            and str(user_units) != str(table_units)
+        ):
+            if not _units_are_convertible(str(user_units), str(table_units)):
+                raise TableValidationError(
+                    f"units={user_units!r} does not match "
+                    f"{variable_entry.table_id}:{variable_entry.name} "
+                    f"value {table_units!r} and the two are not "
+                    f"dimensionally convertible."
+                )
+
         for key in (
-            "units",
             "standard_name",
             "long_name",
             "cell_methods",
@@ -547,8 +593,7 @@ class Variable(_MetadataRecord):
                     f"value {expected!r}."
                 )
 
-        # Validate positive: value must be "up" or "down", and must be
-        # present when the table's required field names it.
+        # --- Gap 1 (positive) validation (already present) ---
         required_attrs = set(str(entry.get("required", "")).split())
         table_positive = entry.get("positive")
         user_positive = values.get("positive")
@@ -572,6 +617,49 @@ class Variable(_MetadataRecord):
                     f"requires 'positive' to be provided "
                     f"(expected {table_positive!r})."
                 )
+
+        # --- Gap 3: required attributes must be present ---
+        # The table's "required" field is a space-separated list of attribute
+        # names that must be supplied by the caller.  We check each one that
+        # also has a table-defined value (attributes with no table value cannot
+        # be meaningfully validated here).
+        _SKIP_REQUIRED = {"positive"}  # handled above
+        for attr in required_attrs - _SKIP_REQUIRED:
+            table_val = entry.get(attr)
+            if not is_table_value(table_val):
+                continue
+            user_val = values.get(attr)
+            if user_val in (None, ""):
+                raise TableValidationError(
+                    f"variable {variable_entry.table_id}:{variable_entry.name} "
+                    f"requires attribute {attr!r} to be provided "
+                    f"(expected {table_val!r})."
+                )
+
+        # --- Gap 4: flag_values / flag_meanings consistency ---
+        table_flag_values = entry.get("flag_values")
+        table_flag_meanings = entry.get("flag_meanings")
+        _has_flag_values = is_table_value(table_flag_values)
+        _has_flag_meanings = is_table_value(table_flag_meanings)
+        if _has_flag_values != _has_flag_meanings:
+            missing = "flag_meanings" if _has_flag_values else "flag_values"
+            present = "flag_values" if _has_flag_values else "flag_meanings"
+            raise TableValidationError(
+                f"{variable_entry.table_id}:{variable_entry.name} "
+                f"has {present!r} but is missing {missing!r}; "
+                f"both must be present together."
+            )
+        if _has_flag_values and _has_flag_meanings:
+            n_values = len(str(table_flag_values).split())
+            n_meanings = len(str(table_flag_meanings).split())
+            if n_values != n_meanings:
+                raise TableValidationError(
+                    f"{variable_entry.table_id}:{variable_entry.name} "
+                    f"flag_values has {n_values} token(s) but "
+                    f"flag_meanings has {n_meanings} token(s); "
+                    f"counts must match."
+                )
+
         expected_values = {
             "frequency": entry.get("frequency"),
             "realm": entry.get("modeling_realm"),
