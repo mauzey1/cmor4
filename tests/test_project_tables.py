@@ -1154,15 +1154,6 @@ class ProjectTablesTest(unittest.TestCase):
     def test_obs4mips_rejects_variable_not_in_loaded_table(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
-        dataset = {
-            "activity_id": "obs4MIPs",
-            "grid_label": "gn",
-            "institution_id": "NOAA-NCEI",
-            "license": project.cv["license"],
-            "nominal_resolution": "250 km",
-            "product": "observations",
-            "source_id": "CMAP-V1902",
-        }
 
         with self.assertRaises(cmor4.TableValidationError):
             project.variable("not_a_table_variable")

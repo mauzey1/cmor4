@@ -7,6 +7,7 @@ import numpy as np
 
 from .axis import Axis
 from .exceptions import VariableValidationError
+from .variable import Variable
 
 
 def validate_variable_values(
