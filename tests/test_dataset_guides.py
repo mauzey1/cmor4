@@ -62,10 +62,7 @@ def guide_lon_axis(values=(90.0, 180.0, 270.0), project=None):
 def _regular_bounds(values):
     if len(values) == 1:
         return [[values[0] - 0.5, values[0] + 0.5]]
-    edges = [
-        (left + right) / 2.0
-        for left, right in zip(values[:-1], values[1:])
-    ]
+    edges = [(left + right) / 2.0 for left, right in zip(values[:-1], values[1:])]
     first = values[0] - (edges[0] - values[0])
     last = values[-1] + (values[-1] - edges[-1])
     edges = [first, *edges, last]
@@ -146,12 +143,8 @@ class DatasetGuideProjectTest(unittest.TestCase):
         cls.cmip7_atmos_project = cmip7_project("tables/CMIP7_atmos.json")
         cls.drcdp_ap1hr_project = drcdp_project("Tables/DRCDP_AP1hr.json")
         cls.drcdp_apday_project = drcdp_project("Tables/DRCDP_APday.json")
-        cls.obs4mips_amon_project = obs4mips_project(
-            "Tables/obs4MIPs_Amon.json"
-        )
-        cls.obs4mips_a1hrpt_project = obs4mips_project(
-            "Tables/obs4MIPs_A1hrPt.json"
-        )
+        cls.obs4mips_amon_project = obs4mips_project("Tables/obs4MIPs_Amon.json")
+        cls.obs4mips_a1hrpt_project = obs4mips_project("Tables/obs4MIPs_A1hrPt.json")
 
     def test_drcdp_hourly_precipitation_uses_project_drs_template(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -202,9 +195,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 "tasmax",
                 missing_value=np.float32(1.0e20),
             )
-            info = project.dataset_info(
-                drcdp_info(Path(tmp_dir), source_id="LOCA2-1")
-            )
+            info = project.dataset_info(drcdp_info(Path(tmp_dir), source_id="LOCA2-1"))
             axes = [
                 guide_time_axis(
                     [39811.0, 39812.0],
@@ -213,9 +204,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     project=project,
                 ),
                 guide_lat_axis((32.0, 33.0, 34.0)),
-                guide_lon_axis(
-                    (240.0, 241.0, 242.0, 243.0)
-                ),
+                guide_lon_axis((240.0, 241.0, 242.0, 243.0)),
             ]
 
             ds = cmor4.create_dataset(
@@ -260,9 +249,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     project=project,
                 ),
                 guide_lat_axis((10.0, 20.0, 30.0)),
-                guide_lon_axis(
-                    (0.0, 90.0, 180.0, 270.0)
-                ),
+                guide_lon_axis((0.0, 90.0, 180.0, 270.0)),
             ]
             variable = project.variable("tas_tavg-h2m-hxy-u")
             info = project.dataset_info(raw_info)
@@ -344,20 +331,12 @@ class DatasetGuideProjectTest(unittest.TestCase):
             )
             self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
             self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
-            self.assertEqual(
-                ds["longitude"].attrs["standard_name"], "longitude"
-            )
+            self.assertEqual(ds["longitude"].attrs["standard_name"], "longitude")
             self.assertEqual(ds["longitude"].attrs["units"], "degrees_east")
-            self.assertEqual(
-                ds["vertices_latitude"].attrs["units"], "degrees_north"
-            )
-            self.assertEqual(
-                ds["vertices_longitude"].attrs["units"], "degrees_east"
-            )
+            self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
+            self.assertEqual(ds["vertices_longitude"].attrs["units"], "degrees_east")
             self.assertEqual(ds["tasmax"].attrs["grid_mapping"], "crs")
-            self.assertEqual(
-                ds["crs"].attrs["grid_mapping_name"], "latitude_longitude"
-            )
+            self.assertEqual(ds["crs"].attrs["grid_mapping_name"], "latitude_longitude")
 
     def test_obs4mips_monthly_gridded_precipitation_template(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -441,8 +420,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
 
             self.assertEqual(
                 result.path.name,
-                "pr_1hr_ARMBE-atm-c1-1-8_CMORGuide_gn_"
-                "201801010030-201801010130.nc",
+                "pr_1hr_ARMBE-atm-c1-1-8_CMORGuide_gn_" "201801010030-201801010130.nc",
             )
             self.assertEqual(result.dataset.attrs["site_id"], "AR-SLu")
             self.assertEqual(result.dataset["pr"].dims, ("time", "lat", "lon"))

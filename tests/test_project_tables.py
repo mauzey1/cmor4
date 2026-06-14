@@ -19,7 +19,11 @@ from cmor4 import (
     Variable,
     ZFactor,
 )
-from cmor4.exceptions import ControlledVocabularyError, TableValidationError, AxisValidationError
+from cmor4.exceptions import (
+    ControlledVocabularyError,
+    TableValidationError,
+    AxisValidationError,
+)
 from table_helpers import (
     CMIP7_TABLE_ROOT,
     DRCDP_TABLE_ROOT,
@@ -29,10 +33,10 @@ from table_helpers import (
     obs4mips_project,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 def _write(path: Path, obj: Any) -> None:
     path.write_text(json.dumps(obj) + "\n")
@@ -249,7 +253,9 @@ def _build_project(
     kwargs: dict[str, Any] = dict(coordinate_table=coord_file)
 
     if include_formula:
-        _write(formula_file, {"formula_entry": formula_entries or _DEFAULT_FORMULA_ENTRIES})
+        _write(
+            formula_file, {"formula_entry": formula_entries or _DEFAULT_FORMULA_ENTRIES}
+        )
         kwargs["formula_table"] = formula_file
 
     if include_grid:
@@ -286,8 +292,6 @@ def _build_vc_project(tmp: Path, **kwargs) -> ProjectTables:
 # ---------------------------------------------------------------------------
 # 1. Constructor / __init__
 # ---------------------------------------------------------------------------
-
-
 
 
 def require_path(test_case: unittest.TestCase, path: Path) -> None:
@@ -404,33 +408,19 @@ class ProjectTablesTest(unittest.TestCase):
             np.ones((1, 2, 2), dtype="f4"),
         )
 
-        self.assertEqual(
-            ds["x"].attrs["standard_name"], "projection_x_coordinate"
-        )
-        self.assertEqual(
-            ds["x"].attrs["long_name"], "x coordinate of projection"
-        )
+        self.assertEqual(ds["x"].attrs["standard_name"], "projection_x_coordinate")
+        self.assertEqual(ds["x"].attrs["long_name"], "x coordinate of projection")
         self.assertEqual(ds["x"].attrs["units"], "m")
-        self.assertEqual(
-            ds["y"].attrs["standard_name"], "projection_y_coordinate"
-        )
-        self.assertEqual(
-            ds["y"].attrs["long_name"], "y coordinate of projection"
-        )
+        self.assertEqual(ds["y"].attrs["standard_name"], "projection_y_coordinate")
+        self.assertEqual(ds["y"].attrs["long_name"], "y coordinate of projection")
         self.assertEqual(ds["y"].attrs["units"], "m")
         self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
         self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
         self.assertEqual(ds["longitude"].attrs["standard_name"], "longitude")
         self.assertEqual(ds["longitude"].attrs["units"], "degrees_east")
-        self.assertEqual(
-            ds["vertices_latitude"].attrs["units"], "degrees_north"
-        )
-        self.assertEqual(
-            ds["vertices_longitude"].attrs["units"], "degrees_east"
-        )
-        self.assertEqual(
-            ds["sample"].attrs["coordinates"], "latitude longitude"
-        )
+        self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
+        self.assertEqual(ds["vertices_longitude"].attrs["units"], "degrees_east")
+        self.assertEqual(ds["sample"].attrs["coordinates"], "latitude longitude")
 
     def test_loads_cv_and_variable_entries_from_submodule(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -444,9 +434,7 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertIn("latitude", project.grid_coordinate_entries)
         self.assertIn("vertices_latitude", project.grid_coordinate_entries)
         self.assertIn("ps", project.formula_entries)
-        self.assertIn(
-            "alternate_hybrid_sigma", project.generic_level_entries["alevel"]
-        )
+        self.assertIn("alternate_hybrid_sigma", project.generic_level_entries["alevel"])
         self.assertIn("depth_coord", project.generic_level_entries["olevel"])
         self.assertEqual(
             project.variable_entries["tos_tavg-u-hxy-sea"].entry["out_name"],
@@ -456,17 +444,14 @@ class ProjectTablesTest(unittest.TestCase):
     def test_controlled_vocabulary_loads_project_cv_wrapper(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             cv_file = Path(tmp_dir) / "CV.json"
-            cv_file.write_text(
-                """
+            cv_file.write_text("""
 {
   "CV": {
     "activity_id": ["CMIP"],
     "required_global_attributes": ["activity_id"]
   }
 }
-""".strip()
-                + "\n"
-            )
+""".strip() + "\n")
 
             cv = cmor4.ControlledVocabulary.from_file(cv_file)
 
@@ -512,9 +497,7 @@ class ProjectTablesTest(unittest.TestCase):
             np.ones((2, 2, 2, 2), dtype="f4"),
         )
 
-        self.assertEqual(
-            ds["agessc"].dims, ("time", "lev", "lat", "lon")
-        )
+        self.assertEqual(ds["agessc"].dims, ("time", "lev", "lat", "lon"))
         self.assertIn("lev", ds.coords)
         self.assertNotIn("olevel", ds.coords)
         self.assertNotIn("out_name", ds["lev"].attrs)
@@ -529,8 +512,7 @@ class ProjectTablesTest(unittest.TestCase):
             variable_table = root / "test_table.json"
             coordinate_table = root / "coordinate.json"
             cv_file.write_text('{"CV": {}}\n')
-            variable_table.write_text(
-                """
+            variable_table.write_text("""
 {
   "Header": {"table_id": "test"},
   "variable_entry": {
@@ -541,11 +523,8 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip()
-                + "\n"
-            )
-            coordinate_table.write_text(
-                """
+""".strip() + "\n")
+            coordinate_table.write_text("""
 {
   "axis_entry": {
     "runtime_axis": {
@@ -557,9 +536,7 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip()
-                + "\n"
-            )
+""".strip() + "\n")
             project = cmor4.ProjectTables(
                 cv_file,
                 [variable_table],
@@ -647,24 +624,14 @@ class ProjectTablesTest(unittest.TestCase):
             np.ones((1, 2, 2), dtype="f4"),
         )
 
-        self.assertEqual(
-            ds["x"].attrs["standard_name"], "projection_x_coordinate"
-        )
-        self.assertEqual(
-            ds["x"].attrs["long_name"], "x coordinate of projection"
-        )
+        self.assertEqual(ds["x"].attrs["standard_name"], "projection_x_coordinate")
+        self.assertEqual(ds["x"].attrs["long_name"], "x coordinate of projection")
         self.assertEqual(ds["x"].attrs["units"], "m")
-        self.assertEqual(
-            ds["y"].attrs["standard_name"], "projection_y_coordinate"
-        )
+        self.assertEqual(ds["y"].attrs["standard_name"], "projection_y_coordinate")
         self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
         self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
-        self.assertEqual(
-            ds["vertices_latitude"].attrs["units"], "degrees_north"
-        )
-        self.assertEqual(
-            ds["sample"].attrs["coordinates"], "latitude longitude"
-        )
+        self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
+        self.assertEqual(ds["sample"].attrs["coordinates"], "latitude longitude")
 
     def test_drcdp_grid_axes_and_aux_coords_come_from_grids_table(self):
         require_path(self, DRCDP_TABLE_ROOT)
@@ -706,16 +673,12 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertEqual(prepared_dataset["source_id"], "BSVertOzone-v1-0")
         self.assertEqual(prepared_variable.id, "o3")
         self.assertEqual(prepared_variable.units, "mol mol-1")
-        self.assertEqual(
-            prepared_variable.dimensions, ("time", "height", "latitude")
-        )
+        self.assertEqual(prepared_variable.dimensions, ("time", "height", "latitude"))
         self.assertEqual(
             prepared_dataset["source"],
             "BSVertOzone v1-0 (2018): Mole concentration of ozone in air",
         )
-        self.assertEqual(
-            prepared_dataset["source_type"], "satellite_retrieval"
-        )
+        self.assertEqual(prepared_dataset["source_type"], "satellite_retrieval")
         self.assertEqual(prepared_dataset["source_version_number"], "v1-0")
 
     def test_axis_resolution_does_not_use_axis_letter_alone(self):
@@ -725,8 +688,7 @@ class ProjectTablesTest(unittest.TestCase):
             variable_table = root / "test_table.json"
             coordinate_table = root / "coordinate.json"
             cv_file.write_text('{"CV": {}}\n')
-            variable_table.write_text(
-                """
+            variable_table.write_text("""
 {
   "Header": {"table_id": "test"},
   "variable_entry": {
@@ -737,11 +699,8 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip()
-                + "\n"
-            )
-            coordinate_table.write_text(
-                """
+""".strip() + "\n")
+            coordinate_table.write_text("""
 {
   "axis_entry": {
     "longitude": {
@@ -753,18 +712,14 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip()
-                + "\n"
-            )
+""".strip() + "\n")
             project = cmor4.ProjectTables(
                 cv_file,
                 [variable_table],
                 coordinate_table=coordinate_table,
             )
 
-            merged = project.axis(
-                "x", values=[0.0, 1.0], axis="X", units="m"
-            )
+            merged = project.axis("x", values=[0.0, 1.0], axis="X", units="m")
 
             self.assertEqual(merged.name, "x")
             self.assertIsNone(merged.table_entry)
@@ -821,9 +776,7 @@ class ProjectTablesTest(unittest.TestCase):
             )
 
             self.assertEqual(result.dataset["tos"].attrs["units"], "degC")
-            self.assertEqual(
-                result.dataset["lat"].attrs["standard_name"], "latitude"
-            )
+            self.assertEqual(result.dataset["lat"].attrs["standard_name"], "latitude")
             self.assertEqual(result.dataset["lat"].attrs["axis"], "Y")
             self.assertEqual(
                 result.dataset["tos"].attrs["standard_name"],
@@ -920,8 +873,7 @@ class ProjectTablesTest(unittest.TestCase):
             root = Path(tmp_dir)
             cv_file = root / "CV.json"
             variable_table = root / "test_table.json"
-            cv_file.write_text(
-                """
+            cv_file.write_text("""
 {
   "CV": {
     "activity_id": ["CMIP"],
@@ -940,11 +892,8 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip()
-                + "\n"
-            )
-            variable_table.write_text(
-                """
+""".strip() + "\n")
+            variable_table.write_text("""
 {
   "Header": {"table_id": "test"},
   "variable_entry": {
@@ -955,9 +904,7 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip()
-                + "\n"
-            )
+""".strip() + "\n")
             project = cmor4.ProjectTables(cv_file, [variable_table])
             dataset = {
                 "activity_id": "CMIP",
@@ -971,15 +918,9 @@ class ProjectTablesTest(unittest.TestCase):
             with self.assertRaisesRegex(
                 cmor4.ControlledVocabularyError, "missing required"
             ):
-                project.dataset_info(
-                    {**dataset, "source_type": "AER"}
-                )
-            with self.assertRaisesRegex(
-                cmor4.ControlledVocabularyError, "not allowed"
-            ):
-                project.dataset_info(
-                    {**dataset, "source_type": "AOGCM LAND"}
-                )
+                project.dataset_info({**dataset, "source_type": "AER"})
+            with self.assertRaisesRegex(cmor4.ControlledVocabularyError, "not allowed"):
+                project.dataset_info({**dataset, "source_type": "AOGCM LAND"})
 
     def test_required_global_attributes_are_enforced(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -989,9 +930,7 @@ class ProjectTablesTest(unittest.TestCase):
         variable = project.variable("tos_tavg-u-hxy-sea")
         info = project.dataset_info(dataset)
 
-        with self.assertRaisesRegex(
-            cmor4.ControlledVocabularyError, "license_id"
-        ):
+        with self.assertRaisesRegex(cmor4.ControlledVocabularyError, "license_id"):
             cmor4.create_dataset(
                 info,
                 variable,
@@ -1032,9 +971,7 @@ class ProjectTablesTest(unittest.TestCase):
             "source_id": "LOCA2-1",
         }
 
-        with self.assertRaisesRegex(
-            cmor4.ControlledVocabularyError, "institution_id"
-        ):
+        with self.assertRaisesRegex(cmor4.ControlledVocabularyError, "institution_id"):
             project.dataset_info(dataset)
 
     def test_parent_experiment_attributes_are_required_by_experiment_cv(self):
@@ -1102,9 +1039,7 @@ class ProjectTablesTest(unittest.TestCase):
         for key, value in cases.items():
             with self.subTest(key=key):
                 with self.assertRaises(cmor4.ControlledVocabularyError):
-                    project.dataset_info(
-                        {**dataset, key: value}
-                    )
+                    project.dataset_info({**dataset, key: value})
 
     def test_cmip7_variable_attrs_come_from_variable_table(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -1144,12 +1079,8 @@ class ProjectTablesTest(unittest.TestCase):
         )
 
         self.assertEqual(ds["tos"].attrs["units"], "degC")
-        self.assertEqual(
-            ds["tos"].attrs["standard_name"], "sea_surface_temperature"
-        )
-        self.assertEqual(
-            ds["tos"].attrs["long_name"], "Sea Surface Temperature"
-        )
+        self.assertEqual(ds["tos"].attrs["standard_name"], "sea_surface_temperature")
+        self.assertEqual(ds["tos"].attrs["long_name"], "Sea Surface Temperature")
         self.assertEqual(
             ds["tos"].attrs["cell_methods"],
             "area: mean where sea time: mean",
@@ -1171,8 +1102,7 @@ class ProjectTablesTest(unittest.TestCase):
                 "nominal_resolution": "500 km",
                 "outpath": tmp_dir,
                 "output_file_template": (
-                    "<variable_id><frequency><source_id><variant_label>"
-                    "<grid_label>"
+                    "<variable_id><frequency><source_id><variant_label>" "<grid_label>"
                 ),
                 "output_path_template": (
                     "<activity_id><institution_id><source_id><frequency>"
@@ -1334,12 +1264,24 @@ class ConstructorTest(unittest.TestCase):
         _write(cv_file, {"CV": {}})
         t1 = self.tmp / "T1.json"
         t2 = self.tmp / "T2.json"
-        _write(t1, {"Header": {"table_id": "T1"}, "variable_entry": {
-            "aa": {"out_name": "aa", "units": "1", "dimensions": []}
-        }})
-        _write(t2, {"Header": {"table_id": "T2"}, "variable_entry": {
-            "bb": {"out_name": "bb", "units": "1", "dimensions": []}
-        }})
+        _write(
+            t1,
+            {
+                "Header": {"table_id": "T1"},
+                "variable_entry": {
+                    "aa": {"out_name": "aa", "units": "1", "dimensions": []}
+                },
+            },
+        )
+        _write(
+            t2,
+            {
+                "Header": {"table_id": "T2"},
+                "variable_entry": {
+                    "bb": {"out_name": "bb", "units": "1", "dimensions": []}
+                },
+            },
+        )
         project = ProjectTables(cv_file, [t1, t2])
         self.assertIn("aa", project.variable_entries)
         self.assertIn("bb", project.variable_entries)
@@ -1351,12 +1293,32 @@ class ConstructorTest(unittest.TestCase):
         _write(cv_file, {"CV": {}})
         t1 = self.tmp / "T1.json"
         t2 = self.tmp / "T2.json"
-        _write(t1, {"Header": {"table_id": "T1"}, "variable_entry": {
-            "pr": {"out_name": "pr_from_t1", "units": "kg m-2 s-1", "dimensions": []}
-        }})
-        _write(t2, {"Header": {"table_id": "T2"}, "variable_entry": {
-            "pr": {"out_name": "pr_from_t2", "units": "mm s-1", "dimensions": []}
-        }})
+        _write(
+            t1,
+            {
+                "Header": {"table_id": "T1"},
+                "variable_entry": {
+                    "pr": {
+                        "out_name": "pr_from_t1",
+                        "units": "kg m-2 s-1",
+                        "dimensions": [],
+                    }
+                },
+            },
+        )
+        _write(
+            t2,
+            {
+                "Header": {"table_id": "T2"},
+                "variable_entry": {
+                    "pr": {
+                        "out_name": "pr_from_t2",
+                        "units": "mm s-1",
+                        "dimensions": [],
+                    }
+                },
+            },
+        )
         project = ProjectTables(cv_file, [t1, t2])
         self.assertEqual(project.variable_entries["pr"].entry["out_name"], "pr_from_t1")
 
@@ -1365,9 +1327,15 @@ class ConstructorTest(unittest.TestCase):
         cv_file = self.tmp / "CV.json"
         vtable = self.tmp / "Amon.json"
         _write(cv_file, {"CV": {}})
-        _write(vtable, {"Header": {"table_id": "Table Amon"}, "variable_entry": {
-            "pr": {"out_name": "pr", "units": "kg m-2 s-1", "dimensions": []}
-        }})
+        _write(
+            vtable,
+            {
+                "Header": {"table_id": "Table Amon"},
+                "variable_entry": {
+                    "pr": {"out_name": "pr", "units": "kg m-2 s-1", "dimensions": []}
+                },
+            },
+        )
         project = ProjectTables(cv_file, [vtable])
         self.assertEqual(project.variable_entries["pr"].table_id, "Amon")
 
@@ -1375,6 +1343,7 @@ class ConstructorTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 2. from_directory
 # ---------------------------------------------------------------------------
+
 
 class FromDirectoryTest(unittest.TestCase):
     def setUp(self):
@@ -1387,19 +1356,32 @@ class FromDirectoryTest(unittest.TestCase):
 
     def _write_standard_files(self, tables_dir: Path) -> None:
         _write(self.tmp / "CV.json", {"CV": {}})
-        _write(tables_dir / "Amon.json", {
-            "Header": {"table_id": "Amon"},
-            "variable_entry": {
-                "pr": {"out_name": "pr", "units": "kg m-2 s-1", "dimensions": ["time"]}
+        _write(
+            tables_dir / "Amon.json",
+            {
+                "Header": {"table_id": "Amon"},
+                "variable_entry": {
+                    "pr": {
+                        "out_name": "pr",
+                        "units": "kg m-2 s-1",
+                        "dimensions": ["time"],
+                    }
+                },
             },
-        })
-        _write(tables_dir / "PROJ_coordinate.json", {"axis_entry": {
-            "time": {"axis": "T", "out_name": "time", "standard_name": "time"}
-        }})
+        )
+        _write(
+            tables_dir / "PROJ_coordinate.json",
+            {
+                "axis_entry": {
+                    "time": {"axis": "T", "out_name": "time", "standard_name": "time"}
+                }
+            },
+        )
         _write(tables_dir / "PROJ_formula_terms.json", {"formula_entry": {}})
-        _write(tables_dir / "PROJ_grids.json", {
-            "axis_entry": {}, "variable_entry": {}, "mapping_entry": {}
-        })
+        _write(
+            tables_dir / "PROJ_grids.json",
+            {"axis_entry": {}, "variable_entry": {}, "mapping_entry": {}},
+        )
 
     def test_explicit_paths_resolve_relative_to_root(self):
         tables_dir = self.tmp / "tables"
@@ -1439,10 +1421,13 @@ class FromDirectoryTest(unittest.TestCase):
         big_tables = self.tmp / "Tables"
         big_tables.mkdir(exist_ok=True)
         _write(self.tmp / "CV.json", {"CV": {}})
-        _write(big_tables / "Amon.json", {
-            "Header": {"table_id": "Amon"},
-            "variable_entry": {},
-        })
+        _write(
+            big_tables / "Amon.json",
+            {
+                "Header": {"table_id": "Amon"},
+                "variable_entry": {},
+            },
+        )
         _write(big_tables / "PROJ_coordinate.json", {"axis_entry": {}})
         project = ProjectTables.from_directory(
             self.tmp,
@@ -1455,9 +1440,14 @@ class FromDirectoryTest(unittest.TestCase):
         tables_dir = self.tmp / "tables"
         self._write_standard_files(tables_dir)
         custom_coord = self.tmp / "custom_coord.json"
-        _write(custom_coord, {"axis_entry": {
-            "custom_axis": {"axis": "X", "out_name": "custom", "units": "m"}
-        }})
+        _write(
+            custom_coord,
+            {
+                "axis_entry": {
+                    "custom_axis": {"axis": "X", "out_name": "custom", "units": "m"}
+                }
+            },
+        )
         project = ProjectTables.from_directory(
             self.tmp,
             cv_file="CV.json",
@@ -1481,6 +1471,7 @@ class FromDirectoryTest(unittest.TestCase):
 # 3. dataset_info
 # ---------------------------------------------------------------------------
 
+
 class DatasetInfoMethodTest(unittest.TestCase):
     def setUp(self):
         self._ctx = tempfile.TemporaryDirectory()
@@ -1491,35 +1482,45 @@ class DatasetInfoMethodTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_returns_dataset_info_instance(self):
-        info = self.project.dataset_info({"activity_id": "CMIP", "institution_id": "NCAR"})
+        info = self.project.dataset_info(
+            {"activity_id": "CMIP", "institution_id": "NCAR"}
+        )
         self.assertIsInstance(info, DatasetInfo)
 
     def test_applies_scalar_cv_default(self):
         # _RICH_CV has "mip_era": "CMIP7" — a scalar default
-        info = self.project.dataset_info({"activity_id": "CMIP", "institution_id": "NCAR"})
+        info = self.project.dataset_info(
+            {"activity_id": "CMIP", "institution_id": "NCAR"}
+        )
         self.assertEqual(info["mip_era"], "CMIP7")
 
     def test_user_values_are_preserved(self):
-        info = self.project.dataset_info({
-            "activity_id": "CMIP",
-            "institution_id": "NCAR",
-            "grid_label": "gn",
-        })
+        info = self.project.dataset_info(
+            {
+                "activity_id": "CMIP",
+                "institution_id": "NCAR",
+                "grid_label": "gn",
+            }
+        )
         self.assertEqual(info["activity_id"], "CMIP")
         self.assertEqual(info["grid_label"], "gn")
 
     def test_institution_text_filled_from_institution_id(self):
-        info = self.project.dataset_info({"activity_id": "CMIP", "institution_id": "NCAR"})
+        info = self.project.dataset_info(
+            {"activity_id": "CMIP", "institution_id": "NCAR"}
+        )
         self.assertIn("institution", info)
         self.assertIn("National Center", info["institution"])
 
     def test_rejects_invalid_activity_id_at_validation(self):
         """dataset_info validates controlled values and rejects unknown ones."""
         with self.assertRaises(ControlledVocabularyError):
-            self.project.dataset_info({
-                "activity_id": "NOT_REAL",
-                "institution_id": "NCAR",
-            })
+            self.project.dataset_info(
+                {
+                    "activity_id": "NOT_REAL",
+                    "institution_id": "NCAR",
+                }
+            )
 
     def test_validate_dataset_enforces_required_attributes(self):
         """validate_dataset (not dataset_info) raises when required attrs are missing."""
@@ -1546,6 +1547,7 @@ class DatasetInfoMethodTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 4. variable
 # ---------------------------------------------------------------------------
+
 
 class VariableMethodTest(unittest.TestCase):
     def setUp(self):
@@ -1607,12 +1609,34 @@ class VariableMethodTest(unittest.TestCase):
         t1 = self.tmp / "A.json"
         t2 = self.tmp / "B.json"
         _write(cv_file, {"CV": {}})
-        _write(t1, {"Header": {"table_id": "A"}, "variable_entry": {
-            "pr": {"out_name": "pr_a", "units": "kg m-2 s-1", "dimensions": [], "frequency": "mon"}
-        }})
-        _write(t2, {"Header": {"table_id": "B"}, "variable_entry": {
-            "pr": {"out_name": "pr_b", "units": "kg m-2 s-1", "dimensions": [], "frequency": "day"}
-        }})
+        _write(
+            t1,
+            {
+                "Header": {"table_id": "A"},
+                "variable_entry": {
+                    "pr": {
+                        "out_name": "pr_a",
+                        "units": "kg m-2 s-1",
+                        "dimensions": [],
+                        "frequency": "mon",
+                    }
+                },
+            },
+        )
+        _write(
+            t2,
+            {
+                "Header": {"table_id": "B"},
+                "variable_entry": {
+                    "pr": {
+                        "out_name": "pr_b",
+                        "units": "kg m-2 s-1",
+                        "dimensions": [],
+                        "frequency": "day",
+                    }
+                },
+            },
+        )
         project = ProjectTables(cv_file, [t1, t2])
         var = project.variable("pr", table_id="B")
         self.assertEqual(var.frequency, "day")
@@ -1627,10 +1651,17 @@ class VariableMethodTest(unittest.TestCase):
         """positive from the table entry is applied to the Variable."""
         tmp2 = Path(self._ctx.name) / "pos"
         tmp2.mkdir()
-        project = _build_project(tmp2, variable_entries={
-            "wap": {"dimensions": [], "out_name": "wap",
-                    "units": "Pa s-1", "positive": "down"},
-        })
+        project = _build_project(
+            tmp2,
+            variable_entries={
+                "wap": {
+                    "dimensions": [],
+                    "out_name": "wap",
+                    "units": "Pa s-1",
+                    "positive": "down",
+                },
+            },
+        )
         var = project.variable("wap")
         self.assertEqual(var.positive, "down")
 
@@ -1638,10 +1669,17 @@ class VariableMethodTest(unittest.TestCase):
         """positive from the table is written to NetCDF output attributes."""
         tmp2 = Path(self._ctx.name) / "posattr"
         tmp2.mkdir()
-        project = _build_project(tmp2, variable_entries={
-            "wap": {"dimensions": [], "out_name": "wap",
-                    "units": "Pa s-1", "positive": "down"},
-        })
+        project = _build_project(
+            tmp2,
+            variable_entries={
+                "wap": {
+                    "dimensions": [],
+                    "out_name": "wap",
+                    "units": "Pa s-1",
+                    "positive": "down",
+                },
+            },
+        )
         var = project.variable("wap")
         _, labels = var.names()
         attrs = var.attributes(labels)
@@ -1655,6 +1693,7 @@ class VariableMethodTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # positive field validation
 # ---------------------------------------------------------------------------
+
 
 class PositiveValidationTest(unittest.TestCase):
     """Tests for the 'positive' attribute validation in validate_against_entry
@@ -1776,18 +1815,14 @@ class PositiveValidationTest(unittest.TestCase):
     def test_required_positive_absent_raises(self):
         """positive in required field → must be provided."""
         with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_components(
-                None, Variable(name="wap"), []
-            )
+            self.project.validate_components(None, Variable(name="wap"), [])
         msg = str(ctx.exception)
         self.assertIn("positive", msg)
         self.assertIn("requires", msg)
 
     def test_required_positive_error_names_table_and_variable(self):
         with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_components(
-                None, Variable(name="wap"), []
-            )
+            self.project.validate_components(None, Variable(name="wap"), [])
         msg = str(ctx.exception)
         self.assertIn("wap", msg)
         self.assertIn("Amon", msg)
@@ -1805,14 +1840,10 @@ class PositiveValidationTest(unittest.TestCase):
 
     def test_optional_positive_absent_passes(self):
         """positive not in required → omitting it is fine."""
-        self.project.validate_components(
-            None, Variable(name="ua"), []
-        )
+        self.project.validate_components(None, Variable(name="ua"), [])
 
     def test_optional_positive_correct_value_passes(self):
-        self.project.validate_components(
-            None, Variable(name="ua", positive="up"), []
-        )
+        self.project.validate_components(None, Variable(name="ua", positive="up"), [])
 
     def test_optional_positive_wrong_value_raises(self):
         """Even for optional positive, the value must match the table."""
@@ -1826,15 +1857,11 @@ class PositiveValidationTest(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_no_positive_in_table_no_positive_provided_passes(self):
-        self.project.validate_components(
-            None, Variable(name="tas"), []
-        )
+        self.project.validate_components(None, Variable(name="tas"), [])
 
     def test_no_positive_in_table_positive_provided_passes(self):
         """No table constraint → any valid value is accepted."""
-        self.project.validate_components(
-            None, Variable(name="tas", positive="up"), []
-        )
+        self.project.validate_components(None, Variable(name="tas", positive="up"), [])
 
     # ------------------------------------------------------------------
     # project.variable() round-trip through validate_components
@@ -1861,9 +1888,9 @@ class UnitsConvertibilityTest(unittest.TestCase):
             self.tmp,
             variable_entries={
                 "tas": {"dimensions": [], "out_name": "tas", "units": "K"},
-                "pr":  {"dimensions": [], "out_name": "pr",  "units": "kg m-2 s-1"},
+                "pr": {"dimensions": [], "out_name": "pr", "units": "kg m-2 s-1"},
                 "wap": {"dimensions": [], "out_name": "wap", "units": "Pa s-1"},
-                "wc":  {"dimensions": [], "out_name": "wc",  "units": "?"},
+                "wc": {"dimensions": [], "out_name": "wc", "units": "?"},
             },
         )
 
@@ -1877,25 +1904,17 @@ class UnitsConvertibilityTest(unittest.TestCase):
     # --- exact-match always works ---
 
     def test_exact_unit_match_passes(self):
-        self.project.validate_components(
-            None, Variable(name="tas", units="K"), []
-        )
+        self.project.validate_components(None, Variable(name="tas", units="K"), [])
 
     def test_no_user_units_skips_check(self):
-        self.project.validate_components(
-            None, Variable(name="tas"), []
-        )
+        self.project.validate_components(None, Variable(name="tas"), [])
 
     def test_wildcard_table_units_accepts_any_user_units(self):
         """Table units '?' means accept any user-supplied units."""
-        self.project.validate_components(
-            None, Variable(name="wc", units="hPa"), []
-        )
+        self.project.validate_components(None, Variable(name="wc", units="hPa"), [])
 
     def test_wildcard_table_units_accepts_no_user_units(self):
-        self.project.validate_components(
-            None, Variable(name="wc"), []
-        )
+        self.project.validate_components(None, Variable(name="wc"), [])
 
     # --- incompatible units always fail ---
 
@@ -1919,9 +1938,7 @@ class UnitsConvertibilityTest(unittest.TestCase):
 
     def test_pressure_incompatible_with_temperature_raises(self):
         with self.assertRaises(TableValidationError):
-            self.project.validate_components(
-                None, Variable(name="tas", units="Pa"), []
-            )
+            self.project.validate_components(None, Variable(name="tas", units="Pa"), [])
 
     # --- equivalent units pass when cf_units is available ---
 
@@ -1929,9 +1946,7 @@ class UnitsConvertibilityTest(unittest.TestCase):
         """degC and K are dimensionally convertible (temperature offset)."""
         if not self._cf_units_available():
             self.skipTest("cf_units not installed")
-        self.project.validate_components(
-            None, Variable(name="tas", units="degC"), []
-        )
+        self.project.validate_components(None, Variable(name="tas", units="degC"), [])
 
     def test_hPa_accepted_for_Pa_table(self):
         if not self._cf_units_available():
@@ -1944,9 +1959,7 @@ class UnitsConvertibilityTest(unittest.TestCase):
         """K and kelvin are the same unit with different string representations."""
         if not self._cf_units_available():
             self.skipTest("cf_units not installed")
-        self.project.validate_components(
-            None, Variable(name="tas", units="kelvin"), []
-        )
+        self.project.validate_components(None, Variable(name="tas", units="kelvin"), [])
 
 
 class RequiredAttributesTest(unittest.TestCase):
@@ -1969,20 +1982,26 @@ class RequiredAttributesTest(unittest.TestCase):
             variable_entries={
                 # two required attrs
                 "ua": {
-                    "dimensions": [], "out_name": "ua", "units": "m s-1",
+                    "dimensions": [],
+                    "out_name": "ua",
+                    "units": "m s-1",
                     "required": "standard_name long_name",
                     "standard_name": "eastward_wind",
                     "long_name": "Eastward Wind",
                 },
                 # required attr with no table value → no check possible
                 "va": {
-                    "dimensions": [], "out_name": "va", "units": "m s-1",
+                    "dimensions": [],
+                    "out_name": "va",
+                    "units": "m s-1",
                     "required": "comment",
                     # comment has no value in the table entry
                 },
                 # no required field at all
                 "tas": {
-                    "dimensions": [], "out_name": "tas", "units": "K",
+                    "dimensions": [],
+                    "out_name": "tas",
+                    "units": "K",
                     "standard_name": "air_temperature",
                 },
             },
@@ -1996,22 +2015,18 @@ class RequiredAttributesTest(unittest.TestCase):
     def test_all_required_attrs_present_passes(self):
         self.project.validate_components(
             None,
-            Variable(name="ua",
-                     standard_name="eastward_wind",
-                     long_name="Eastward Wind"),
+            Variable(
+                name="ua", standard_name="eastward_wind", long_name="Eastward Wind"
+            ),
             [],
         )
 
     def test_no_required_field_in_table_always_passes(self):
-        self.project.validate_components(
-            None, Variable(name="tas"), []
-        )
+        self.project.validate_components(None, Variable(name="tas"), [])
 
     def test_required_attr_without_table_value_not_enforced(self):
         """'required: comment' when the table has no comment value → no check."""
-        self.project.validate_components(
-            None, Variable(name="va"), []
-        )
+        self.project.validate_components(None, Variable(name="va"), [])
 
     # --- missing required attr raises ---
 
@@ -2036,9 +2051,7 @@ class RequiredAttributesTest(unittest.TestCase):
 
     def test_error_names_table_and_variable(self):
         with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_components(
-                None, Variable(name="ua"), []
-            )
+            self.project.validate_components(None, Variable(name="ua"), [])
         msg = str(ctx.exception)
         self.assertIn("Amon", msg)
         self.assertIn("ua", msg)
@@ -2055,9 +2068,7 @@ class RequiredAttributesTest(unittest.TestCase):
     def test_all_missing_raises_on_first(self):
         """When both required attrs are missing only the first is reported."""
         with self.assertRaises(TableValidationError):
-            self.project.validate_components(
-                None, Variable(name="ua"), []
-            )
+            self.project.validate_components(None, Variable(name="ua"), [])
 
     def test_project_variable_includes_required_attrs(self):
         """project.variable() merges table attrs so required check passes."""
@@ -2081,25 +2092,31 @@ class FlagConsistencyTest(unittest.TestCase):
             variable_entries={
                 # valid: counts match
                 "biome": {
-                    "dimensions": [], "out_name": "biome", "units": "1",
+                    "dimensions": [],
+                    "out_name": "biome",
+                    "units": "1",
                     "flag_values": "1 2 3",
                     "flag_meanings": "forest grassland desert",
                 },
                 # invalid: 3 values but 2 meanings
                 "biome_short": {
-                    "dimensions": [], "out_name": "biome_short", "units": "1",
+                    "dimensions": [],
+                    "out_name": "biome_short",
+                    "units": "1",
                     "flag_values": "1 2 3",
                     "flag_meanings": "forest grassland",
                 },
                 # invalid: flag_values present, flag_meanings absent
                 "biome_no_meanings": {
-                    "dimensions": [], "out_name": "biome_no_meanings",
+                    "dimensions": [],
+                    "out_name": "biome_no_meanings",
                     "units": "1",
                     "flag_values": "1 2 3",
                 },
                 # invalid: flag_meanings present, flag_values absent
                 "biome_no_values": {
-                    "dimensions": [], "out_name": "biome_no_values",
+                    "dimensions": [],
+                    "out_name": "biome_no_values",
                     "units": "1",
                     "flag_meanings": "forest grassland desert",
                 },
@@ -2107,7 +2124,9 @@ class FlagConsistencyTest(unittest.TestCase):
                 "tas": {"dimensions": [], "out_name": "tas", "units": "K"},
                 # single-flag edge case
                 "binary": {
-                    "dimensions": [], "out_name": "binary", "units": "1",
+                    "dimensions": [],
+                    "out_name": "binary",
+                    "units": "1",
                     "flag_values": "0",
                     "flag_meanings": "off",
                 },
@@ -2154,19 +2173,13 @@ class FlagConsistencyTest(unittest.TestCase):
     # --- happy paths ---
 
     def test_matching_token_counts_passes(self):
-        self.project.validate_components(
-            None, self.project.variable("biome"), []
-        )
+        self.project.validate_components(None, self.project.variable("biome"), [])
 
     def test_single_flag_pair_passes(self):
-        self.project.validate_components(
-            None, self.project.variable("binary"), []
-        )
+        self.project.validate_components(None, self.project.variable("binary"), [])
 
     def test_no_flags_in_table_passes(self):
-        self.project.validate_components(
-            None, self.project.variable("tas"), []
-        )
+        self.project.validate_components(None, self.project.variable("tas"), [])
 
     # --- mismatch raises ---
 
@@ -2185,8 +2198,8 @@ class FlagConsistencyTest(unittest.TestCase):
                 None, self.project.variable("biome_short"), []
             )
         msg = str(ctx.exception)
-        self.assertIn("3", msg)   # flag_values count
-        self.assertIn("2", msg)   # flag_meanings count
+        self.assertIn("3", msg)  # flag_values count
+        self.assertIn("2", msg)  # flag_meanings count
 
     def test_flag_values_without_flag_meanings_raises(self):
         with self.assertRaises(TableValidationError) as ctx:
@@ -2217,6 +2230,7 @@ class FlagConsistencyTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 5. axis
 # ---------------------------------------------------------------------------
+
 
 class AxisMethodTest(unittest.TestCase):
     def setUp(self):
@@ -2287,6 +2301,7 @@ class AxisMethodTest(unittest.TestCase):
 # 6. scalar_axes_for
 # ---------------------------------------------------------------------------
 
+
 class ScalarAxesForTest(unittest.TestCase):
     def setUp(self):
         self._ctx = tempfile.TemporaryDirectory()
@@ -2298,8 +2313,12 @@ class ScalarAxesForTest(unittest.TestCase):
 
     def _base_axes(self):
         return [
-            self.project.axis("time", values=[15.0], bounds=[[0.0, 30.0]],
-                              units="days since 2000-01-01"),
+            self.project.axis(
+                "time",
+                values=[15.0],
+                bounds=[[0.0, 30.0]],
+                units="days since 2000-01-01",
+            ),
             self.project.axis("lat", values=[-45.0, 45.0]),
             self.project.axis("lon", values=[90.0, 270.0]),
         ]
@@ -2354,6 +2373,7 @@ class ScalarAxesForTest(unittest.TestCase):
 # 7. complete_axes
 # ---------------------------------------------------------------------------
 
+
 class CompleteAxesTest(unittest.TestCase):
     def setUp(self):
         self._ctx = tempfile.TemporaryDirectory()
@@ -2365,8 +2385,12 @@ class CompleteAxesTest(unittest.TestCase):
 
     def _base_axes(self):
         return [
-            self.project.axis("time", values=[15.0], bounds=[[0.0, 30.0]],
-                              units="days since 2000-01-01"),
+            self.project.axis(
+                "time",
+                values=[15.0],
+                bounds=[[0.0, 30.0]],
+                units="days since 2000-01-01",
+            ),
             self.project.axis("lat", values=[-45.0, 45.0]),
             self.project.axis("lon", values=[90.0, 270.0]),
         ]
@@ -2409,8 +2433,12 @@ class CompleteAxesTest(unittest.TestCase):
         pr = self.project.variable("pr")
         raw_lat = Axis(name="lat", values=[-45.0, 45.0])
         axes = [
-            self.project.axis("time", values=[15.0], bounds=[[0.0, 30.0]],
-                              units="days since 2000-01-01"),
+            self.project.axis(
+                "time",
+                values=[15.0],
+                bounds=[[0.0, 30.0]],
+                units="days since 2000-01-01",
+            ),
             raw_lat,
             self.project.axis("lon", values=[90.0, 270.0]),
         ]
@@ -2429,6 +2457,7 @@ class CompleteAxesTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 8. grid
 # ---------------------------------------------------------------------------
+
 
 class GridMethodTest(unittest.TestCase):
     def setUp(self):
@@ -2484,6 +2513,7 @@ class GridMethodTest(unittest.TestCase):
 # 9. zfactor
 # ---------------------------------------------------------------------------
 
+
 class ZFactorMethodTest(unittest.TestCase):
     def setUp(self):
         self._ctx = tempfile.TemporaryDirectory()
@@ -2537,6 +2567,7 @@ class ZFactorMethodTest(unittest.TestCase):
 # ZFactor units convertibility
 # ---------------------------------------------------------------------------
 
+
 class ZFactorUnitsConvertibilityTest(unittest.TestCase):
     """Tests for ZFactor units validation using dimensional convertibility.
 
@@ -2550,10 +2581,16 @@ class ZFactorUnitsConvertibilityTest(unittest.TestCase):
         self.project = _build_project(
             self.tmp,
             formula_entries={
-                "ps": {"units": "Pa", "standard_name": "surface_air_pressure",
-                       "out_name": "ps"},
-                "temp": {"units": "K", "standard_name": "air_temperature",
-                         "out_name": "temp"},
+                "ps": {
+                    "units": "Pa",
+                    "standard_name": "surface_air_pressure",
+                    "out_name": "ps",
+                },
+                "temp": {
+                    "units": "K",
+                    "standard_name": "air_temperature",
+                    "out_name": "temp",
+                },
             },
         )
         self.var = self.project.variable("pr")
@@ -2610,6 +2647,7 @@ class ZFactorUnitsConvertibilityTest(unittest.TestCase):
 # ZFactor scalar enforcement (p0)
 # ---------------------------------------------------------------------------
 
+
 class ZFactorScalarTest(unittest.TestCase):
     """Tests for the rule that formula terms with no declared dimensions must
     supply scalar (0-dimensional) values.
@@ -2625,11 +2663,18 @@ class ZFactorScalarTest(unittest.TestCase):
             self.tmp,
             formula_entries={
                 # p0: no dimensions — must be scalar
-                "p0": {"units": "Pa", "standard_name": "reference_air_pressure",
-                       "out_name": "p0"},
+                "p0": {
+                    "units": "Pa",
+                    "standard_name": "reference_air_pressure",
+                    "out_name": "p0",
+                },
                 # ap: has dimensions — array is fine
-                "ap": {"units": "Pa", "standard_name": "vertical_pressure",
-                       "out_name": "ap", "dimensions": "lev"},
+                "ap": {
+                    "units": "Pa",
+                    "standard_name": "vertical_pressure",
+                    "out_name": "ap",
+                    "dimensions": "lev",
+                },
             },
         )
         self.var = self.project.variable("pr")
@@ -2646,8 +2691,10 @@ class ZFactorScalarTest(unittest.TestCase):
 
     def test_zero_dimensional_array_passes(self):
         self.project.validate_components(
-            None, self.var, [],
-            zfactors=[ZFactor(name="p0", values=np.float64(100000.0))]
+            None,
+            self.var,
+            [],
+            zfactors=[ZFactor(name="p0", values=np.float64(100000.0))],
         )
 
     def test_no_values_provided_skips_check(self):
@@ -2659,15 +2706,19 @@ class ZFactorScalarTest(unittest.TestCase):
     def test_formula_term_with_dimensions_accepts_array(self):
         """ap declares dimensions in the table — a 1-D array is correct."""
         self.project.validate_components(
-            None, self.var, [],
-            zfactors=[ZFactor(name="ap", values=np.ones(5), units="Pa")]
+            None,
+            self.var,
+            [],
+            zfactors=[ZFactor(name="ap", values=np.ones(5), units="Pa")],
         )
 
     def test_unknown_formula_term_accepts_array(self):
         """ZFactor not in the formula table is not checked."""
         self.project.validate_components(
-            None, self.var, [],
-            zfactors=[ZFactor(name="unknown", values=np.ones((3, 4)))]
+            None,
+            self.var,
+            [],
+            zfactors=[ZFactor(name="unknown", values=np.ones((3, 4)))],
         )
 
     # --- array values raise ---
@@ -2675,8 +2726,7 @@ class ZFactorScalarTest(unittest.TestCase):
     def test_one_dimensional_array_raises(self):
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_components(
-                None, self.var, [],
-                zfactors=[ZFactor(name="p0", values=np.ones(3))]
+                None, self.var, [], zfactors=[ZFactor(name="p0", values=np.ones(3))]
             )
         msg = str(ctx.exception)
         self.assertIn("p0", msg)
@@ -2685,8 +2735,10 @@ class ZFactorScalarTest(unittest.TestCase):
     def test_two_dimensional_array_raises(self):
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_components(
-                None, self.var, [],
-                zfactors=[ZFactor(name="p0", values=np.ones((2, 3)))]
+                None,
+                self.var,
+                [],
+                zfactors=[ZFactor(name="p0", values=np.ones((2, 3)))],
             )
         msg = str(ctx.exception)
         self.assertIn("(2, 3)", msg)
@@ -2694,16 +2746,14 @@ class ZFactorScalarTest(unittest.TestCase):
     def test_error_names_the_formula_term(self):
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_components(
-                None, self.var, [],
-                zfactors=[ZFactor(name="p0", values=np.ones(3))]
+                None, self.var, [], zfactors=[ZFactor(name="p0", values=np.ones(3))]
             )
         self.assertIn("p0", str(ctx.exception))
 
     def test_error_reports_actual_shape(self):
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_components(
-                None, self.var, [],
-                zfactors=[ZFactor(name="p0", values=np.ones((4,)))]
+                None, self.var, [], zfactors=[ZFactor(name="p0", values=np.ones((4,)))]
             )
         self.assertIn("(4,)", str(ctx.exception))
 
@@ -2711,6 +2761,7 @@ class ZFactorScalarTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 10. validate_global_attributes
 # ---------------------------------------------------------------------------
+
 
 class ValidateGlobalAttributesTest(unittest.TestCase):
     def setUp(self):
@@ -2757,6 +2808,7 @@ class ValidateGlobalAttributesTest(unittest.TestCase):
 # 11. validate_dataset
 # ---------------------------------------------------------------------------
 
+
 class ValidateDatasetTest(unittest.TestCase):
     def setUp(self):
         self._ctx = tempfile.TemporaryDirectory()
@@ -2771,10 +2823,12 @@ class ValidateDatasetTest(unittest.TestCase):
 
     def test_invalid_controlled_value_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_dataset({
-                "activity_id": "INVALID",
-                "institution_id": "NCAR",
-            })
+            self.project.validate_dataset(
+                {
+                    "activity_id": "INVALID",
+                    "institution_id": "NCAR",
+                }
+            )
 
     def test_missing_required_attribute_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
@@ -2782,10 +2836,12 @@ class ValidateDatasetTest(unittest.TestCase):
         self.assertIn("institution_id", str(ctx.exception))
 
     def test_returns_none_on_success(self):
-        result = self.project.validate_dataset({
-            "activity_id": "CMIP",
-            "institution_id": "NCAR",
-        })
+        result = self.project.validate_dataset(
+            {
+                "activity_id": "CMIP",
+                "institution_id": "NCAR",
+            }
+        )
         self.assertIsNone(result)
 
     def test_empty_cv_accepts_any_values(self):
@@ -2800,16 +2856,19 @@ class ValidateDatasetTest(unittest.TestCase):
     def test_invalid_source_type_raises(self):
         """source_type is a multi-token field validated against the CV."""
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_dataset({
-                "activity_id": "CMIP",
-                "institution_id": "NCAR",
-                "source_type": "NOT_A_REAL_TYPE",
-            })
+            self.project.validate_dataset(
+                {
+                    "activity_id": "CMIP",
+                    "institution_id": "NCAR",
+                    "source_type": "NOT_A_REAL_TYPE",
+                }
+            )
 
 
 # ---------------------------------------------------------------------------
 # 12. validate_required_global_attributes
 # ---------------------------------------------------------------------------
+
 
 class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
     def setUp(self):
@@ -2821,16 +2880,20 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_all_required_present_passes(self):
-        self.project.validate_required_global_attributes({
-            "activity_id": "CMIP",
-            "institution_id": "NCAR",
-        })
+        self.project.validate_required_global_attributes(
+            {
+                "activity_id": "CMIP",
+                "institution_id": "NCAR",
+            }
+        )
 
     def test_missing_required_attribute_raises_with_name(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_required_global_attributes({
-                "activity_id": "CMIP",
-            })
+            self.project.validate_required_global_attributes(
+                {
+                    "activity_id": "CMIP",
+                }
+            )
         self.assertIn("institution_id", str(ctx.exception))
 
     def test_both_missing_raises(self):
@@ -2839,16 +2902,20 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
 
     def test_empty_string_counts_as_missing(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_required_global_attributes({
-                "activity_id": "CMIP",
-                "institution_id": "",
-            })
+            self.project.validate_required_global_attributes(
+                {
+                    "activity_id": "CMIP",
+                    "institution_id": "",
+                }
+            )
 
     def test_returns_none_on_success(self):
-        result = self.project.validate_required_global_attributes({
-            "activity_id": "CMIP",
-            "institution_id": "NCAR",
-        })
+        result = self.project.validate_required_global_attributes(
+            {
+                "activity_id": "CMIP",
+                "institution_id": "NCAR",
+            }
+        )
         self.assertIsNone(result)
 
     def test_no_required_attributes_always_passes(self):
@@ -2863,6 +2930,7 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 13. required_global_attributes
 # ---------------------------------------------------------------------------
+
 
 class RequiredGlobalAttributesTest(unittest.TestCase):
     def setUp(self):
@@ -2900,6 +2968,7 @@ class RequiredGlobalAttributesTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 14. validate_experiment
 # ---------------------------------------------------------------------------
+
 
 class ValidateExperimentTest(unittest.TestCase):
     def setUp(self):
@@ -2940,36 +3009,47 @@ class ValidateExperimentTest(unittest.TestCase):
         # Build a project where BGC is excluded from additional_allowed:
         cv_file = self.tmp / "CV_strict.json"
         vtable = self.tmp / "V_strict.json"
-        _write(cv_file, {"CV": {
-            "experiment_id": {
-                "historical": {
-                    "required_source_type": ["AOGCM"],
-                    "additional_allowed_model_components": ["AER"],
-                    # BGC intentionally omitted
-                },
+        _write(
+            cv_file,
+            {
+                "CV": {
+                    "experiment_id": {
+                        "historical": {
+                            "required_source_type": ["AOGCM"],
+                            "additional_allowed_model_components": ["AER"],
+                            # BGC intentionally omitted
+                        },
+                    },
+                }
             },
-        }})
+        )
         _write(vtable, {"Header": {"table_id": "t"}, "variable_entry": {}})
         project = ProjectTables(cv_file, [vtable])
         with self.assertRaises(ControlledVocabularyError):
-            project.validate_experiment({
-                "experiment_id": "historical",
-                "source_type": "AOGCM BGC",
-            })
+            project.validate_experiment(
+                {
+                    "experiment_id": "historical",
+                    "source_type": "AOGCM BGC",
+                }
+            )
 
     def test_valid_additional_allowed_source_type_passes(self):
-        self.project.validate_experiment({
-            "experiment_id": "historical",
-            "source_type": "AOGCM AER",
-        })
+        self.project.validate_experiment(
+            {
+                "experiment_id": "historical",
+                "source_type": "AOGCM AER",
+            }
+        )
 
     def test_wrong_activity_id_for_experiment_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_experiment({
-                "experiment_id": "historical",
-                "source_type": "AOGCM",
-                "activity_id": "ScenarioMIP",  # historical requires CMIP
-            })
+            self.project.validate_experiment(
+                {
+                    "experiment_id": "historical",
+                    "source_type": "AOGCM",
+                    "activity_id": "ScenarioMIP",  # historical requires CMIP
+                }
+            )
 
     def test_parent_attribute_on_no_parent_experiment_raises(self):
         """amip has no parent_experiment_id CV entry.  validate_parent_attributes
@@ -2977,10 +3057,12 @@ class ValidateExperimentTest(unittest.TestCase):
         validate_experiment itself does not perform this check."""
         # verify the correct method rejects it
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_parent_attributes({
-                "experiment_id": "amip",
-                "parent_experiment_id": "piControl",
-            })
+            self.project.validate_parent_attributes(
+                {
+                    "experiment_id": "amip",
+                    "parent_experiment_id": "piControl",
+                }
+            )
         self.assertIn("parent_experiment_id", str(ctx.exception))
 
     def test_returns_none_on_success(self):
@@ -2991,6 +3073,7 @@ class ValidateExperimentTest(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 15. validate_source_type
 # ---------------------------------------------------------------------------
+
 
 class ValidateSourceTypeTest(unittest.TestCase):
     def setUp(self):
@@ -3041,16 +3124,12 @@ class ValidateSourceTypeTest(unittest.TestCase):
             # BGC deliberately excluded
         }
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_source_type(
-                {"source_type": "AOGCM BGC"}, exp_entry
-            )
+            self.project.validate_source_type({"source_type": "AOGCM BGC"}, exp_entry)
         self.assertIn("not allowed", str(ctx.exception))
 
     def test_empty_experiment_entry_is_no_op(self):
         """When experiment has no required/additional source type, no error."""
-        self.project.validate_source_type(
-            {"source_type": "ANYTHING"}, {}
-        )
+        self.project.validate_source_type({"source_type": "ANYTHING"}, {})
 
     def test_returns_none_on_success(self):
         result = self.project.validate_source_type(
@@ -3063,6 +3142,7 @@ class ValidateSourceTypeTest(unittest.TestCase):
 # 16. validate_source_attributes
 # ---------------------------------------------------------------------------
 
+
 class ValidateSourceAttributesTest(unittest.TestCase):
     def setUp(self):
         self._ctx = tempfile.TemporaryDirectory()
@@ -3073,18 +3153,22 @@ class ValidateSourceAttributesTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_valid_source_attributes_pass(self):
-        self.project.validate_source_attributes({
-            "source_id": "CESM2",
-            "institution_id": "NCAR",
-            "source_type": "AOGCM",
-        })
+        self.project.validate_source_attributes(
+            {
+                "source_id": "CESM2",
+                "institution_id": "NCAR",
+                "source_type": "AOGCM",
+            }
+        )
 
     def test_wrong_institution_for_source_id_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_source_attributes({
-                "source_id": "CESM2",
-                "institution_id": "ECMWF",
-            })
+            self.project.validate_source_attributes(
+                {
+                    "source_id": "CESM2",
+                    "institution_id": "ECMWF",
+                }
+            )
         self.assertIn("institution_id", str(ctx.exception))
 
     def test_no_source_id_is_no_op(self):
@@ -3093,37 +3177,46 @@ class ValidateSourceAttributesTest(unittest.TestCase):
 
     def test_unknown_source_id_is_no_op(self):
         """source_id not in CV: nothing to cross-check."""
-        self.project.validate_source_attributes({
-            "source_id": "TOTALLY_UNKNOWN",
-            "institution_id": "ANY",
-        })
+        self.project.validate_source_attributes(
+            {
+                "source_id": "TOTALLY_UNKNOWN",
+                "institution_id": "ANY",
+            }
+        )
 
     def test_source_id_with_correct_source_type_passes(self):
-        self.project.validate_source_attributes({
-            "source_id": "CESM2",
-            "institution_id": "NCAR",
-            "source_type": "AOGCM",
-        })
+        self.project.validate_source_attributes(
+            {
+                "source_id": "CESM2",
+                "institution_id": "NCAR",
+                "source_type": "AOGCM",
+            }
+        )
 
     def test_source_id_with_wrong_source_type_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_source_attributes({
-                "source_id": "CESM2",
-                "institution_id": "NCAR",
-                "source_type": "AER",  # CESM2 must be AOGCM
-            })
+            self.project.validate_source_attributes(
+                {
+                    "source_id": "CESM2",
+                    "institution_id": "NCAR",
+                    "source_type": "AER",  # CESM2 must be AOGCM
+                }
+            )
 
     def test_returns_none_on_success(self):
-        result = self.project.validate_source_attributes({
-            "source_id": "DUMMY",
-            "institution_id": "NCAR",
-        })
+        result = self.project.validate_source_attributes(
+            {
+                "source_id": "DUMMY",
+                "institution_id": "NCAR",
+            }
+        )
         self.assertIsNone(result)
 
 
 # ---------------------------------------------------------------------------
 # 17. validate_parent_attributes
 # ---------------------------------------------------------------------------
+
 
 class ValidateParentAttributesTest(unittest.TestCase):
     def setUp(self):
@@ -3166,10 +3259,12 @@ class ValidateParentAttributesTest(unittest.TestCase):
 
     def test_supplying_parent_to_no_parent_experiment_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_parent_attributes({
-                "experiment_id": "amip",
-                "parent_experiment_id": "piControl",
-            })
+            self.project.validate_parent_attributes(
+                {
+                    "experiment_id": "amip",
+                    "parent_experiment_id": "piControl",
+                }
+            )
         self.assertIn("parent_experiment_id", str(ctx.exception))
 
     def test_missing_parent_experiment_id_raises(self):
@@ -3220,16 +3315,19 @@ class ValidateParentAttributesTest(unittest.TestCase):
         """Supplying any parent-related attribute when experiment has no parent
         must raise."""
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_parent_attributes({
-                "experiment_id": "amip",
-                "parent_activity_id": "CMIP",
-            })
+            self.project.validate_parent_attributes(
+                {
+                    "experiment_id": "amip",
+                    "parent_activity_id": "CMIP",
+                }
+            )
 
 
 # ---------------------------------------------------------------------------
 # 18. validate_components — integration / cross-method scenarios
 # (primary unit tests in test_validate_components.py)
 # ---------------------------------------------------------------------------
+
 
 class ValidateComponentsIntegrationTest(unittest.TestCase):
     """Scenarios that exercise validate_components together with factory methods."""
@@ -3244,9 +3342,12 @@ class ValidateComponentsIntegrationTest(unittest.TestCase):
 
     def _base_axes(self):
         return [
-            self.project.axis("time", values=[15.0, 45.0],
-                              bounds=[[0.0, 30.0], [30.0, 60.0]],
-                              units="days since 2000-01-01"),
+            self.project.axis(
+                "time",
+                values=[15.0, 45.0],
+                bounds=[[0.0, 30.0], [30.0, 60.0]],
+                units="days since 2000-01-01",
+            ),
             self.project.axis("lat", values=[-45.0, 45.0]),
             self.project.axis("lon", values=[90.0, 270.0]),
         ]
@@ -3308,19 +3409,27 @@ class StoredDirectionTest(unittest.TestCase):
             coordinate_entries={
                 "time": {"axis": "T", "out_name": "time"},
                 "plev": {
-                    "axis": "Z", "units": "Pa",
-                    "standard_name": "air_pressure", "out_name": "plev",
-                    "positive": "down", "stored_direction": "decreasing",
-                    "valid_min": "100.0", "valid_max": "92500.0",
+                    "axis": "Z",
+                    "units": "Pa",
+                    "standard_name": "air_pressure",
+                    "out_name": "plev",
+                    "positive": "down",
+                    "stored_direction": "decreasing",
+                    "valid_min": "100.0",
+                    "valid_max": "92500.0",
                 },
                 "lev": {
-                    "axis": "Z", "units": "m",
-                    "standard_name": "depth", "out_name": "lev",
+                    "axis": "Z",
+                    "units": "m",
+                    "standard_name": "depth",
+                    "out_name": "lev",
                     "stored_direction": "increasing",
                 },
                 "lat": {
-                    "axis": "Y", "units": "degrees_north",
-                    "standard_name": "latitude", "out_name": "lat",
+                    "axis": "Y",
+                    "units": "degrees_north",
+                    "standard_name": "latitude",
+                    "out_name": "lat",
                 },
             },
         )
@@ -3388,6 +3497,7 @@ class StoredDirectionTest(unittest.TestCase):
     def test_raw_axis_with_wrong_direction_raises_on_early_validation(self):
         """An unprepared Axis with stored_direction set is also validated."""
         from cmor4._axis_validation import validate_axis_values_early
+
         raw = Axis(
             name="plev",
             values=[10000.0, 50000.0, 92500.0],
@@ -3399,6 +3509,7 @@ class StoredDirectionTest(unittest.TestCase):
 
     def test_raw_axis_correct_direction_passes_early_validation(self):
         from cmor4._axis_validation import validate_axis_values_early
+
         raw = Axis(
             name="plev",
             values=[92500.0, 50000.0, 10000.0],
@@ -3424,19 +3535,24 @@ class MustHaveBoundsTest(unittest.TestCase):
             variable_entries={
                 "pr": {
                     "dimensions": ["time", "lat", "lon"],
-                    "out_name": "pr", "units": "kg m-2 s-1",
+                    "out_name": "pr",
+                    "units": "kg m-2 s-1",
                 }
             },
             coordinate_entries={
                 "time": {"axis": "T", "out_name": "time"},
                 "lat": {
-                    "axis": "Y", "units": "degrees_north",
-                    "standard_name": "latitude", "out_name": "lat",
+                    "axis": "Y",
+                    "units": "degrees_north",
+                    "standard_name": "latitude",
+                    "out_name": "lat",
                     "must_have_bounds": "1",
                 },
                 "lon": {
-                    "axis": "X", "units": "degrees_east",
-                    "standard_name": "longitude", "out_name": "lon",
+                    "axis": "X",
+                    "units": "degrees_east",
+                    "standard_name": "longitude",
+                    "out_name": "lon",
                 },
             },
         )
@@ -3446,7 +3562,9 @@ class MustHaveBoundsTest(unittest.TestCase):
 
     def _base_axes(self, lat_bounds=True):
         time = self.project.axis(
-            "time", values=[15.0], bounds=[[0.0, 30.0]],
+            "time",
+            values=[15.0],
+            bounds=[[0.0, 30.0]],
             units="days since 2000-01-01",
         )
         lat_kwargs = dict(values=[-45.0, 45.0])
@@ -3454,7 +3572,9 @@ class MustHaveBoundsTest(unittest.TestCase):
             lat_kwargs["bounds"] = [[-90.0, 0.0], [0.0, 90.0]]
         lat = self.project.axis("lat", **lat_kwargs)
         lon = self.project.axis(
-            "lon", values=[90.0, 270.0], bounds=[[0.0, 180.0], [180.0, 360.0]],
+            "lon",
+            values=[90.0, 270.0],
+            bounds=[[0.0, 180.0], [180.0, 360.0]],
         )
         return [time, lat, lon]
 
@@ -3475,7 +3595,9 @@ class MustHaveBoundsTest(unittest.TestCase):
         """must_have_bounds is enforced even when dataset=None."""
         var = self.project.variable("pr")
         with self.assertRaises(AxisValidationError) as ctx:
-            self.project.validate_components(None, var, self._base_axes(lat_bounds=False))
+            self.project.validate_components(
+                None, var, self._base_axes(lat_bounds=False)
+            )
         self.assertIn("must have bounds", str(ctx.exception))
         self.assertIn("lat", str(ctx.exception))
 
@@ -3483,16 +3605,20 @@ class MustHaveBoundsTest(unittest.TestCase):
         var = self.project.variable("pr")
         dataset = DatasetInfo.from_mapping({"frequency": "mon"})
         with self.assertRaises(AxisValidationError) as ctx:
-            self.project.validate_components(dataset, var, self._base_axes(lat_bounds=False))
+            self.project.validate_components(
+                dataset, var, self._base_axes(lat_bounds=False)
+            )
         self.assertIn("must have bounds", str(ctx.exception))
 
     def test_axis_without_must_have_bounds_needs_no_bounds(self):
         """lon has no must_have_bounds — omitting its bounds is fine."""
         var = self.project.variable("pr")
-        time = self.project.axis("time", values=[15.0], bounds=[[0.0, 30.0]],
-                                  units="days since 2000-01-01")
-        lat = self.project.axis("lat", values=[-45.0, 45.0],
-                                 bounds=[[-90.0, 0.0], [0.0, 90.0]])
+        time = self.project.axis(
+            "time", values=[15.0], bounds=[[0.0, 30.0]], units="days since 2000-01-01"
+        )
+        lat = self.project.axis(
+            "lat", values=[-45.0, 45.0], bounds=[[-90.0, 0.0], [0.0, 90.0]]
+        )
         lon_no_bounds = self.project.axis("lon", values=[90.0, 270.0])
         self.project.validate_components(None, var, [time, lat, lon_no_bounds])
 
@@ -3514,25 +3640,31 @@ class TimeIntervalWithoutDatasetTest(unittest.TestCase):
             variable_entries={
                 "pr": {
                     "dimensions": ["time", "lat", "lon"],
-                    "out_name": "pr", "units": "kg m-2 s-1",
+                    "out_name": "pr",
+                    "units": "kg m-2 s-1",
                     "frequency": "mon",
                 },
                 "tas_fx": {
                     "dimensions": ["lat", "lon"],
-                    "out_name": "tas_fx", "units": "K",
+                    "out_name": "tas_fx",
+                    "units": "K",
                     # no frequency in table
                 },
             },
             coordinate_entries={
                 "time": {"axis": "T", "out_name": "time"},
                 "lat": {
-                    "axis": "Y", "units": "degrees_north",
-                    "standard_name": "latitude", "out_name": "lat",
+                    "axis": "Y",
+                    "units": "degrees_north",
+                    "standard_name": "latitude",
+                    "out_name": "lat",
                     "must_have_bounds": "1",
                 },
                 "lon": {
-                    "axis": "X", "units": "degrees_east",
-                    "standard_name": "longitude", "out_name": "lon",
+                    "axis": "X",
+                    "units": "degrees_east",
+                    "standard_name": "longitude",
+                    "out_name": "lon",
                 },
             },
         )
@@ -3542,22 +3674,26 @@ class TimeIntervalWithoutDatasetTest(unittest.TestCase):
 
     def _spatial_axes(self):
         return [
-            self.project.axis("lat", values=[-45.0, 45.0],
-                               bounds=[[-90.0, 0.0], [0.0, 90.0]]),
-            self.project.axis("lon", values=[90.0, 270.0],
-                               bounds=[[0.0, 180.0], [180.0, 360.0]]),
+            self.project.axis(
+                "lat", values=[-45.0, 45.0], bounds=[[-90.0, 0.0], [0.0, 90.0]]
+            ),
+            self.project.axis(
+                "lon", values=[90.0, 270.0], bounds=[[0.0, 180.0], [180.0, 360.0]]
+            ),
         ]
 
     def _monthly_time(self):
         return self.project.axis(
-            "time", values=[15.0, 45.0],
+            "time",
+            values=[15.0, 45.0],
             bounds=[[0.0, 30.0], [30.0, 60.0]],
             units="days since 2000-01-01",
         )
 
     def _daily_time(self):
         return self.project.axis(
-            "time", values=[0.5, 1.5, 2.5],
+            "time",
+            values=[0.5, 1.5, 2.5],
             bounds=[[0.0, 1.0], [1.0, 2.0], [2.0, 3.0]],
             units="days since 2000-01-01",
         )
@@ -3602,7 +3738,9 @@ class TimeIntervalWithoutDatasetTest(unittest.TestCase):
         """When the table declares no frequency there is no expected interval."""
         var = self.project.variable("tas_fx")
         daily = self.project.axis(
-            "time", values=[0.5, 1.5], bounds=[[0.0, 1.0], [1.0, 2.0]],
+            "time",
+            values=[0.5, 1.5],
+            bounds=[[0.0, 1.0], [1.0, 2.0]],
             units="days since 2000-01-01",
         )
         # Should not raise — no table frequency to validate against
@@ -3625,20 +3763,25 @@ class MIPCalendarTest(unittest.TestCase):
             variable_entries={
                 "pr": {
                     "dimensions": ["time", "lat", "lon"],
-                    "out_name": "pr", "units": "kg m-2 s-1",
+                    "out_name": "pr",
+                    "units": "kg m-2 s-1",
                     "frequency": "mon",
                 }
             },
             coordinate_entries={
                 "time": {"axis": "T", "out_name": "time"},
                 "lat": {
-                    "axis": "Y", "units": "degrees_north",
-                    "standard_name": "latitude", "out_name": "lat",
+                    "axis": "Y",
+                    "units": "degrees_north",
+                    "standard_name": "latitude",
+                    "out_name": "lat",
                     "must_have_bounds": "1",
                 },
                 "lon": {
-                    "axis": "X", "units": "degrees_east",
-                    "standard_name": "longitude", "out_name": "lon",
+                    "axis": "X",
+                    "units": "degrees_east",
+                    "standard_name": "longitude",
+                    "out_name": "lon",
                 },
             },
         )
@@ -3648,13 +3791,18 @@ class MIPCalendarTest(unittest.TestCase):
 
     def _base_axes(self):
         return [
-            self.project.axis("time", values=[15.0, 45.0],
-                               bounds=[[0.0, 30.0], [30.0, 60.0]],
-                               units="days since 2000-01-01"),
-            self.project.axis("lat", values=[-45.0, 45.0],
-                               bounds=[[-90.0, 0.0], [0.0, 90.0]]),
-            self.project.axis("lon", values=[90.0, 270.0],
-                               bounds=[[0.0, 180.0], [180.0, 360.0]]),
+            self.project.axis(
+                "time",
+                values=[15.0, 45.0],
+                bounds=[[0.0, 30.0], [30.0, 60.0]],
+                units="days since 2000-01-01",
+            ),
+            self.project.axis(
+                "lat", values=[-45.0, 45.0], bounds=[[-90.0, 0.0], [0.0, 90.0]]
+            ),
+            self.project.axis(
+                "lon", values=[90.0, 270.0], bounds=[[0.0, 180.0], [180.0, 360.0]]
+            ),
         ]
 
     def _validate_with_calendar(self, calendar):
@@ -3892,16 +4040,21 @@ class ValidateComponentsTest(unittest.TestCase):
     def test_unprepared_axis_with_correct_metadata_passes(self):
         """An axis not created via project.axis() but with correct metadata passes."""
         variable = self.project.variable("pr")
-        raw_lat = Axis(name="latitude", values=[-45.0, 45.0],
-                       standard_name="latitude", units="degrees_north")
+        raw_lat = Axis(
+            name="latitude",
+            values=[-45.0, 45.0],
+            standard_name="latitude",
+            units="degrees_north",
+        )
         axes = [self._time_axis(), raw_lat, self._lon_axis()]
         self.project.validate_components(None, variable, axes)
 
     def test_unprepared_axis_wrong_standard_name_raises(self):
         """Unprepared axis with wrong standard_name raises TableValidationError."""
         variable = self.project.variable("pr")
-        raw_lat = Axis(name="latitude", values=[-45.0, 45.0],
-                       standard_name="WRONG_NAME")
+        raw_lat = Axis(
+            name="latitude", values=[-45.0, 45.0], standard_name="WRONG_NAME"
+        )
         axes = [self._time_axis(), raw_lat, self._lon_axis()]
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_components(None, variable, axes)
@@ -3910,8 +4063,9 @@ class ValidateComponentsTest(unittest.TestCase):
     def test_unprepared_axis_wrong_units_raises(self):
         """Unprepared axis with wrong units raises TableValidationError."""
         variable = self.project.variable("pr")
-        raw_lat = Axis(name="latitude", values=[-45.0, 45.0],
-                       units="degrees_east")  # should be degrees_north
+        raw_lat = Axis(
+            name="latitude", values=[-45.0, 45.0], units="degrees_east"
+        )  # should be degrees_north
         axes = [self._time_axis(), raw_lat, self._lon_axis()]
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_components(None, variable, axes)
@@ -3974,7 +4128,9 @@ class ValidateComponentsTest(unittest.TestCase):
             grid_mapping_name="rotated_latitude_longitude",
             project=self.project,
         )
-        self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+        self.project.validate_components(
+            None, variable, self._standard_axes(), grid=grid
+        )
 
     def test_grid_mapping_name_mismatch_raises(self):
         """Grid with grid_mapping_name conflicting with table raises."""
@@ -3999,7 +4155,9 @@ class ValidateComponentsTest(unittest.TestCase):
         object.__setattr__(grid, "project", None)
         object.__setattr__(grid, "extra", {})
         with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+            self.project.validate_components(
+                None, variable, self._standard_axes(), grid=grid
+            )
         self.assertIn("grid_mapping_name", str(ctx.exception))
 
     def test_grid_not_in_table_is_ignored(self):
@@ -4007,27 +4165,35 @@ class ValidateComponentsTest(unittest.TestCase):
         variable = self.project.variable("pr")
         # 'unknown_projection' doesn't exist in the grids table
         grid = Grid(name=None, project=self.project)
-        self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+        self.project.validate_components(
+            None, variable, self._standard_axes(), grid=grid
+        )
 
     def test_grid_dimensions_matching_axes_passes(self):
         """Grid dimensions that resolve to supplied axes pass validation."""
         variable = self.project.variable("pr")
         grid = Grid(dimensions=["latitude", "longitude"])
-        self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+        self.project.validate_components(
+            None, variable, self._standard_axes(), grid=grid
+        )
 
     def test_grid_dimension_not_in_axes_raises(self):
         """A grid dimension name that matches no axis raises TableValidationError."""
         variable = self.project.variable("pr")
         grid = Grid(dimensions=["latitude", "no_such_axis"])
         with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+            self.project.validate_components(
+                None, variable, self._standard_axes(), grid=grid
+            )
         self.assertIn("no_such_axis", str(ctx.exception))
 
     def test_grid_dimensions_not_set_skips_dimension_check(self):
         """Grid with no dimensions set does not raise for dimension resolution."""
         variable = self.project.variable("pr")
         grid = Grid(latitude=np.ones((2, 3)))
-        self.project.validate_components(None, variable, self._standard_axes(), grid=grid)
+        self.project.validate_components(
+            None, variable, self._standard_axes(), grid=grid
+        )
 
     # ==================================================================
     # 7. ZFactor validation
@@ -4064,16 +4230,26 @@ class ValidateComponentsTest(unittest.TestCase):
         project = _build_vc_project(
             tmp2,
             formula_entries={
-                "ps": {"units": "Pa", "standard_name": "surface_air_pressure",
-                       "out_name": "ps"},
-                "p0": {"units": "Pa", "standard_name": "reference_air_pressure",
-                       "out_name": "p0"},
+                "ps": {
+                    "units": "Pa",
+                    "standard_name": "surface_air_pressure",
+                    "out_name": "ps",
+                },
+                "p0": {
+                    "units": "Pa",
+                    "standard_name": "reference_air_pressure",
+                    "out_name": "p0",
+                },
             },
         )
         variable = project.variable("pr")
         axes = [
-            project.axis("time", values=[15.0], bounds=[[0.0, 30.0]],
-                         units="days since 2000-01-01"),
+            project.axis(
+                "time",
+                values=[15.0],
+                bounds=[[0.0, 30.0]],
+                units="days since 2000-01-01",
+            ),
             project.axis("latitude", values=[-45.0, 45.0]),
             project.axis("longitude", values=[90.0, 270.0]),
         ]
@@ -4233,8 +4409,8 @@ class ValidateGridDimensionsTest(unittest.TestCase):
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_components(None, self._var(), self._axes(), grid=grid)
         msg = str(ctx.exception)
-        self.assertIn("(5, 4)", msg)   # reported array shape
-        self.assertIn("3", msg)         # expected axis length
+        self.assertIn("(5, 4)", msg)  # reported array shape
+        self.assertIn("3", msg)  # expected axis length
 
     def test_transposed_shape_raises(self):
         """Shape (ny, nx) instead of (nx, ny) is caught as a mismatch."""
@@ -4281,16 +4457,21 @@ class ValidateComponentsMinimalProjectTest(unittest.TestCase):
         cv_file = tmp / "CV.json"
         vtable_file = tmp / "vars.json"
         cv_file.write_text('{"CV": {}}\n')
-        vtable_file.write_text(json.dumps({
-            "Header": {"table_id": "test"},
-            "variable_entry": {
-                "sample": {
-                    "dimensions": ["time"],
-                    "out_name": "sample",
-                    "units": "1",
+        vtable_file.write_text(
+            json.dumps(
+                {
+                    "Header": {"table_id": "test"},
+                    "variable_entry": {
+                        "sample": {
+                            "dimensions": ["time"],
+                            "out_name": "sample",
+                            "units": "1",
+                        }
+                    },
                 }
-            }
-        }) + "\n")
+            )
+            + "\n"
+        )
         self.project = ProjectTables(cv_file, [vtable_file])
 
     def tearDown(self):
@@ -4309,6 +4490,7 @@ class ValidateComponentsMinimalProjectTest(unittest.TestCase):
         # for it, so it won't trigger the scalar-axis check.
         # Passing no axes is a user error but not caught by validate_components itself.
         self.project.validate_components(None, variable, [])
+
 
 if __name__ == "__main__":
     unittest.main()
