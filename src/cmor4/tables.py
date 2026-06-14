@@ -9,6 +9,7 @@ from ._table_utils import (
     single_or_original as _single_or_original,
 )
 from ._templates import is_unresolved_template as _is_unresolved_template
+from ._axis_validation import validate_axes as _validate_axes
 from .axis import Axis
 from .cv import ControlledVocabulary
 from .dataset import DatasetInfo
@@ -766,7 +767,36 @@ class ProjectTables:
 
         # Dataset-axis consistency checks (e.g., time axis needs frequency)
         if dataset is not None:
-            self._validate_dataset_axis_consistency(dataset, variable, axes)
+            _validate_axes(dataset, variable, axes)
+
+        # Check that required scalar axes are present (if not auto-added)
+        present_names = {
+            str(value)
+            for axis in axes
+            for value in (
+                axis.name,
+                axis.table_entry,
+                axis.axis_entry,
+                axis.coordinate,
+                axis.out_name,
+                axis.generic_level_name,
+            )
+            if value
+        }
+
+        for dimension in variable.get("dimensions", ()):
+            dimension_name = str(dimension)
+            if dimension_name not in present_names:
+                if dimension_name in self.scalar_axis_entries:
+                    raise TableValidationError(
+                        f"Variable requires scalar axis {dimension_name!r} "
+                        "but it was not provided. Use "
+                        "ProjectTables.scalar_axes_for() or "
+                        "ProjectTables.complete_axes() to get required "
+                        "scalar axes."
+                    )
+                # Non-scalar dimension not found - will be caught elsewhere
+                # (e.g., when building dataset if dimension truly missing)
 
         # Grid validation: ensure stored attributes match tables
         if grid is not None:
@@ -815,49 +845,6 @@ class ProjectTables:
                 f"variable {variable_entry.table_id}:{variable_entry.name} "
                 f"frequency={variable['frequency']!r}."
             )
-
-    def _validate_dataset_axis_consistency(
-        self,
-        dataset: DatasetInfo,
-        variable: Variable,
-        axes: Sequence[Axis],
-    ) -> None:
-        """Validate axes in context of dataset.
-
-        For example, time axis with frequency. This is a placeholder for
-        cross-component validation checks that require dataset context. The
-        main time axis validation with frequency happens in
-        validate_and_normalize_axes during dataset creation, but this could
-        be extended to perform additional checks.
-        """
-        # Check that required scalar axes are present (if not auto-added)
-        present_names = {
-            str(value)
-            for axis in axes
-            for value in (
-                axis.name,
-                axis.table_entry,
-                axis.axis_entry,
-                axis.coordinate,
-                axis.out_name,
-                axis.generic_level_name,
-            )
-            if value
-        }
-
-        for dimension in variable.get("dimensions", ()):
-            dimension_name = str(dimension)
-            if dimension_name not in present_names:
-                if dimension_name in self.scalar_axis_entries:
-                    raise TableValidationError(
-                        f"Variable requires scalar axis {dimension_name!r} "
-                        "but it was not provided. Use "
-                        "ProjectTables.scalar_axes_for() or "
-                        "ProjectTables.complete_axes() to get required "
-                        "scalar axes."
-                    )
-                # Non-scalar dimension not found - will be caught elsewhere
-                # (e.g., when building dataset if dimension truly missing)
 
     def validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
         """Validate final NetCDF global attributes against project tables.

@@ -48,6 +48,24 @@ def validate_and_normalize_axes(
     )
 
 
+def validate_axes(
+    dataset: Mapping[str, Any],
+    variable: Mapping[str, Any],
+    axes: Sequence[Axis]
+) -> None:
+    """Validate axis values with dataset and frequency-dependent checks."""
+
+    for axis in axes:
+        _validate_and_normalize_axis(
+            dataset,
+            variable,
+            axis,
+            include_time_checks=True,
+            enforce_required_bounds=True,
+            normalize=False,
+        )
+
+
 def validate_axis_values_early(axis: Axis) -> None:
     """Validate axis values without dataset- or frequency-dependent checks."""
 
