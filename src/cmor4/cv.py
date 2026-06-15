@@ -153,11 +153,14 @@ class ControlledVocabulary(Mapping[str, Any]):
         for key, value in experiment_entry.items():
             if key in {
                 "additional_allowed_model_components",
-                "description",
+                "end_year",
+                "min_number_yrs_per_sim",
                 "parent_activity_id",
                 "parent_experiment_id",
                 "required_source_type",
                 "source_type",
+                "start_year",
+                "tier",
             }:
                 continue
             default = _single_cv_default(value)
@@ -170,12 +173,17 @@ class ControlledVocabulary(Mapping[str, Any]):
         required = self.required_global_attributes()
         if "Conventions" in required:
             conventions = self.get("Conventions")
-            if isinstance(conventions, list) and conventions:
-                default_conventions = str(conventions[0])
+            # Default to CF-1.12 to match CMOR3 output. The CV lists multiple
+            # accepted versions; we pick CF-1.12 as the stable target unless
+            # the user has already set Conventions explicitly.
+            if isinstance(conventions, list) and "CF-1.12" in conventions:
+                default_conventions = "CF-1.12"
+            elif isinstance(conventions, list) and conventions:
+                default_conventions = str(conventions[-1])
             elif isinstance(conventions, str) and conventions:
                 default_conventions = conventions
             else:
-                default_conventions = "CF-1.11"
+                default_conventions = "CF-1.12"
             dataset.setdefault("Conventions", default_conventions)
         if "creation_date" in required:
             dataset.setdefault(

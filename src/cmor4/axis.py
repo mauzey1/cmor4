@@ -430,8 +430,6 @@ class Axis(_MetadataRecord):
             "axis",
             "positive",
             "formula",
-            "valid_min",
-            "valid_max",
         ):
             if key in self:
                 attrs[key] = self[key]

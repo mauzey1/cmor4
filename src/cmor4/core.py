@@ -575,8 +575,12 @@ def _add_zfactor(
     out_name = str(zfactor.get("out_name") or name)
     values = zfactor.values_array()
     dims = _named_dimensions(zfactor.get("dimensions", ()), axis_dims)
-    if not dims and values.ndim > 0:
-        dims = (out_name,)
+    # If the formula term has no declared dimensions, treat it as a scalar.
+    # Accept a size-1 array (CMOR3-compatible input) by squeezing it.
+    if not dims:
+        if values.size == 1:
+            values = values.reshape(())
+        # values.ndim > 0 with size > 1 was already caught by validation
     validate_variable_values(
         zfactor,
         axes,

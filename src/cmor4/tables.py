@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from datetime import datetime, timezone
 import numpy as np
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -847,11 +849,12 @@ class ProjectTables:
             )
 
             # When the formula-term table entry has no declared
-            # dimensions the term is expected to be a scalar.  Reject arrays.
+            # dimensions the term is expected to be a scalar.  Accept a
+            # size-1 array (CMOR3-compatible) but reject larger arrays.
             entry_dims = entry.get("dimensions")
             if not _is_table_value(entry_dims) and zfactor.values is not None:
                 arr = np.asarray(zfactor.values)
-                if arr.ndim > 0:
+                if arr.ndim > 0 and arr.size != 1:
                     raise TableValidationError(
                         f"formula term {entry_name!r} has no declared "
                         "dimensions (expected a scalar value) but values "
@@ -916,6 +919,9 @@ class ProjectTables:
             value = header.get(key)
             if _is_table_value(value):
                 dataset.setdefault(key, value)
+
+        if "table_info" not in dataset and variable_entry.table_file is not None:
+            dataset["table_info"] = _build_table_info(variable_entry.table_file)
 
     def _add_variable_global_defaults(
         self, dataset: dict[str, Any], variable: Variable
@@ -1248,3 +1254,23 @@ def _resolve_optional_table(
         if matches:
             return matches[0]
     return None
+
+
+def _build_table_info(table_file: Path) -> str:
+    """Build a table_info string with the filename, creation date, and MD5 hash.
+
+    Matches the format written by CMOR3:
+    ``Name: <file>; Creation Date:(<date>) MD5:<hash>``
+    """
+    try:
+        raw = table_file.read_bytes()
+        md5 = hashlib.md5(raw).hexdigest()
+        mtime = datetime.fromtimestamp(table_file.stat().st_mtime, timezone.utc)
+        creation_date_str = mtime.strftime("%Y-%m-%d %H:%M:%S")
+        return (
+            f"Name: {table_file.name};"
+            f" Creation Date:({creation_date_str})"
+            f" MD5:{md5}"
+        )
+    except OSError:
+        return f"Name: {table_file.name};"

@@ -12,7 +12,14 @@ INTERNAL_DATASET_KEYS = {
     "outpath",
     "output_file_template",
     "output_path_template",
+    "tracking_prefix",
 }
+
+# Global attributes derived solely from variable/table metadata that are
+# written via setdefault below rather than copied from the dataset dict.
+# Keeping this empty means we copy everything from the dataset and let
+# per-project CV required_global_attributes drive what must be present.
+_VARIABLE_ONLY_GLOBAL_KEYS: set[str] = set()
 
 RIPF_KEYS = (
     "realization_index",
@@ -195,12 +202,18 @@ class DatasetInfo(Mapping[str, Any]):
             )
         """
 
+        from . import __version__ as _cmor4_version
+
+        from datetime import timezone as _tz
+        creation_date = datetime.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         attrs: dict[str, Any] = {
-            "Conventions": self.get("Conventions", "CF-1.11"),
-            "cmor4_version": "0.1.0",
+            "Conventions": self.get("Conventions", "CF-1.12"),
+            "cmor_version": _cmor4_version,
         }
         for key, value in self.items():
-            if key in INTERNAL_DATASET_KEYS or key.startswith("_"):
+            if key in INTERNAL_DATASET_KEYS or key in _VARIABLE_ONLY_GLOBAL_KEYS:
+                continue
+            if key.startswith("_"):
                 continue
             if _MetadataRecord.is_netcdf_attr_value(value):
                 attrs[key] = value
@@ -223,7 +236,21 @@ class DatasetInfo(Mapping[str, Any]):
         if "table_info" in variable:
             attrs.setdefault("table_info", variable["table_info"])
         attrs.setdefault("variant_label", self.variant_label())
-        attrs.setdefault("creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
+        attrs.setdefault("creation_date", creation_date)
+
+        # Add CMOR3-compatible history attribute
+        history_msg = (
+            f"{creation_date} ; CMOR rewrote data to be consistent with "
+            f"CF-1.12 and CMIP7 data requirements."
+        )
+        attrs.setdefault("history", history_msg)
+
+        # Add title derived from source_id and mip_era
+        source_id = attrs.get("source_id") or self.get("source_id", "")
+        mip_era = attrs.get("mip_era") or self.get("mip_era", "CMIP")
+        if source_id:
+            attrs.setdefault("title", f"{source_id} output prepared for {mip_era}")
+
         if extra_attrs:
             attrs.update(_MetadataRecord.netcdf_attrs(extra_attrs))
         return attrs
