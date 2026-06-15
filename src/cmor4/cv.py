@@ -151,6 +151,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         if experiment_entry is None:
             return
         for key, value in experiment_entry.items():
+            # keys in experiment entry to exclude
             if key in {
                 "additional_allowed_model_components",
                 "end_year",
