@@ -205,6 +205,7 @@ class DatasetInfo(Mapping[str, Any]):
         from . import __version__ as _cmor4_version
 
         from datetime import timezone as _tz
+
         creation_date = datetime.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         attrs: dict[str, Any] = {
             "Conventions": self.get("Conventions", "CF-1.12"),
