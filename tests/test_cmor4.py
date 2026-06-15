@@ -12,6 +12,7 @@ import xarray as xr
 import cmor4
 import cmor4._axis_validation as axis_validation
 import cmor4._time_utils as time_utils
+import cmor4.exceptions
 from table_helpers import cmip7_project
 
 
@@ -1031,6 +1032,256 @@ class Cmor4Test(unittest.TestCase):
                 cmor4.build_output_path(info, variable, ds=ds).name,
                 "co2_mon_201801-201802.nc",
             )
+
+
+class GlobalAttributeDefaultsTest(unittest.TestCase):
+    """Tests for global attribute defaults added by our changes.
+
+    Covers: history, title, description, cmor_version, CF-1.12 Conventions,
+    tracking_prefix suppressed, experiment-internal CV fields suppressed,
+    valid_min/valid_max absent from coordinate attrs.
+    """
+
+    def setUp(self):
+        self.project = cmip7_project("tables/CMIP7_ocean.json")
+
+    def _make_dataset(self, tmp_path):
+        variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+        info = self.project.dataset_info(dataset_info(Path(tmp_path)))
+        ds = cmor4.create_dataset(
+            info,
+            variable,
+            [time_axis(self.project), *horizontal_axes(self.project)],
+            np.ones((2, 2, 2), dtype="f4"),
+        )
+        return ds
+
+    def test_history_attribute_is_written(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertIn("history", ds.attrs)
+        self.assertIn("CMOR rewrote data", ds.attrs["history"])
+
+    def test_history_contains_creation_date_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        # history must start with an ISO-8601 timestamp ending in Z
+
+        self.assertRegex(
+            ds.attrs["history"],
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z",
+        )
+
+    def test_title_attribute_is_written(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertEqual(ds.attrs["title"], "DUMMY-MODEL output prepared for CMIP7")
+
+    def test_title_uses_source_id_and_mip_era(self):
+        """title should reflect the actual source_id in the dataset."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            raw = dataset_info(Path(tmp_dir))
+            raw["source_id"] = "DUMMY-MODEL"
+            info = self.project.dataset_info(raw)
+            ds = cmor4.create_dataset(
+                info,
+                variable,
+                [time_axis(self.project), *horizontal_axes(self.project)],
+                np.ones((2, 2, 2), dtype="f4"),
+            )
+        self.assertIn("DUMMY-MODEL", ds.attrs["title"])
+        self.assertIn("CMIP7", ds.attrs["title"])
+
+    def test_description_attribute_from_experiment_cv(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        # The amip experiment has a description in the CV
+        self.assertIn("description", ds.attrs)
+        self.assertIsInstance(ds.attrs["description"], str)
+        self.assertGreater(len(ds.attrs["description"]), 0)
+
+    def test_cmor_version_attribute_is_written(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertIn("cmor_version", ds.attrs)
+
+    def test_cmor4_version_attribute_is_not_written(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertNotIn("cmor4_version", ds.attrs)
+
+    def test_cmor_version_matches_package_version(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertEqual(ds.attrs["cmor_version"], cmor4.__version__)
+
+    def test_conventions_defaults_to_cf_1_12(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertEqual(ds.attrs["Conventions"], "CF-1.12")
+
+    def test_tracking_prefix_not_in_global_attrs(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertNotIn("tracking_prefix", ds.attrs)
+
+    def test_experiment_internal_fields_not_in_global_attrs(self):
+        """end_year, start_year, tier, min_number_yrs_per_sim are CV bookkeeping
+        fields that should not appear in the output file."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        for key in ("end_year", "start_year", "tier", "min_number_yrs_per_sim"):
+            self.assertNotIn(
+                key, ds.attrs, msg=f"{key!r} should not be in global attrs"
+            )
+
+    def test_coordinate_attrs_do_not_include_valid_min_max(self):
+        """valid_min and valid_max are validation-only bounds; they should not
+        be written as NetCDF attributes on coordinate variables."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        for coord in ("lat", "lon"):
+            self.assertNotIn(
+                "valid_min", ds[coord].attrs, msg=f"valid_min should not be on {coord}"
+            )
+            self.assertNotIn(
+                "valid_max", ds[coord].attrs, msg=f"valid_max should not be on {coord}"
+            )
+
+
+class TableInfoTest(unittest.TestCase):
+    """Tests for table_info generation in tables.py._add_table_header_defaults."""
+
+    def setUp(self):
+        self.project = cmip7_project("tables/CMIP7_ocean.json")
+
+    def _axes(self):
+        return [time_axis(self.project), *horizontal_axes(self.project)]
+
+    def _make_dataset(self, tmp_path):
+        variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+        info = self.project.dataset_info(dataset_info(Path(tmp_path)))
+        return cmor4.create_dataset(
+            info,
+            variable,
+            self._axes(),
+            np.ones((2, 2, 2), dtype="f4"),
+        )
+
+    def test_table_info_includes_filename(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertIn("Name: CMIP7_ocean.json;", ds.attrs["table_info"])
+
+    def test_table_info_includes_creation_date(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertIn("Creation Date:(", ds.attrs["table_info"])
+
+    def test_table_info_includes_md5_hash(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        # MD5 is a 32-character hex string
+        self.assertRegex(ds.attrs["table_info"], r"MD5:[0-9a-f]{32}")
+
+    def test_table_info_set_during_dataset_creation_not_dataset_info(self):
+        """table_info should be computed in _dataset_for_variable (create_dataset),
+        not during dataset_info() when no variable is known yet."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = self.project.dataset_info(dataset_info(Path(tmp_dir)))
+        # Not present on the DatasetInfo object itself
+        self.assertIsNone(info.get("table_info"))
+
+    def test_table_info_not_overwritten_if_user_supplied(self):
+        """
+        User-provided table_info should not be overwritten by the auto-generated one.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            raw = dataset_info(Path(tmp_dir))
+            raw["table_info"] = "custom table info"
+            info = self.project.dataset_info(raw)
+            ds = cmor4.create_dataset(
+                info,
+                variable,
+                self._axes(),
+                np.ones((2, 2, 2), dtype="f4"),
+            )
+        self.assertEqual(ds.attrs["table_info"], "custom table info")
+
+
+class ScalarZfactorTest(unittest.TestCase):
+    """Tests for p0-style scalar zfactor handling.
+
+    CMOR3 accepts a size-1 array for scalar formula terms (dimensions: "").
+    CMOR4 should do the same and squeeze the value to a 0-d variable.
+    """
+
+    def setUp(self):
+        self.project = cmip7_project("tables/CMIP7_atmos.json")
+
+    def _make_hybrid_ds(self, p0_values):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            axes = [
+                time_axis(self.project),
+                self.project.axis(
+                    "standard_hybrid_sigma",
+                    values=[0.9, 0.1],
+                    bounds=[[1.0, 0.5], [0.5, 0.0]],
+                ),
+                *horizontal_axes(self.project),
+            ]
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u", table_id="atmos"
+            )
+            info = self.project.dataset_info(dataset_info(Path(tmp_dir)))
+            zfactors = [
+                self.project.zfactor(
+                    "a", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]
+                ),
+                self.project.zfactor(
+                    "b", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]
+                ),
+                self.project.zfactor("p0", values=p0_values),
+                self.project.zfactor(
+                    "ps", values=np.ones((2, 2, 2), dtype="f4") * 99000.0
+                ),
+            ]
+            return cmor4.create_dataset(
+                info,
+                variable,
+                axes,
+                np.ones((2, 2, 2, 2), dtype="f4"),
+                zfactors=zfactors,
+            )
+
+    def test_scalar_p0_as_true_scalar_is_accepted(self):
+        """Existing behaviour: a Python float is accepted."""
+        ds = self._make_hybrid_ds(100000.0)
+        self.assertEqual(ds["p0"].dims, ())
+        self.assertAlmostEqual(float(ds["p0"].values), 100000.0)
+
+    def test_scalar_p0_as_size1_array_is_accepted(self):
+        """CMOR3-compat: np.array([100000.0]) (shape (1,)) must not raise."""
+        ds = self._make_hybrid_ds(np.array([100000.0]))
+        self.assertIn("p0", ds.variables)
+
+    def test_scalar_p0_size1_array_is_squeezed_to_0d(self):
+        """A size-1 array for a scalar term must be written as a 0-d variable."""
+        ds = self._make_hybrid_ds(np.array([100000.0]))
+        self.assertEqual(
+            ds["p0"].dims, (), "p0 should be dimensionless (0-d) in the output"
+        )
+
+    def test_scalar_p0_size1_array_preserves_value(self):
+        ds = self._make_hybrid_ds(np.array([100000.0]))
+        self.assertAlmostEqual(float(ds["p0"].values), 100000.0)
+
+    def test_scalar_p0_multi_element_array_raises(self):
+        """A multi-element array for a scalar term must be rejected."""
+        with self.assertRaises((cmor4.exceptions.TableValidationError, ValueError)):
+            self._make_hybrid_ds(np.array([100000.0, 101325.0]))
 
 
 if __name__ == "__main__":

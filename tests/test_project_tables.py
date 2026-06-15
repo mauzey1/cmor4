@@ -841,6 +841,9 @@ class ProjectTablesTest(unittest.TestCase):
         for key in project.required_global_attributes():
             self.assertIn(key, ds.attrs)
         self.assertIn("Name: CMIP7_ocean.json;", ds.attrs["table_info"])
+        # table_info should also contain a creation date and MD5 hash
+        self.assertIn("Creation Date:(", ds.attrs["table_info"])
+        self.assertRegex(ds.attrs["table_info"], r"MD5:[0-9a-f]{32}")
         self.assertNotIn("license_type", ds.attrs)
         self.assertNotIn("license_url", ds.attrs)
         self.assertEqual(
@@ -2749,6 +2752,31 @@ class ZFactorScalarTest(unittest.TestCase):
                 None, self.var, [], zfactors=[ZFactor(name="p0", values=np.ones((4,)))]
             )
         self.assertIn("(4,)", str(ctx.exception))
+
+    # --- size-1 array is CMOR3-compatible and must be accepted ---
+
+    def test_size_1_array_is_accepted(self):
+        """A shape-(1,) array is CMOR3-compatible and must not raise."""
+        self.project.validate_components(
+            None,
+            self.var,
+            [],
+            zfactors=[ZFactor(name="p0", values=np.array([100000.0]))],
+        )
+
+    def test_size_1_array_error_message_not_raised(self):
+        """Confirm the 'scalar value' error is NOT raised for shape-(1,) arrays."""
+        try:
+            self.project.validate_components(
+                None,
+                self.var,
+                [],
+                zfactors=[ZFactor(name="p0", values=np.array([100000.0]))],
+            )
+        except TableValidationError as exc:
+            self.fail(
+                f"validate_components raised TableValidationError unexpectedly: {exc}"
+            )
 
 
 # ---------------------------------------------------------------------------
