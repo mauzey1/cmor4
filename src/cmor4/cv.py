@@ -18,6 +18,26 @@ from ._templates import (
 )
 from .exceptions import ControlledVocabularyError
 
+# Variant label index keys and their allowed integer range.
+# CMOR3 stores these as C int (32-bit signed), so values above INT32_MAX
+# are rejected to keep parity with CMOR3 behaviour.
+_RIPF_KEYS: tuple[str, ...] = (
+    "realization_index",
+    "initialization_index",
+    "physics_index",
+    "forcing_index",
+)
+# Expected single-character prefix for each RIPF key.
+# CMIP7 encodes indices as prefixed strings ("r9", "i1", …);
+# CMOR3 used bare integers ("9", "1", …).  Both are accepted.
+_RIPF_PREFIXES: dict[str, str] = {
+    "realization_index": "r",
+    "initialization_index": "i",
+    "physics_index": "p",
+    "forcing_index": "f",
+}
+_RIPF_MAX: int = 2**31 - 1  # INT32_MAX — matches CMOR3's upper bound
+
 
 class ControlledVocabulary(Mapping[str, Any]):
     """Project controlled vocabulary with defaulting and validation helpers.
@@ -248,6 +268,80 @@ class ControlledVocabulary(Mapping[str, Any]):
 
         self.validate_dataset_values(dataset)
         self.validate_required_global_attributes(dataset)
+        self.validate_variant_indices(dataset)
+
+    def validate_variant_indices(self, dataset: Mapping[str, Any]) -> None:
+        """Validate variant index integers and the derived variant_label format.
+
+        Each of ``realization_index``, ``initialization_index``,
+        ``physics_index``, and ``forcing_index`` must be a positive integer
+        no greater than INT32_MAX (2 147 483 647) when present.  Accepting
+        arbitrarily large values would silently produce a variant_label that
+        is technically valid text but cannot be round-tripped through CMOR3
+        and is likely to confuse downstream tools.
+
+        If all four indices are present (or a ``variant_label`` is already
+        set), the resulting ``variant_label`` is also validated against the
+        canonical pattern ``r<N>i<N>p<N>f<N>``.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata to validate.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if any index value is not a
+            positive integer, exceeds INT32_MAX, or if the derived
+            variant_label does not match the expected pattern.
+        """
+
+        for key in _RIPF_KEYS:
+            value = dataset.get(key)
+            if value in (None, ""):
+                continue
+            value_str = str(value)
+            # CMIP7 style: "r9", "i1", "p1", "f3" — strip the leading letter.
+            # CMOR3 style: "9", "1" — use as-is.
+            # Each key has a canonical prefix: r/i/p/f.
+            prefix = _RIPF_PREFIXES[key]
+            if value_str.startswith(prefix) and len(value_str) > 1:
+                numeric_part = value_str[1:]
+            else:
+                numeric_part = value_str
+            try:
+                int_value = int(numeric_part)
+            except (TypeError, ValueError) as exc:
+                raise ControlledVocabularyError(
+                    f"{key}={value!r} must be a positive integer "
+                    f"(with optional '{prefix}' prefix, e.g. '{prefix}1')."
+                ) from exc
+            if int_value < 1 or int_value > _RIPF_MAX:
+                raise ControlledVocabularyError(
+                    f"{key}={value!r} numeric value {int_value} is out of the "
+                    f"valid range [1, {_RIPF_MAX}]."
+                )
+
+        variant_label = dataset.get("variant_label")
+        if variant_label:
+            # Explicit variant_label: format is project-specific and already
+            # validated by validate_dataset_values against the CV definition.
+            # Nothing more to do here.
+            return
+
+        # When all four RIPF indices are in the CMIP7 prefixed format ("r9",
+        # "i1", "p1", "f3"), _variant_label assembles them and we can check
+        # that the result satisfies the canonical pattern.  Bare-integer
+        # indices (CMOR3 style "9", "1") are concatenated without prefixes by
+        # _variant_label so we skip the format check for them.
+        assembled = _variant_label(dataset)
+        if assembled and assembled.startswith("r"):
+            if not re.fullmatch(r"r\d+i\d+p\d+f\d+", assembled):
+                raise ControlledVocabularyError(
+                    f"variant_label={assembled!r} assembled from RIPF indices "
+                    "does not match the required pattern 'r<N>i<N>p<N>f<N>'."
+                )
 
     def validate_dataset_values(self, dataset: Mapping[str, Any]) -> None:
         """Validate controlled values without requiring every global attr.

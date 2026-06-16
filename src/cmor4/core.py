@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
+import re
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -185,6 +186,21 @@ def create_dataset(
     if grid and grid.variable_name in data_vars:
         var_attrs["grid_mapping"] = grid.variable_name
 
+    # Collect any CF external variables referenced in cell_measures but not
+    # written to this file and expose them as a global attribute so that
+    # downstream tools and ESGF QC checkers can locate them.
+    all_provided_names = set(coords.keys()) | set(data_vars.keys())
+    external_vars = _collect_external_variables(variable, all_provided_names)
+    if external_vars:
+        # Merge computed external_variables with user-supplied attrs;
+        # user-supplied attrs take precedence (they come later in the update).
+        merged_attrs: dict[str, Any] = {
+            "external_variables": " ".join(sorted(external_vars))
+        }
+        if attrs:
+            merged_attrs.update(attrs)
+        attrs = merged_attrs
+
     data_vars[var_name] = (dims, data_array, var_attrs)
     ds = xr.Dataset(
         data_vars=data_vars,
@@ -328,6 +344,42 @@ def open_dataset(path: str | Path, **kwargs: Any) -> xr.Dataset:
     """
 
     return xr.open_dataset(path, **kwargs)
+
+
+def _collect_external_variables(
+    variable: Variable,
+    provided_names: set[str],
+) -> set[str]:
+    """Return CF external variable names cited in cell_measures but not provided.
+
+    CF Conventions require that any variable named in a ``cell_measures``
+    attribute but not included in the file is listed in the global
+    ``external_variables`` attribute so that data consumers know where to
+    find it.  This helper parses the ``measure: varname`` tokens from the
+    variable's ``cell_measures`` field and returns those whose names are not
+    among the coordinates and data variables already written.
+
+    Parameters
+    ----------
+    variable:
+        Variable metadata record, which may carry a ``cell_measures`` entry.
+    provided_names:
+        Names of all coordinates and data variables that will be written to
+        the output file.
+
+    Returns
+    -------
+    set[str]
+        External variable names that are referenced but not provided.
+    """
+    cell_measures = str(variable.get("cell_measures", "") or "")
+    if not cell_measures.strip():
+        return set()
+    return {
+        name
+        for name in re.findall(r":\s*(\S+)", cell_measures)
+        if name not in provided_names
+    }
 
 
 def build_output_path(

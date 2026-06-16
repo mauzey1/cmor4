@@ -323,6 +323,21 @@ def _validate_time_interval(
     axis: Axis,
     values: np.ndarray,
 ) -> None:
+    # Require a frequency attribute whenever a time axis is present and we
+    # have a real dataset context.  An empty dict ({}) is used as a
+    # placeholder when validate_components is called without a dataset for
+    # structure-only validation; in that case the frequency check is
+    # deferred until a full dataset is available.
+    frequency = str(dataset.get("frequency", variable.get("frequency", "")))
+    if not frequency:
+        if dataset:  # non-empty dict or DatasetInfo — real dataset context
+            raise AxisValidationError(
+                "No frequency attribute provided in the dataset configuration. "
+                "A 'frequency' value is required when a time axis is present. "
+                "Set frequency in the dataset metadata or ensure the variable "
+                "table entry defines a frequency."
+            )
+        return
     flat = values.reshape(-1)
     if flat.size < 2:
         return
