@@ -172,6 +172,7 @@ class ProjectTables:
         normalized_dataset = self.cv.get_dataset_info(dataset)
         self.cv.validate_dataset_values(normalized_dataset)
         self.cv.validate_variant_indices(normalized_dataset)
+        self.cv.validate_forcing_terms(normalized_dataset)
         self.validate_source_attributes(normalized_dataset)
         self.validate_experiment(normalized_dataset)
         self.validate_parent_attributes(normalized_dataset)

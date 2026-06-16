@@ -22,6 +22,7 @@ from cmor4._axis_validation import _validate_time_interval, _is_time_axis
 from cmor4.core import _collect_external_variables, create_dataset
 from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
 
+
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -556,9 +557,7 @@ class TestVariantIndexValidation(unittest.TestCase):
     # variant_label format — explicit value validated via CV constraint
     # -----------------------------------------------------------------------
 
-    def test_explicit_malformed_variant_label_caught_by_cv_validate_dataset_values(
-        self,
-    ):
+    def test_explicit_malformed_variant_label_caught_by_cv_validate_dataset_values(self):
         """Explicit variant_label format is validated by validate_dataset_values
         when the CV defines a regex constraint for it.  validate_variant_indices
         intentionally defers this to the CV layer so that non-CMIP projects
@@ -569,9 +568,7 @@ class TestVariantIndexValidation(unittest.TestCase):
                 "CV": {
                     **_MINIMAL_CV["CV"],
                     # CMIP7-style variant_label constraint as a regex list.
-                    "variant_label": [
-                        r"r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+"
-                    ],
+                    "variant_label": [r"r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+"],
                 }
             }
         )
@@ -592,7 +589,7 @@ class TestVariantIndexValidation(unittest.TestCase):
                     "realization_index": "r1",
                     "initialization_index": "i1",
                     "physics_index": "p1",
-                    "forcing_index": "r1",  # 'r' prefix is wrong for forcing_index
+                    "forcing_index": "r1",   # 'r' prefix is wrong for forcing_index
                 }
             )
         # Should be caught at the integer-parsing level for forcing_index,
@@ -744,5 +741,216 @@ class TestVariantIndexValidation(unittest.TestCase):
             self.assertIsNotNone(info)
 
 
+# ---------------------------------------------------------------------------
+# GAP-04 — forcing terms validation against CV forcing list
+# ---------------------------------------------------------------------------
+
+# A minimal CV that defines a forcing enumeration, mirroring how CMIP6 CVs
+# define valid forcing abbreviations.
+_CV_WITH_FORCING: dict = {
+    "CV": {
+        **_MINIMAL_CV["CV"],
+        "forcing": ["GHG", "Oz", "SA", "Sl", "Vl", "BC", "OC", "Nat", "Ant"],
+    }
+}
+
+
+class TestForcingTermsValidation(unittest.TestCase):
+    """GAP-04: forcing attribute tokens must be in the CV forcing enumeration.
+
+    CMOR3 reference: ``cmor_check_forcing_validity`` in ``Src/cmor.c``.
+    """
+
+    def _cv(self) -> ControlledVocabulary:
+        return ControlledVocabulary(_CV_WITH_FORCING)
+
+    def _cv_no_forcing(self) -> ControlledVocabulary:
+        """A CV without any forcing enumeration (e.g. CMIP7, obs4MIPs)."""
+        return ControlledVocabulary(_MINIMAL_CV)
+
+    # -----------------------------------------------------------------------
+    # Error cases
+    # -----------------------------------------------------------------------
+
+    def test_unknown_single_token_raises(self):
+        cv = self._cv()
+        with self.assertRaises(ControlledVocabularyError) as ctx:
+            cv.validate_forcing_terms({"forcing": "UNKNOWN"})
+        self.assertIn("UNKNOWN", str(ctx.exception))
+
+    def test_unknown_token_in_multi_token_string_raises(self):
+        cv = self._cv()
+        with self.assertRaises(ControlledVocabularyError) as ctx:
+            cv.validate_forcing_terms({"forcing": "GHG Oz BADTERM"})
+        self.assertIn("BADTERM", str(ctx.exception))
+
+    def test_comma_separated_with_unknown_token_raises(self):
+        """Comma-separated format is also supported (CMOR3 parity)."""
+        cv = self._cv()
+        with self.assertRaises(ControlledVocabularyError) as ctx:
+            cv.validate_forcing_terms({"forcing": "GHG, Oz, BADTERM"})
+        self.assertIn("BADTERM", str(ctx.exception))
+
+    def test_error_message_includes_valid_values(self):
+        cv = self._cv()
+        with self.assertRaises(ControlledVocabularyError) as ctx:
+            cv.validate_forcing_terms({"forcing": "JUNK"})
+        msg = str(ctx.exception)
+        self.assertIn("GHG", msg)  # valid values listed
+
+    # -----------------------------------------------------------------------
+    # Happy-path cases
+    # -----------------------------------------------------------------------
+
+    def test_single_valid_token_passes(self):
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": "GHG"})
+
+    def test_space_separated_valid_tokens_pass(self):
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": "GHG Oz SA Sl Vl BC OC"})
+
+    def test_comma_separated_valid_tokens_pass(self):
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": "GHG, Oz, SA"})
+
+    def test_mixed_comma_and_space_separated_tokens_pass(self):
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": "GHG, Oz SA, Vl"})
+
+    def test_annotation_in_parentheses_is_stripped(self):
+        """Parenthetical annotation is truncated before tokenising — CMOR3 parity.
+
+        'GHG Oz (GHG = CO2, N2O, …)' → tokens are ['GHG', 'Oz'].
+        The annotation content (including any unrecognised terms inside it)
+        is ignored.
+        """
+        cv = self._cv()
+        cv.validate_forcing_terms(
+            {"forcing": "GHG Oz (GHG = CO2, N2O, CH4, UNKNOWNGAS)"}
+        )
+
+    def test_annotation_truncation_not_just_removal(self):
+        """Everything from the first '(' is dropped, not just the parenthetical.
+
+        CMOR3 does astr[i] = '\\0' at the first '(', so:
+        'GHG (note BADTERM after paren) Oz' → tokens ['GHG'] only.
+        'Oz' after the closing ')' is NOT tokenised.
+        """
+        cv = self._cv()
+        # 'Oz' appears after the closing paren; CMOR3 truncates at '(' so
+        # only 'GHG' is validated — 'Oz' and 'BADTERM' are both dropped.
+        cv.validate_forcing_terms(
+            {"forcing": "GHG (note BADTERM here) Oz"}
+        )
+
+    def test_comma_replaced_with_space_before_truncation(self):
+        """Commas become spaces before the '(' truncation step."""
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": "GHG,Oz,SA (annotation)"})
+
+    # -----------------------------------------------------------------------
+    # Edge cases — no-ops
+    # -----------------------------------------------------------------------
+
+    def test_cv_without_forcing_key_skips_validation(self):
+        """CMIP7 / obs4MIPs CVs have no forcing key — validation is a no-op."""
+        cv = self._cv_no_forcing()
+        # Even a completely unknown token should not raise.
+        cv.validate_forcing_terms({"forcing": "ANYTHING_AT_ALL"})
+
+    def test_dataset_without_forcing_attribute_passes(self):
+        cv = self._cv()
+        cv.validate_forcing_terms({})
+
+    def test_empty_forcing_string_passes(self):
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": ""})
+
+    def test_none_forcing_passes(self):
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": None})
+
+    def test_only_whitespace_passes(self):
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": "   "})
+
+    def test_only_annotation_passes(self):
+        """A forcing string that is purely an annotation (starts with '(')."""
+        cv = self._cv()
+        cv.validate_forcing_terms({"forcing": "(just an annotation)"})
+
+    def test_forcing_dict_cv_also_works(self):
+        """CV forcing defined as a mapping (CMIP6 style)."""
+        cv_dict = ControlledVocabulary(
+            {
+                "CV": {
+                    **_MINIMAL_CV["CV"],
+                    "forcing": {
+                        "GHG": "Greenhouse gases",
+                        "Oz": "Ozone",
+                        "Nat": "Natural forcings",
+                    },
+                }
+            }
+        )
+        cv_dict.validate_forcing_terms({"forcing": "GHG Oz"})
+        with self.assertRaises(ControlledVocabularyError):
+            cv_dict.validate_forcing_terms({"forcing": "GHG UNKNOWN"})
+
+    # -----------------------------------------------------------------------
+    # Integration via validate_dataset and ProjectTables
+    # -----------------------------------------------------------------------
+
+    def test_validate_dataset_includes_forcing_check(self):
+        cv = self._cv()
+        with self.assertRaises(ControlledVocabularyError) as ctx:
+            cv.validate_dataset(
+                {
+                    "activity_id": "CMIP",
+                    "institution_id": "NCAR",
+                    "forcing": "GHG BADTOKEN",
+                }
+            )
+        self.assertIn("BADTOKEN", str(ctx.exception))
+
+    def test_project_tables_dataset_info_raises_on_bad_forcing(self):
+        """ProjectTables.dataset_info catches bad forcing tokens at creation time."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            project = _make_project(
+                tmp, _CV_WITH_FORCING, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
+            bad_dataset = dict(_MINIMAL_DATASET)
+            bad_dataset["forcing"] = "GHG INVALIDTERM"
+            with self.assertRaises(ControlledVocabularyError) as ctx:
+                project.dataset_info(bad_dataset)
+            self.assertIn("INVALIDTERM", str(ctx.exception))
+
+    def test_project_tables_dataset_info_valid_forcing_passes(self):
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            project = _make_project(
+                tmp, _CV_WITH_FORCING, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
+            good_dataset = dict(_MINIMAL_DATASET)
+            good_dataset["forcing"] = "GHG Oz SA Sl Vl BC OC (GHG = CO2, N2O)"
+            info = project.dataset_info(good_dataset)
+            self.assertIsNotNone(info)
+
+    def test_project_tables_no_forcing_cv_ignores_forcing_field(self):
+        """Projects without a CV forcing key accept any forcing text."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            project = _make_project(
+                tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
+            dataset = dict(_MINIMAL_DATASET)
+            dataset["forcing"] = "N/A"
+            info = project.dataset_info(dataset)
+            self.assertIsNotNone(info)
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -269,6 +269,76 @@ class ControlledVocabulary(Mapping[str, Any]):
         self.validate_dataset_values(dataset)
         self.validate_required_global_attributes(dataset)
         self.validate_variant_indices(dataset)
+        self.validate_forcing_terms(dataset)
+
+    def validate_forcing_terms(self, dataset: Mapping[str, Any]) -> None:
+        """Validate the ``forcing`` global attribute against the CV forcing list.
+
+        The ``forcing`` attribute (used in CMIP6-style projects) is a
+        space- or comma-separated string of abbreviations describing the
+        applied forcings, optionally followed by a parenthetical annotation,
+        for example::
+
+            "GHG Oz SA Sl Vl BC OC (GHG = CO2, N2O, CH4, …)"
+
+        Tokenisation mirrors CMOR3's ``cmor_check_forcing_validity``:
+
+        1. Commas are replaced with spaces.
+        2. Everything from the first ``(`` onwards is discarded (annotation
+           truncation, not just removal of the parenthetical content).
+        3. The remaining text is split on whitespace.
+        4. Each non-empty token is looked up in the CV's ``forcing``
+           enumeration (list or mapping keys).
+
+        Validation is skipped when the CV does not define a ``forcing`` key
+        (e.g. CMIP7, obs4MIPs), when the CV's ``forcing`` value is not a
+        list or mapping, or when the dataset has no ``forcing`` attribute.
+
+        Parameters
+        ----------
+        dataset:
+            Dataset metadata that may contain a ``forcing`` attribute.
+
+        Returns
+        -------
+        None
+            Raises ``ControlledVocabularyError`` if any token is not in
+            the CV's forcing enumeration.
+        """
+
+        forcing_cv = self.get("forcing")
+        # Only validate when the CV provides an enumeration.
+        if not isinstance(forcing_cv, (list, Mapping)):
+            return
+
+        forcing_text = str(dataset.get("forcing", "") or "")
+        if not forcing_text.strip():
+            return
+
+        # Step 1: replace commas with spaces.
+        cleaned = forcing_text.replace(",", " ")
+        # Step 2: truncate at the first '(' — everything from that point
+        # onwards is a human-readable annotation, not a forcing code.
+        paren_pos = cleaned.find("(")
+        if paren_pos != -1:
+            cleaned = cleaned[:paren_pos]
+        # Step 3: tokenise on whitespace, discarding empty strings.
+        tokens = [t for t in cleaned.split() if t]
+        if not tokens:
+            return
+
+        valid: set[str] = (
+            set(forcing_cv)
+            if isinstance(forcing_cv, (list, Mapping))
+            else set()
+        )
+        for token in tokens:
+            if token not in valid:
+                raise ControlledVocabularyError(
+                    f"forcing term {token!r} is not valid. "
+                    f"Valid values are: {sorted(valid)!r}. "
+                    f"Check {self.filename}."
+                )
 
     def validate_variant_indices(self, dataset: Mapping[str, Any]) -> None:
         """Validate variant index integers and the derived variant_label format.
@@ -363,6 +433,11 @@ class ControlledVocabulary(Mapping[str, Any]):
                 "outpath",
                 "output_file_template",
                 "output_path_template",
+                # The 'forcing' attribute is a space/comma-separated list of
+                # abbreviations (e.g. "GHG Oz SA").  It cannot be validated
+                # as a single value against the CV; validate_forcing_terms
+                # handles it with per-token checks instead.
+                "forcing",
             }:
                 continue
             allowed = self.definition_for(str(key))
