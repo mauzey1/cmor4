@@ -954,3 +954,211 @@ class TestForcingTermsValidation(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+# ---------------------------------------------------------------------------
+# GAP-05 — DRS path/filename templates read from the CV
+# ---------------------------------------------------------------------------
+
+from cmor4.core import build_output_path, DEFAULT_OUTPUT_PATH_TEMPLATE, DEFAULT_OUTPUT_FILE_TEMPLATE  # noqa: E402
+
+
+_CV_WITH_DRS: dict = {
+    "CV": {
+        **_MINIMAL_CV["CV"],
+        "DRS": {
+            "directory_path_example": "PROJ/CMIP/NCAR/CESM2/amip/r1i1p1f1/tas/gn/v20240101",
+            "directory_path_template": "<mip_era><activity_id><institution_id><source_id><experiment_id><variant_label>",
+            "filename_example": "tas_mon_CESM2_amip_r1i1p1f1_gn.nc",
+            "filename_template": "<variable_id><frequency><source_id><experiment_id><variant_label><grid_label>",
+        },
+    }
+}
+
+_CV_WITHOUT_DRS: dict = _MINIMAL_CV  # no DRS section
+
+
+class TestDrsTemplates(unittest.TestCase):
+    """GAP-05: CV DRS section templates override hard-coded defaults.
+
+    CMOR3 reference: ``cmor.c`` DRS section handling; GitHub issue #834.
+    Priority chain (highest → lowest):
+      1. User-supplied ``output_path_template`` / ``output_file_template``
+      2. CV ``DRS.directory_path_template`` / ``DRS.filename_template``
+      3. Hard-coded ``DEFAULT_OUTPUT_PATH_TEMPLATE`` / ``DEFAULT_OUTPUT_FILE_TEMPLATE``
+    """
+
+    # -----------------------------------------------------------------------
+    # ControlledVocabulary.drs_templates() unit tests
+    # -----------------------------------------------------------------------
+
+    def test_drs_templates_returns_both_when_defined(self):
+        cv = ControlledVocabulary(_CV_WITH_DRS)
+        path_tmpl, file_tmpl = cv.drs_templates()
+        self.assertEqual(
+            path_tmpl,
+            "<mip_era><activity_id><institution_id><source_id><experiment_id><variant_label>",
+        )
+        self.assertEqual(
+            file_tmpl,
+            "<variable_id><frequency><source_id><experiment_id><variant_label><grid_label>",
+        )
+
+    def test_drs_templates_returns_none_when_no_drs_section(self):
+        cv = ControlledVocabulary(_CV_WITHOUT_DRS)
+        path_tmpl, file_tmpl = cv.drs_templates()
+        self.assertIsNone(path_tmpl)
+        self.assertIsNone(file_tmpl)
+
+    def test_drs_templates_returns_none_for_missing_individual_keys(self):
+        cv_partial = ControlledVocabulary(
+            {
+                "CV": {
+                    **_MINIMAL_CV["CV"],
+                    "DRS": {"directory_path_example": "example/only/no/templates"},
+                }
+            }
+        )
+        path_tmpl, file_tmpl = cv_partial.drs_templates()
+        self.assertIsNone(path_tmpl)
+        self.assertIsNone(file_tmpl)
+
+    def test_drs_templates_ignores_non_mapping_drs_value(self):
+        cv_bad = ControlledVocabulary(
+            {"CV": {**_MINIMAL_CV["CV"], "DRS": "not-a-dict"}}
+        )
+        path_tmpl, file_tmpl = cv_bad.drs_templates()
+        self.assertIsNone(path_tmpl)
+        self.assertIsNone(file_tmpl)
+
+    # -----------------------------------------------------------------------
+    # build_output_path priority-chain integration tests
+    # -----------------------------------------------------------------------
+
+    def _make_dataset_and_variable(self, cv_dict: dict, tmp: Path, extra: dict | None = None):
+        """Helper: build a DatasetInfo + Variable from a given CV dict."""
+        project = _make_project(tmp, cv_dict, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
+        dataset_attrs = {**_MINIMAL_DATASET, **(extra or {})}
+        dataset_info = project.dataset_info(dataset_attrs)
+        variable = project.variable("tas")
+        return dataset_info, variable
+
+    def test_cv_drs_path_template_used_when_no_user_override(self):
+        """When no user template is set, build_output_path uses the CV DRS template."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dataset_info, variable = self._make_dataset_and_variable(
+                _CV_WITH_DRS, tmp
+            )
+            path = build_output_path(dataset_info, variable)
+        # CV template: <mip_era><activity_id><institution_id><source_id>
+        #              <experiment_id><variant_label>
+        # With _MINIMAL_DATASET values:
+        #   mip_era=CMIP7, activity_id=CMIP, institution_id=NCAR,
+        #   source_id=CESM2, experiment_id=amip, variant_label=r1i1p1f1
+        directory = str(path.parent)
+        self.assertIn("CMIP7", directory)
+        self.assertIn("CMIP", directory)
+        self.assertIn("NCAR", directory)
+        self.assertIn("CESM2", directory)
+        self.assertIn("amip", directory)
+
+    def test_cv_drs_file_template_used_when_no_user_override(self):
+        """build_output_path uses the CV DRS filename template."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dataset_info, variable = self._make_dataset_and_variable(
+                _CV_WITH_DRS, tmp
+            )
+            path = build_output_path(dataset_info, variable)
+        # CV filename template: <variable_id><frequency><source_id>
+        #                       <experiment_id><variant_label><grid_label>
+        filename = path.name
+        self.assertIn("tas", filename)
+        self.assertIn("mon", filename)
+        self.assertIn("CESM2", filename)
+
+    def test_user_path_template_overrides_cv_drs(self):
+        """A user-supplied output_path_template takes priority over the CV DRS."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dataset_info, variable = self._make_dataset_and_variable(
+                _CV_WITH_DRS,
+                tmp,
+                extra={"output_path_template": "<source_id><experiment_id>"},
+            )
+            path = build_output_path(dataset_info, variable)
+        directory = str(path.parent)
+        # The user template only has source_id and experiment_id.
+        # The CV template would also have mip_era, activity_id etc.
+        self.assertIn("CESM2", directory)
+        self.assertIn("amip", directory)
+        # mip_era should NOT appear in a path produced from the narrow user template.
+        self.assertNotIn("CMIP7", directory)
+
+    def test_user_file_template_overrides_cv_drs(self):
+        """A user-supplied output_file_template takes priority over the CV DRS."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dataset_info, variable = self._make_dataset_and_variable(
+                _CV_WITH_DRS,
+                tmp,
+                extra={"output_file_template": "<source_id><variable_id>"},
+            )
+            path = build_output_path(dataset_info, variable)
+        filename = path.name
+        self.assertIn("CESM2", filename)
+        self.assertIn("tas", filename)
+        # The CV template would include frequency ('mon'); the user template does not.
+        self.assertNotIn("mon", filename)
+
+    def test_hard_coded_default_used_when_no_cv_drs_and_no_user_override(self):
+        """When neither the CV nor the user supplies templates, fall back to defaults."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            dataset_info, variable = self._make_dataset_and_variable(
+                _CV_WITHOUT_DRS, tmp
+            )
+            path = build_output_path(dataset_info, variable)
+        # The default path template starts with <drs_specs><mip_era>…
+        # With _MINIMAL_DATASET there is no drs_specs/version, but mip_era=CMIP7
+        # and the other tokens are present.
+        directory = str(path.parent)
+        self.assertIn("CMIP7", directory)
+
+    def test_cmip7_project_uses_cv_drs_templates(self):
+        """The real CMIP7 project tables carry a DRS section that is used."""
+        from table_helpers import cmip7_project
+
+        project = cmip7_project()
+        cv_path_tmpl, cv_file_tmpl = project.cv.drs_templates()
+
+        # CMIP7 DRS section defines both templates.
+        self.assertIsNotNone(cv_path_tmpl)
+        self.assertIsNotNone(cv_file_tmpl)
+        # Templates contain the expected tokens.
+        self.assertIn("<mip_era>", cv_path_tmpl)
+        self.assertIn("<variable_id>", cv_file_tmpl)
+
+    def test_drcdp_project_uses_cv_drs_templates(self):
+        """The DRCDP project tables also carry a DRS section."""
+        from table_helpers import drcdp_project
+
+        project = drcdp_project()
+        cv_path_tmpl, cv_file_tmpl = project.cv.drs_templates()
+
+        self.assertIsNotNone(cv_path_tmpl)
+        self.assertIsNotNone(cv_file_tmpl)
+
+    def test_obs4mips_project_has_no_drs_templates(self):
+        """obs4MIPs has no DRS section; drs_templates() returns (None, None)."""
+        from table_helpers import obs4mips_project
+
+        project = obs4mips_project()
+        cv_path_tmpl, cv_file_tmpl = project.cv.drs_templates()
+
+        self.assertIsNone(cv_path_tmpl)
+        self.assertIsNone(cv_file_tmpl)
+
+
+if __name__ == "__main__":
+    unittest.main()

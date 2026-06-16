@@ -96,6 +96,31 @@ class ControlledVocabulary(Mapping[str, Any]):
 
         return self.path.name if self.path is not None else "CV"
 
+    def drs_templates(self) -> tuple[str | None, str | None]:
+        """Return the DRS path and filename templates defined in the CV.
+
+        The CV ``DRS`` section may specify ``directory_path_template`` and
+        ``filename_template`` that projects want CMOR to use by default.
+        These override the compiled-in defaults but are themselves overridden
+        by any template the user supplies in their dataset metadata.
+
+        Returns
+        -------
+        tuple[str | None, str | None]
+            ``(directory_path_template, filename_template)``.
+            Either element is ``None`` when the CV does not define it.
+        """
+
+        drs = self.get("DRS")
+        if not isinstance(drs, Mapping):
+            return None, None
+        path_tmpl = drs.get("directory_path_template")
+        file_tmpl = drs.get("filename_template")
+        return (
+            str(path_tmpl) if isinstance(path_tmpl, str) and path_tmpl else None,
+            str(file_tmpl) if isinstance(file_tmpl, str) and file_tmpl else None,
+        )
+
     def get_dataset_info(self, dataset: dict[str, Any]) -> dict[str, Any]:
         """Get dataset info with CV defaults.
 

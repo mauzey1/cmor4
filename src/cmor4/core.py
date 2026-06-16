@@ -389,6 +389,18 @@ def build_output_path(
 ) -> Path:
     """Build a CMOR-like output path from dataset and variable metadata.
 
+    Template resolution follows a three-level priority chain that mirrors
+    CMOR3's behaviour (added in CMOR 3.12):
+
+    1. **User-supplied** — ``output_path_template`` / ``output_file_template``
+       keys in the dataset metadata.  These take highest priority.
+    2. **CV DRS section** — ``directory_path_template`` /
+       ``filename_template`` from the CV's ``DRS`` block, when present.
+       All three project CVs shipped with CMOR4 (CMIP7, DRCDP) carry a
+       ``DRS`` section; obs4MIPs does not.
+    3. **Hard-coded defaults** — ``DEFAULT_OUTPUT_PATH_TEMPLATE`` and
+       ``DEFAULT_OUTPUT_FILE_TEMPLATE``.
+
     Parameters
     ----------
     dataset:
@@ -407,11 +419,24 @@ def build_output_path(
     dataset = _dataset_for_variable(dataset, variable)
     root = Path(str(dataset.get("outpath", "."))).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
+
+    # Read CV DRS templates once; both may be None when the CV lacks a DRS
+    # section (e.g. obs4MIPs) or when the CV is not project-backed.
+    cv_path_tmpl: str | None = None
+    cv_file_tmpl: str | None = None
+    cv = getattr(getattr(dataset, "project", None), "cv", None)
+    if cv is not None and hasattr(cv, "drs_templates"):
+        cv_path_tmpl, cv_file_tmpl = cv.drs_templates()
+
     path_template = str(
-        dataset.get("output_path_template", DEFAULT_OUTPUT_PATH_TEMPLATE)
+        dataset.get("output_path_template")
+        or cv_path_tmpl
+        or DEFAULT_OUTPUT_PATH_TEMPLATE
     )
     file_template = str(
-        dataset.get("output_file_template", DEFAULT_OUTPUT_FILE_TEMPLATE)
+        dataset.get("output_file_template")
+        or cv_file_tmpl
+        or DEFAULT_OUTPUT_FILE_TEMPLATE
     )
 
     if (
