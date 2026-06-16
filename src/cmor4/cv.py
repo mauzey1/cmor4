@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
 import uuid
+import warnings
 
 from ._table_utils import (
     is_table_value as _is_table_value,
@@ -54,6 +55,82 @@ class ControlledVocabulary(Mapping[str, Any]):
     def __init__(self, data: Mapping[str, Any], path: str | Path | None = None):
         self.path = Path(path) if path is not None else None
         self._data = dict(data.get("CV", data))
+        self._warn_double_nested_entries()
+
+    def _warn_double_nested_entries(self) -> None:
+        """Emit a RuntimeWarning for double-nested CV entries.
+
+        The most common CV authoring mistake is accidentally wrapping an
+        attribute's value inside a dict keyed by the attribute name itself,
+        for example::
+
+            "nominal_resolution": {
+                "nominal_resolution": ["0.5 km", "1 km", …]
+            }
+
+        instead of the correct::
+
+            "nominal_resolution": ["0.5 km", "1 km", …]
+
+        When this happens, :meth:`validate_dataset_values` receives the inner
+        dict as the ``allowed`` value, and :meth:`value_allowed` silently
+        passes any submitted value because ``str(value) in allowed`` checks
+        membership in the inner dict's keys rather than the intended list.
+
+        This check mirrors the CMOR3 issue reported at
+        github.com/PCMDI/cmor/issues/829.
+        """
+
+        issues = self.validate_structure()
+        for issue in issues:
+            warnings.warn(issue, RuntimeWarning, stacklevel=3)
+
+    def validate_structure(self) -> list[str]:
+        """Return a list of structural issues found in this CV.
+
+        Currently detects double-nested entries — those where the value is a
+        mapping whose only key is the entry's own name.  When present,
+        :meth:`validate_dataset_values` silently skips enforcement for that
+        attribute because the expected constraint is buried one level too
+        deep.
+
+        Returns
+        -------
+        list[str]
+            Human-readable issue descriptions.  Empty when no issues are
+            found.
+
+        Examples
+        --------
+        Detect a double-nested entry::
+
+            cv = ControlledVocabulary({
+                "CV": {
+                    "nominal_resolution": {
+                        "nominal_resolution": ["0.5 km", "1 km"]
+                    }
+                }
+            })
+            issues = cv.validate_structure()
+            # ["CV entry 'nominal_resolution' appears to be double-nested …"]
+        """
+
+        issues: list[str] = []
+        for key, value in self._data.items():
+            if (
+                isinstance(value, Mapping)
+                and len(value) == 1
+                and key in value
+            ):
+                issues.append(
+                    f"CV entry {key!r} in {self.filename} appears to be "
+                    f"double-nested: its value is a mapping containing only "
+                    f"the key {key!r}. This is usually a CV authoring mistake "
+                    f"(see github.com/PCMDI/cmor/issues/829). "
+                    f"Controlled vocabulary validation for {key!r} may "
+                    f"silently pass any value."
+                )
+        return issues
 
     @classmethod
     def from_file(cls, path: str | Path) -> "ControlledVocabulary":

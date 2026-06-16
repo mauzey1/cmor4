@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -1158,6 +1159,264 @@ class TestDrsTemplates(unittest.TestCase):
 
         self.assertIsNone(cv_path_tmpl)
         self.assertIsNone(cv_file_tmpl)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+# ---------------------------------------------------------------------------
+# GAP-06 — CV JSON structure validation (double-nesting detection)
+# ---------------------------------------------------------------------------
+
+
+class TestCVStructureValidation(unittest.TestCase):
+    """GAP-06: Double-nested CV entries emit RuntimeWarning and are reported.
+
+    CMOR3 reference: ``cmor_CV.c``; GitHub issue #829
+    (obs4MIPs double-nested ``nominal_resolution`` silently skipped validation).
+
+    The double-nesting pattern is::
+
+        "nominal_resolution": {
+            "nominal_resolution": ["0.5 km", "1 km", …]
+        }
+
+    instead of the correct::
+
+        "nominal_resolution": ["0.5 km", "1 km", …]
+    """
+
+    # -----------------------------------------------------------------------
+    # validate_structure() unit tests
+    # -----------------------------------------------------------------------
+
+    @staticmethod
+    def _make_broken_cv(data: dict) -> ControlledVocabulary:
+        """Construct a deliberately malformed CV, suppressing the expected warning.
+
+        Tests that exercise ``validate_structure()`` or the validation bypass
+        behaviour call this helper so they don't leak RuntimeWarnings into the
+        test output.  Tests that specifically verify *warning emission* use
+        ``warnings.catch_warnings(record=True)`` directly.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            return ControlledVocabulary(data)
+
+    def test_well_formed_cv_has_no_issues(self):
+        cv = ControlledVocabulary(
+            {
+                "CV": {
+                    "nominal_resolution": ["100 km", "250 km"],
+                    "institution_id": {"NCAR": "National Center …"},
+                    "mip_era": "CMIP7",
+                }
+            }
+        )
+        self.assertEqual(cv.validate_structure(), [])
+
+    def test_double_nested_entry_is_detected(self):
+        cv = self._make_broken_cv(
+            {
+                "CV": {
+                    "nominal_resolution": {
+                        "nominal_resolution": ["0.5 km", "1 km", "10 km"]
+                    }
+                }
+            }
+        )
+        issues = cv.validate_structure()
+        self.assertEqual(len(issues), 1)
+        self.assertIn("nominal_resolution", issues[0])
+        self.assertIn("double-nested", issues[0])
+
+    def test_multiple_double_nested_entries_all_detected(self):
+        cv = self._make_broken_cv(
+            {
+                "CV": {
+                    "nominal_resolution": {"nominal_resolution": ["10 km"]},
+                    "activity_id": {"activity_id": ["CMIP", "ScenarioMIP"]},
+                    "institution_id": {"NCAR": "National Center …"},  # not double-nested
+                }
+            }
+        )
+        issues = cv.validate_structure()
+        self.assertEqual(len(issues), 2)
+        keys_mentioned = {line.split("'")[1] for line in issues}
+        self.assertEqual(keys_mentioned, {"nominal_resolution", "activity_id"})
+
+    def test_mapping_with_multiple_keys_is_not_double_nested(self):
+        """A mapping value with more than one key is a lookup table, not a bug."""
+        cv = ControlledVocabulary(
+            {
+                "CV": {
+                    "experiment_id": {
+                        "historical": {"description": "historical"},
+                        "amip": {"description": "amip"},
+                    }
+                }
+            }
+        )
+        self.assertEqual(cv.validate_structure(), [])
+
+    def test_mapping_with_different_key_is_not_double_nested(self):
+        """A mapping value whose single key differs from the parent is a lookup table."""
+        cv = ControlledVocabulary(
+            {"CV": {"institution_id": {"NCAR": "National Center …"}}}
+        )
+        self.assertEqual(cv.validate_structure(), [])
+
+    def test_list_value_is_not_double_nested(self):
+        cv = ControlledVocabulary({"CV": {"activity_id": ["CMIP", "ScenarioMIP"]}})
+        self.assertEqual(cv.validate_structure(), [])
+
+    def test_string_value_is_not_double_nested(self):
+        cv = ControlledVocabulary({"CV": {"mip_era": "CMIP7"}})
+        self.assertEqual(cv.validate_structure(), [])
+
+    def test_issue_message_mentions_github_reference(self):
+        """Issue description links to the bug report for user guidance."""
+        cv = self._make_broken_cv(
+            {"CV": {"nominal_resolution": {"nominal_resolution": ["10 km"]}}}
+        )
+        issues = cv.validate_structure()
+        self.assertTrue(any("829" in issue for issue in issues))
+
+    def test_issue_message_explains_validation_consequence(self):
+        """Users are told that validation may silently pass any value."""
+        cv = self._make_broken_cv(
+            {"CV": {"nominal_resolution": {"nominal_resolution": ["10 km"]}}}
+        )
+        issues = cv.validate_structure()
+        self.assertTrue(
+            any("silently" in issue.lower() for issue in issues)
+        )
+
+    # -----------------------------------------------------------------------
+    # RuntimeWarning emission tests
+    # -----------------------------------------------------------------------
+
+    def test_double_nested_entry_emits_runtime_warning(self):
+        """ControlledVocabulary.__init__ emits RuntimeWarning for double-nesting."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            ControlledVocabulary(
+                {
+                    "CV": {
+                        "nominal_resolution": {
+                            "nominal_resolution": ["0.5 km", "10 km"]
+                        }
+                    }
+                }
+            )
+        runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
+        self.assertEqual(len(runtime_warnings), 1)
+        self.assertIn("nominal_resolution", str(runtime_warnings[0].message))
+
+    def test_multiple_double_nested_entries_emit_one_warning_each(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            ControlledVocabulary(
+                {
+                    "CV": {
+                        "nominal_resolution": {"nominal_resolution": ["10 km"]},
+                        "activity_id": {"activity_id": ["CMIP"]},
+                    }
+                }
+            )
+        runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
+        self.assertEqual(len(runtime_warnings), 2)
+
+    def test_well_formed_cv_emits_no_warning(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            ControlledVocabulary(
+                {"CV": {"nominal_resolution": ["100 km", "250 km"]}}
+            )
+        runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
+        self.assertEqual(len(runtime_warnings), 0)
+
+    def test_from_file_emits_warning_for_double_nested_cv(self):
+        """Warning is emitted when loading a double-nested CV from disk."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            cv_path = Path(tmp_str) / "bad_cv.json"
+            cv_path.write_text(
+                json.dumps(
+                    {
+                        "CV": {
+                            "nominal_resolution": {
+                                "nominal_resolution": ["10 km", "50 km"]
+                            },
+                            "institution_id": {"NCAR": "National Center …"},
+                        }
+                    }
+                )
+            )
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                ControlledVocabulary.from_file(cv_path)
+
+        runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
+        self.assertEqual(len(runtime_warnings), 1)
+        self.assertIn("nominal_resolution", str(runtime_warnings[0].message))
+
+    # -----------------------------------------------------------------------
+    # Interaction with validate_dataset_values
+    # -----------------------------------------------------------------------
+
+    def test_double_nested_nominal_resolution_silently_accepts_bad_value(self):
+        """Demonstrate the bug: double-nesting causes an incorrect value to be accepted.
+
+        With correct nesting, only values in the allowed list pass.
+        With double-nesting, the check becomes "is the submitted value a key
+        of the inner dict?" — so the key name itself (``"nominal_resolution"``)
+        is mistakenly accepted, and the true allowed values (like ``"100 km"``)
+        are rejected, which is the opposite of the intended behaviour.
+        """
+        cv_correct = ControlledVocabulary(
+            {"CV": {"nominal_resolution": ["100 km", "250 km"]}}
+        )
+        # Correct CV: "100 km" passes, the key-name string does not.
+        cv_correct.validate_dataset_values({"nominal_resolution": "100 km"})
+        with self.assertRaises(ControlledVocabularyError):
+            cv_correct.validate_dataset_values({"nominal_resolution": "nominal_resolution"})
+
+        cv_broken = self._make_broken_cv(
+            {"CV": {"nominal_resolution": {"nominal_resolution": ["100 km"]}}}
+        )
+        # Broken CV: "100 km" is wrongly REJECTED (it is not a key of the
+        # inner dict), while "nominal_resolution" is wrongly ACCEPTED (it IS
+        # a key of the inner dict).
+        with self.assertRaises(ControlledVocabularyError):
+            cv_broken.validate_dataset_values({"nominal_resolution": "100 km"})
+        # The key-name string passes silently — wrong.
+        cv_broken.validate_dataset_values({"nominal_resolution": "nominal_resolution"})
+
+    # -----------------------------------------------------------------------
+    # Real project CV checks
+    # -----------------------------------------------------------------------
+
+    def test_cmip7_cv_has_no_structural_issues(self):
+        """The shipped CMIP7 CV should be well-formed."""
+        from table_helpers import cmip7_project
+
+        project = cmip7_project()
+        issues = project.cv.validate_structure()
+        self.assertEqual(issues, [], msg=f"CMIP7 CV structural issues: {issues}")
+
+    def test_obs4mips_cv_has_no_structural_issues(self):
+        from table_helpers import obs4mips_project
+
+        project = obs4mips_project()
+        issues = project.cv.validate_structure()
+        self.assertEqual(issues, [], msg=f"obs4MIPs CV structural issues: {issues}")
+
+    def test_drcdp_cv_has_no_structural_issues(self):
+        from table_helpers import drcdp_project
+
+        project = drcdp_project()
+        issues = project.cv.validate_structure()
+        self.assertEqual(issues, [], msg=f"DRCDP CV structural issues: {issues}")
 
 
 if __name__ == "__main__":
