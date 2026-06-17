@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Mapping
 
 from pydantic import Field
@@ -10,43 +9,6 @@ from pydantic import Field
 from .metadata import CoercedF, IntTuple, MetadataModel, StrOrTuple, StrSeq
 
 
-# ---------------------------------------------------------------------------
-# VariableEntry — lightweight result of a table lookup
-# ---------------------------------------------------------------------------
-
-
-class VariableEntry:
-    """Resolved variable table entry.
-
-    Parameters
-    ----------
-    name:
-        Variable entry name in the table.
-    table_id:
-        Identifier of the table supplying the entry.
-    entry:
-        Raw variable-entry metadata dict from the JSON table.
-    table_file:
-        Path to the source table file, if available.
-    table_header:
-        Header metadata from the table file, if available.
-    """
-
-    __slots__ = ("name", "table_id", "entry", "table_file", "table_header")
-
-    def __init__(
-        self,
-        name: str,
-        table_id: str,
-        entry: Mapping[str, Any],
-        table_file: Path | None = None,
-        table_header: Mapping[str, Any] | None = None,
-    ) -> None:
-        self.name = name
-        self.table_id = table_id
-        self.entry = entry
-        self.table_file = table_file
-        self.table_header = table_header
 
 
 # ---------------------------------------------------------------------------

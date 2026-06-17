@@ -568,8 +568,7 @@ def _grid_axes(
             "auxiliary": True,
         }
         if project is not None:
-            from . import _table_resolution as _tr
-            lat_data = _tr._apply_axis_defaults(lat_data, project)
+            lat_data = project.coordinate_table.build(lat_data)
         lat_axis = Axis.model_validate(lat_data)
         axes.append(lat_axis)
 
@@ -586,7 +585,7 @@ def _grid_axes(
             "auxiliary": True,
         }
         if project is not None:
-            lon_data = _tr._apply_axis_defaults(lon_data, project)
+            lon_data = project.coordinate_table.build(lon_data)
         lon_axis = Axis.model_validate(lon_data)
         axes.append(lon_axis)
 

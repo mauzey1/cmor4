@@ -10,17 +10,19 @@ from typing import Any, Mapping, Sequence
 from ._table_utils import (
     is_table_value as _is_table_value,
     single_or_original as _single_or_original,
+    validate_table_metadata as _validate_table_metadata,
 )
 from ._templates import is_unresolved_template as _is_unresolved_template
 from ._axis_validation import validate_axes as _validate_axes
+from ._axis_validation import validate_axis_values_early as _validate_axis_values_early
 from ._axis_validation import _validate_calendar
-from . import _table_resolution as _tr
+from ._tables import CoordinateTable, FormulaTable, GridTable, VariableEntry, VariableTable
 from .axis import Axis
 from .cv import ControlledVocabulary
 from .dataset import DatasetInfo
 from .exceptions import TableValidationError
 from .grid import Grid
-from .variable import Variable, VariableEntry
+from .variable import Variable
 from ._unit_conversion import units_are_convertible as _units_are_convertible
 from .zfactor import ZFactor
 
@@ -65,42 +67,77 @@ class ProjectTables:
         )
         self.grid_table_file = Path(grid_table) if grid_table is not None else None
         self.cv = ControlledVocabulary.from_file(self.cv_file)
-        self.variable_entries: dict[str, VariableEntry] = {}
-        self._variable_entries_by_name: dict[str, list[VariableEntry]] = {}
-        for table_file in self.variable_table_files:
-            self._load_variable_table(table_file)
-        self.grid_axis_entries: dict[str, Mapping[str, Any]] = {}
-        self.grid_coordinate_entries: dict[str, Mapping[str, Any]] = {}
-        self.grid_mapping_entries: dict[str, Mapping[str, Any]] = {}
+        self.variable_table = VariableTable(self.variable_table_files)
+
+        # Load raw grid table data first — coordinate table needs the axis
+        # entries from it for the overlay that gives grid-specific names priority.
+        raw_grid_axis: dict[str, Mapping[str, Any]] = {}
+        raw_grid_coord: dict[str, Mapping[str, Any]] = {}
+        raw_grid_mapping: dict[str, Mapping[str, Any]] = {}
         if self.grid_table_file is not None:
-            self.grid_axis_entries = self._read_entries(
-                self.grid_table_file, "axis_entry"
-            )
-            self.grid_coordinate_entries = self._read_entries(
-                self.grid_table_file, "variable_entry"
-            )
-            self.grid_mapping_entries = self._read_entries(
-                self.grid_table_file, "mapping_entry"
-            )
-        coordinate_entries: dict[str, Mapping[str, Any]] = {}
+            raw_grid_axis = self._read_entries(self.grid_table_file, "axis_entry")
+            raw_grid_coord = self._read_entries(self.grid_table_file, "variable_entry")
+            raw_grid_mapping = self._read_entries(self.grid_table_file, "mapping_entry")
+        self.grid_table = GridTable(raw_grid_axis, raw_grid_coord, raw_grid_mapping)
+
+        raw_coord: dict[str, Mapping[str, Any]] = {}
         if self.coordinate_table_file is not None:
-            coordinate_entries = self._read_entries(
-                self.coordinate_table_file, "axis_entry"
-            )
-        self.coordinate_entries = _overlay_table_entries(
-            coordinate_entries, self.grid_axis_entries
-        )
-        self.scalar_axis_entries = {
-            name: entry
-            for name, entry in self.coordinate_entries.items()
-            if _is_table_value(entry.get("value"))
-        }
-        self.generic_level_entries = _generic_level_entries(self.coordinate_entries)
-        self.formula_entries: dict[str, Mapping[str, Any]] = {}
+            raw_coord = self._read_entries(self.coordinate_table_file, "axis_entry")
+        self.coordinate_table = CoordinateTable(raw_coord, raw_grid_axis, raw_grid_coord)
+
+        raw_formula: dict[str, Mapping[str, Any]] = {}
         if self.formula_table_file is not None:
-            self.formula_entries = self._read_entries(
-                self.formula_table_file, "formula_entry"
-            )
+            raw_formula = self._read_entries(self.formula_table_file, "formula_entry")
+        self.formula_table = FormulaTable(raw_formula)
+
+    # ------------------------------------------------------------------
+    # Backward-compatible properties (delegate to table objects)
+    # ------------------------------------------------------------------
+
+    @property
+    def coordinate_entries(self) -> dict[str, Mapping[str, Any]]:
+        """Overlaid coordinate entries (grid axis entries take precedence)."""
+        return self.coordinate_table._all_coord
+
+    @property
+    def grid_axis_entries(self) -> dict[str, Mapping[str, Any]]:
+        """Raw axis entries from the grids table."""
+        return self.grid_table.axis_entries
+
+    @property
+    def grid_coordinate_entries(self) -> dict[str, Mapping[str, Any]]:
+        """Raw grid-coordinate entries from the grids table."""
+        return self.grid_table.coord_entries
+
+    @property
+    def grid_mapping_entries(self) -> dict[str, Mapping[str, Any]]:
+        """Raw grid-mapping entries from the grids table."""
+        return self.grid_table._raw_mapping
+
+    @property
+    def scalar_axis_entries(self) -> dict[str, Mapping[str, Any]]:
+        """Coordinate entries that carry a fixed scalar value."""
+        return self.coordinate_table.scalar_entries
+
+    @property
+    def generic_level_entries(self) -> dict[str, dict[str, Mapping[str, Any]]]:
+        """Two-level index: generic_level_name → {entry_name → entry}."""
+        return self.coordinate_table.generic_level_entries
+
+    @property
+    def formula_entries(self) -> dict[str, Mapping[str, Any]]:
+        """Raw formula-term entries."""
+        return self.formula_table._entries
+
+    @property
+    def variable_entries(self) -> dict[str, VariableEntry]:
+        """Variable entries indexed by name (first table wins on duplicates)."""
+        return self.variable_table.entries
+
+    @property
+    def _variable_entries_by_name(self) -> dict[str, list[VariableEntry]]:
+        """Variable entries grouped by short name (may span multiple tables)."""
+        return self.variable_table._by_name
 
     @classmethod
     def from_directory(
@@ -190,7 +227,7 @@ class ProjectTables:
         happens later via validate_components.
         """
         normalized_dataset = self.cv.get_dataset_info(dataset)
-        variable_entry = _tr.variable_table_entry(self, variable)
+        variable_entry = self.variable_table.resolve(variable.to_dict())
         self._add_table_header_defaults(normalized_dataset, variable_entry)
         self._add_variable_global_defaults(normalized_dataset, variable)
         self.validate_dataset(normalized_dataset)
@@ -205,7 +242,7 @@ class ProjectTables:
         # Quick validation check for dataset-variable consistency
         # This is duplicated in validate_components but done early for fast
         # failure
-        _tr.validate_variable_against_entry(variable, variable_entry)
+        self.variable_table.validate_against(variable, variable_entry)
         self._validate_dataset_variable_consistency(
             prepared_dataset, variable, variable_entry
         )
@@ -269,7 +306,8 @@ class ProjectTables:
             # Uses monthly atmospheric table specifically
         """
 
-        return _tr.build_variable(self, name, **values)
+        data = self.variable_table.build({"name": name, **values})
+        return Variable.model_validate(data)
 
     def axis(self, name: str, **values: Any) -> Axis:
         """Create an axis with metadata from the loaded coordinate tables.
@@ -339,7 +377,10 @@ class ProjectTables:
             )
         """
 
-        return self._mark_prepared_axis(_tr.build_axis(self, name, **values))
+        data = self.coordinate_table.build({"name": name, **values})
+        axis = Axis.model_validate(data)
+        _validate_axis_values_early(axis)
+        return self._mark_prepared_axis(axis)
 
     def _axes(
         self,
@@ -355,7 +396,8 @@ class ProjectTables:
         """
 
         merged_axes = [
-            axis if self._is_prepared_axis(axis) else _tr.merge_unprepared_axis(self, axis)
+            axis if self._is_prepared_axis(axis)
+            else Axis.model_validate(self.coordinate_table.build(axis.to_dict()))
             for axis in axes
         ]
         if variable is not None:
@@ -434,9 +476,11 @@ class ProjectTables:
             dimension_name = str(dimension)
             if dimension_name in present:
                 continue
-            if dimension_name not in self.scalar_axis_entries:
+            if dimension_name not in self.coordinate_table.scalar_entries:
                 continue
-            axis = _tr.build_axis(self, dimension_name, table_entry=dimension_name, scalar=True)
+            data = self.coordinate_table.build({"name": dimension_name, "table_entry": dimension_name, "scalar": True})
+            axis = Axis.model_validate(data)
+            _validate_axis_values_early(axis)
             missing_axes.append(axis)
             present.update(
                 str(value)
@@ -552,7 +596,8 @@ class ProjectTables:
             )
         """
 
-        return _tr.build_grid(self, name, **values)
+        data = {k: v for k, v in {"name": name, **values}.items() if v is not None}
+        return Grid.model_validate(self.grid_table.build(data))
 
     def zfactor(self, name: str, **values: Any) -> ZFactor:
         """Create a z-factor with metadata from formula-term tables.
@@ -624,7 +669,8 @@ class ProjectTables:
             )
         """
 
-        return _tr.build_zfactor(self, name, **values)
+        data = self.formula_table.build({"name": name, **values})
+        return ZFactor.model_validate(data)
 
     def validate_components(
         self,
@@ -699,8 +745,8 @@ class ProjectTables:
         # Note: This may be redundant with validation in _dataset_for_variable,
         # but we validate again here to ensure consistency when called directly
         # by users or if variable was modified after _dataset_for_variable
-        variable_entry = _tr.variable_table_entry(self, variable)
-        _tr.validate_variable_against_entry(variable, variable_entry)
+        variable_entry = self.variable_table.resolve(variable.to_dict())
+        self.variable_table.validate_against(variable, variable_entry)
 
         # Dataset-variable consistency checks
         if dataset is not None:
@@ -712,23 +758,20 @@ class ProjectTables:
         for axis in axes:
             if not self._is_prepared_axis(axis):
                 # Check if this is a grid coordinate (auxiliary lat/lon)
-                grid_entry_name, grid_entry = _tr.axis_grid_coordinate(self, axis)
-                if grid_entry is not None:
-                    # Grid coordinates are only validated against grid table
-                    _tr.validate_axis_metadata(
-                        axis, "grid coordinate",
-                        grid_entry_name, grid_entry,
-                        ("units", "standard_name", "long_name"),
+                adict = axis.to_dict()
+                if (ae := self.coordinate_table.resolve_grid_coord(adict)):
+                    # Grid coordinates validated against grid coordinate table
+                    _validate_table_metadata(
+                        adict, ae.name, ae.entry,
+                        ("units", "standard_name", "long_name"), "grid coordinate",
                     )
-                else:
+                elif (ae := self.coordinate_table.resolve_coord(adict)):
                     # Regular coordinates validated against coordinate table
-                    entry_name, entry = _tr.axis_table_entry(self, axis)
-                    if entry is not None:
-                        _tr.validate_axis_metadata(
-                            axis, "axis", entry_name, entry,
-                            ("units", "standard_name", "long_name",
-                             "axis", "positive", "formula"),
-                        )
+                    _validate_table_metadata(
+                        adict, ae.name, ae.entry,
+                        ("units", "standard_name", "long_name",
+                         "axis", "positive", "formula"), "axis",
+                    )
 
         # Dataset-axis consistency checks
         # (must_have_bounds, time interval,etc.)
@@ -773,7 +816,9 @@ class ProjectTables:
 
         # Grid validation: ensure stored attributes match tables
         if grid is not None:
-            entry_name, entry = _tr.grid_table_entry(self, grid)
+            requested = str(grid.table_entry or grid.mapping_entry or grid.name or "")
+            _gm = self.grid_table.resolve_mapping(requested) if requested else None
+            entry_name, entry = (_gm.name, _gm.entry) if _gm else (None, None)
             if entry is not None:
                 for key, user_val in (
                     ("mapping_name", grid.mapping_name),
@@ -798,7 +843,8 @@ class ProjectTables:
 
         # ZFactor validation: ensure stored attributes match tables
         for zfactor in zfactors:
-            entry_name, entry = _tr.zfactor_table_entry(self, zfactor)
+            _ze = self.formula_table.resolve(zfactor.to_dict())
+            entry_name, entry = (_ze.name, _ze.entry) if _ze else (None, None)
             if entry is None:
                 continue
 
@@ -821,9 +867,9 @@ class ProjectTables:
 
             # Validate remaining metadata (standard_name, long_name)
             # by exact match.
-            _tr.validate_zfactor_metadata(
-                zfactor, "formula term", entry_name, entry,
-                ("standard_name", "long_name"),
+            _validate_table_metadata(
+                zfactor.to_dict(), entry_name, entry,
+                ("standard_name", "long_name"), "formula term",
             )
 
             # When the formula-term table entry has no declared
@@ -1100,23 +1146,6 @@ class ProjectTables:
             if isinstance(entry, Mapping)
         }
 
-    def _load_variable_table(self, table_file: Path) -> None:
-        with table_file.open() as handle:
-            data = json.load(handle)
-        entries = data.get("variable_entry", {})
-        table_id = str(data.get("Header", {}).get("table_id") or table_file.stem)
-        if table_id.startswith("Table "):
-            table_id = table_id.removeprefix("Table ")
-        for name, entry in entries.items():
-            variable_entry = VariableEntry(
-                name=name,
-                table_id=str(table_id),
-                entry=entry,
-                table_file=table_file,
-                table_header=data.get("Header", {}),
-            )
-            self.variable_entries.setdefault(name, variable_entry)
-            self._variable_entries_by_name.setdefault(name, []).append(variable_entry)
 
 
 def _validate_grid_dimensions(
@@ -1193,30 +1222,6 @@ def _validate_grid_dimensions(
                     f"{arr.shape[i]} along that axis."
                 )
 
-
-def _generic_level_entries(
-    entries: Mapping[str, Mapping[str, Any]],
-) -> dict[str, dict[str, Mapping[str, Any]]]:
-    generic_entries: dict[str, dict[str, Mapping[str, Any]]] = {}
-    for name, entry in entries.items():
-        generic_level_name = entry.get("generic_level_name")
-        if _is_table_value(generic_level_name):
-            generic_entries.setdefault(str(generic_level_name), {})[str(name)] = entry
-    return generic_entries
-
-
-def _overlay_table_entries(
-    base_entries: Mapping[str, Mapping[str, Any]],
-    overlay_entries: Mapping[str, Mapping[str, Any]],
-) -> dict[str, Mapping[str, Any]]:
-    entries = {name: dict(entry) for name, entry in base_entries.items()}
-    for name, overlay in overlay_entries.items():
-        entry = dict(entries.get(name, {}))
-        for key, value in overlay.items():
-            if _is_table_value(value) or key not in entry:
-                entry[key] = value
-        entries[name] = entry
-    return entries
 
 
 def _resolve_optional_table(

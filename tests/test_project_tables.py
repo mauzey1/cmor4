@@ -732,12 +732,12 @@ class ProjectTablesTest(unittest.TestCase):
         )
 
         with self.assertRaises(cmor4.TableValidationError):
-            cmor4._table_resolution.variable_table_entry(
-                project, cmor4.Variable(name="pr")
+            project.variable_table.resolve(
+                cmor4.Variable(name="pr").to_dict()
             )
 
-        entry = cmor4._table_resolution.variable_table_entry(
-            project, cmor4.Variable(name="pr", table_id="obs4MIPs_A1hrPt")
+        entry = project.variable_table.resolve(
+            cmor4.Variable(name="pr", table_id="obs4MIPs_A1hrPt").to_dict()
         )
 
         self.assertEqual(entry.table_id, "obs4MIPs_A1hrPt")

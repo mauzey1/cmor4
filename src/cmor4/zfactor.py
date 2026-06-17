@@ -90,3 +90,4 @@ class ZFactor(MetadataModel):
     def bounds_array(self) -> np.ndarray:
         """Return formula-term bounds as a NetCDF-ready numpy array."""
         return self.netcdf_array(self.bounds)
+

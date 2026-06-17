@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any
 import warnings
 
 import numpy as np
@@ -208,3 +208,4 @@ def _primary_num(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
