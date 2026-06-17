@@ -27,13 +27,15 @@ def validate_variable_values(
         return
 
     valid_mask = ~np.ma.getmaskarray(values)
-    missing_value = variable.get("missing_value", variable.get("fill_value"))
+    missing_value = (
+        getattr(variable, "missing_value", None) or getattr(variable, "fill_value", None)
+    )
     if missing_value is not None:
         try:
             valid_mask &= ~np.isclose(
                 values.filled(np.nan),
                 float(missing_value),
-                rtol=float(variable.get("tolerance", 1.0e-6)),
+                rtol=float(variable.extra.get("tolerance", 1.0e-6)),
                 atol=0.0,
                 equal_nan=False,
             )
@@ -112,7 +114,7 @@ def _warn_for_limit(
     name: str | None,
     table_id: str | None,
 ) -> None:
-    limit = _numeric_or_none(variable.get(key))
+    limit = _numeric_or_none(getattr(variable, key, None))
     if limit is None:
         return
     bad_mask = compare(numeric, limit) & valid_mask
@@ -143,7 +145,7 @@ def _check_absolute_mean(
     table_id: str | None,
 ) -> None:
     mean_abs = float(np.mean(np.abs(active)))
-    ok_min = _numeric_or_none(variable.get("ok_min_mean_abs"))
+    ok_min = _numeric_or_none(variable.ok_min_mean_abs)
     if ok_min is not None:
         if mean_abs < 0.1 * ok_min:
             raise VariableValidationError(
@@ -164,7 +166,7 @@ def _check_absolute_mean(
                 stacklevel=3,
             )
 
-    ok_max = _numeric_or_none(variable.get("ok_max_mean_abs"))
+    ok_max = _numeric_or_none(variable.ok_max_mean_abs)
     if ok_max is not None:
         if mean_abs > 10.0 * ok_max:
             raise VariableValidationError(
@@ -220,7 +222,7 @@ def _axis_by_dim(
 ) -> dict[str, Axis]:
     mapped: dict[str, Axis] = {}
     for axis in axes:
-        name = str(axis["name"])
+        name = axis.name
         dims = axis_dims.get(name, ())
         if len(dims) == 1:
             mapped.setdefault(dims[0], axis)
@@ -237,16 +239,16 @@ def _axis_value(axis: Axis, location: int) -> Any:
     return location
 
 
-def _variable_name(variable: Mapping[str, Any], name: str | None) -> str:
+def _variable_name(variable: Any, name: str | None) -> str:
     if name is not None:
         return name
     names = getattr(variable, "names", None)
     if callable(names):
         return names()[0]
-    return str(variable.get("out_name", variable.get("name", "")))
+    return str(getattr(variable, "id", None) or getattr(variable, "name", ""))
 
 
-def _table_id(variable: Mapping[str, Any], table_id: str | None) -> str:
+def _table_id(variable: Any, table_id: str | None) -> str:
     if table_id is not None:
         return str(table_id)
-    return str(variable.get("table_id", ""))
+    return str(getattr(variable, "table_id", "") or "")

@@ -2,72 +2,123 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, KeysView, ItemsView, Mapping
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BeforeValidator
+
+
+# ---------------------------------------------------------------------------
+# Shared coercion helpers and annotated type aliases
+# ---------------------------------------------------------------------------
+# Axis, Variable, ZFactor, and Grid import these instead of duplicating them.
+# ---------------------------------------------------------------------------
+
+
+def _str_tuple(v: Any) -> tuple[str, ...] | None:
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return (v,)
+    return tuple(str(x) for x in v)
+
+
+def _str_seq(v: Any) -> list[str] | tuple[str, ...] | None:
+    """Coerce to list-or-tuple of str, preserving the container type."""
+    if v is None:
+        return None
+    if isinstance(v, list):
+        return [str(x) for x in v]
+    if isinstance(v, tuple):
+        return tuple(str(x) for x in v)
+    if isinstance(v, str):
+        return [v]
+    return [str(x) for x in v]
+
+
+def _int_tuple(v: Any) -> tuple[int, ...] | None:
+    if v is None:
+        return None
+    return tuple(int(x) for x in v)
+
+
+def _str_or_tuple(v: Any) -> str | tuple[str, ...] | None:
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return v
+    items = tuple(str(x) for x in v)
+    return items[0] if len(items) == 1 else items
+
+
+def _float_or_none(v: Any) -> float | None:
+    if v is None or v == "":
+        return None
+    return float(v)
+
+
+def _upper_str(v: Any) -> Any:
+    """Upper-case the axis designator so 't'/'x'/'y'/'z' are accepted."""
+    if isinstance(v, str):
+        return v.upper()
+    return v
+
+
+StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
+StrSeq = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
+IntTuple = Annotated[tuple[int, ...] | None, BeforeValidator(_int_tuple)]
+StrOrTuple = Annotated[str | tuple[str, ...] | None, BeforeValidator(_str_or_tuple)]
+CoercedF = Annotated[float | None, BeforeValidator(_float_or_none)]
+AxisStr = Annotated[str | None, BeforeValidator(_upper_str)]
+
+
+# ---------------------------------------------------------------------------
+# MetadataModel
+# ---------------------------------------------------------------------------
 
 
 class MetadataModel(BaseModel):
-    """Frozen Pydantic base with Mapping protocol and NetCDF helpers.
+    """Frozen Pydantic base for CMOR4 metadata records.
 
-    Key design decisions
-    --------------------
-    * **No direct ``Mapping`` inheritance.** ``MetadataModel`` implements the
-      full :class:`~collections.abc.Mapping` interface manually and is
-      registered as a virtual ``Mapping`` subclass via
-      ``Mapping.register(MetadataModel)``.  This avoids Pydantic's
-      "Field name 'values' shadows an attribute in parent" warning that
-      would occur because ``Mapping`` supplies a ``values()`` method and
-      ``Axis`` / ``ZFactor`` declare a field named ``values``.
-    * ``extra`` is a **declared field** (``dict[str, Any]``), not Pydantic's
-      ``model_extra``.  This preserves backward compatibility: callers may
-      still pass ``Variable(..., extra={"k": "v"})`` *or* pass unknown kwargs
-      directly (``Variable(..., k="v")``); both end up in ``self.extra``.
-      It also lets test code do ``object.__setattr__(model, "extra", {})`` to
-      bypass the frozen guard in setup helpers.
-    * ``extra="ignore"`` is set in model_config; truly unknown keys are
-      routed into ``self.extra`` by the ``_collect_extras`` before-validator.
-    * ``coerce_numbers_to_str=True`` means numeric values from JSON table
-      entries (e.g. ``"units": 1``) are quietly converted for ``str`` fields.
-    * ``frozen=True`` enforces immutability.  Use :meth:`updated` for copies.
+    Subclasses (Axis, Variable, ZFactor, Grid) are pure data holders: they
+    declare typed fields and provide NetCDF output helpers.  All project-table
+    resolution logic lives in :mod:`cmor4._table_resolution`.
+
+    Design notes
+    ------------
+    * ``frozen=True`` enforces immutability after construction.
+      Use :meth:`updated` to create a modified copy.
+    * ``extra`` is a **declared field** rather than Pydantic's ``model_extra``.
+      Unknown kwargs are routed there by ``_collect_extras`` so they end up
+      in :meth:`to_dict` and are written as NetCDF attributes when valid.
+    * ``extra="ignore"`` in model_config: truly unknown keys are routed into
+      ``self.extra`` by the ``_collect_extras`` before-validator.
+    * ``coerce_numbers_to_str=True`` converts numeric table-entry values
+      (e.g. ``"units": 1``) silently for ``str`` fields.
     """
 
     model_config = ConfigDict(
         frozen=True,
-        extra="ignore",  # unknown keys handled by _collect_extras below
+        extra="ignore",
         arbitrary_types_allowed=True,
         populate_by_name=True,
         coerce_numbers_to_str=True,
     )
 
-    # Explicit extra-metadata bucket (mirrors original dataclass field)
     extra: dict[str, Any] = Field(default_factory=dict, repr=False)
-
-    # ------------------------------------------------------------------
-    # Before-validator: normalise extra= kwarg and unknown kwargs
-    # ------------------------------------------------------------------
 
     @model_validator(mode="before")
     @classmethod
     def _collect_extras(cls, data: Any) -> Any:
-        """Spread ``extra=`` dict and collect truly unknown kwargs into it.
-
-        This runs for both ``Model(**kwargs)`` and ``Model.model_validate(d)``
-        construction paths, so the ``extra`` field is always the single
-        authoritative location for non-declared keys.
-        """
+        """Spread ``extra=`` dict and collect unknown kwargs into ``extra``."""
         if not isinstance(data, dict):
             return data
         data = dict(data)
-        data.pop("project", None)  # consumed by __init__ before Pydantic sees it
-        # Spread an explicit extra= dict first
         explicit_extra = data.pop("extra", None)
         if isinstance(explicit_extra, dict):
             for k, v in explicit_extra.items():
                 data.setdefault(k, v)
-        # Collect all remaining unknown keys into extra
         known = set(cls.model_fields.keys())
         unknown = {k: v for k, v in list(data.items()) if k not in known}
         if unknown:
@@ -77,44 +128,13 @@ class MetadataModel(BaseModel):
         return data
 
     # ------------------------------------------------------------------
-    # Backward-compatible project= kwarg support
+    # Serialisation helpers
     # ------------------------------------------------------------------
 
-    def __init__(self, **data: Any) -> None:
-        """Accept an optional ``project=`` kwarg for table-backed construction.
-
-        ``project`` is popped here — *before* Pydantic validation — so any
-        :exc:`~cmor4.exceptions.TableValidationError` raised by the table
-        merging propagates directly to the caller, not wrapped in a
-        ``pydantic.ValidationError``.
-        """
-        project = data.pop("project", None)
-        if project is not None:
-            data = type(self)._apply_table_defaults(data, project)
-        super().__init__(**data)
-        if project is not None:
-            self._post_project_init()
-
-    @classmethod
-    def _apply_table_defaults(
-        cls, data: dict[str, Any], project: Any
-    ) -> dict[str, Any]:
-        """Merge project-table defaults into *data*.  No-op on the base class."""
-        return data
-
-    def _post_project_init(self) -> None:
-        """Called after frozen construction when ``project=`` was supplied."""
-
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
-
-    def _data(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Return all meaningful (non-None, non-empty-dict) field values.
 
-        The ``extra`` field itself is *not* included; its contents are inlined
-        at the top level (mirroring the original ``_MetadataRecord.to_dict``).
-        Fields with ``exclude=True`` are also omitted.
+        ``extra`` field contents are inlined at the top level.
         """
         result: dict[str, Any] = {}
         for name, info in type(self).model_fields.items():
@@ -126,72 +146,25 @@ class MetadataModel(BaseModel):
             if isinstance(value, dict) and not value:
                 continue
             result[name] = value
-        # Inline extra contents
         for key, value in self.extra.items():
             if value is not None:
                 result.setdefault(key, value)
         return result
 
-    # ------------------------------------------------------------------
-    # Mapping protocol (explicit, no ABC inheritance)
-    #
-    # Inheriting from Mapping[str, Any] would put Mapping.values() in the
-    # MRO, causing Pydantic to warn that the 'values' field in Axis and
-    # ZFactor shadows that method.  Instead we implement the protocol by
-    # hand and register MetadataModel as a virtual Mapping subclass at the
-    # bottom of this module so that isinstance(obj, Mapping) still holds.
-    # ------------------------------------------------------------------
-
-    def __getitem__(self, key: str) -> Any:
-        return self._data()[key]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._data())
-
-    def __len__(self) -> int:
-        return len(self._data())
-
-    def __contains__(self, key: object) -> bool:
-        return key in self._data()
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Return the value for *key*, or *default* if absent."""
-        try:
-            return self[key]
-        except KeyError:
-            return default
-
-    def keys(self) -> KeysView[str]:
-        """Return a view of all Mapping keys."""
-        return self._data().keys()
-
-    def items(self) -> ItemsView[str, Any]:
-        """Return a view of all ``(key, value)`` pairs."""
-        return self._data().items()
-
-    # Note: no .values() method — 'values' is a data field on Axis/ZFactor.
-
-    @classmethod
-    def from_mapping(cls, values: Mapping[str, Any]) -> MetadataModel:
-        """Construct from a plain mapping."""
-        return cls.model_validate(dict(values))
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a mutable copy of the Mapping view."""
-        return self._data()
-
     def updated(self, **updates: Any) -> MetadataModel:
         """Return a new instance with *updates* applied (no table re-merge)."""
         return type(self).model_validate({**self.to_dict(), **updates})
 
-    # NetCDF helpers -------------------------------------------------
+    # ------------------------------------------------------------------
+    # NetCDF helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def is_netcdf_attr_value(value: Any) -> bool:
         return isinstance(value, (str, bytes, int, float, np.integer, np.floating))
 
     @staticmethod
-    def netcdf_attrs(values: Mapping[str, Any]) -> dict[str, Any]:
+    def netcdf_attrs(values: dict[str, Any]) -> dict[str, Any]:
         return {
             str(k): v
             for k, v in values.items()
@@ -204,9 +177,3 @@ class MetadataModel(BaseModel):
         if arr.dtype.kind in {"U", "S", "O"}:
             return arr.astype(str)
         return arr
-
-
-# Register as a virtual Mapping subclass so that
-# isinstance(variable, Mapping) and isinstance(axis, Mapping) remain True
-# without putting Mapping.values() in the MRO.
-Mapping.register(MetadataModel)

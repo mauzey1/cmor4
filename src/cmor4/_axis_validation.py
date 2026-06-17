@@ -43,7 +43,6 @@ def validate_and_normalize_axes(
     axes: Sequence[Axis],
 ) -> tuple[Axis, ...]:
     """Return axes after CMOR-style coordinate validation."""
-
     return tuple(_validate_and_normalize_axis(dataset, variable, axis) for axis in axes)
 
 
@@ -51,7 +50,6 @@ def validate_axes(
     dataset: DatasetInfo, variable: Variable, axes: Sequence[Axis]
 ) -> None:
     """Validate axis values with dataset and frequency-dependent checks."""
-
     for axis in axes:
         _validate_and_normalize_axis(
             dataset,
@@ -65,7 +63,6 @@ def validate_axes(
 
 def validate_axis_values_early(axis: Axis) -> None:
     """Validate axis values without dataset- or frequency-dependent checks."""
-
     _validate_and_normalize_axis(
         {},
         {},
@@ -86,9 +83,9 @@ def _validate_and_normalize_axis(
     normalize: bool = True,
 ) -> Axis:
     values = axis.values_array()
-    bounds = axis.bounds_array() if "bounds" in axis else None
-    name = str(axis.get("table_entry") or axis.get("name"))
-    climatology = _is_truthy(axis.get("climatology"))
+    bounds = axis.bounds_array() if axis.bounds is not None else None
+    name = str(axis.table_entry or axis.name)
+    climatology = _is_truthy(axis.climatology)
 
     values, bounds = _normalize_bounds_shape(axis, values, bounds)
     if enforce_required_bounds and _requires_bounds(axis) and bounds is None:
@@ -132,7 +129,7 @@ def _validate_and_normalize_axis(
     updates: dict[str, Any] = {}
     if not np.array_equal(values, axis.values_array()):
         updates["values"] = _array_to_user_value(values)
-    if bounds is not None and "bounds" in axis:
+    if bounds is not None and axis.bounds is not None:
         if not np.array_equal(bounds, axis.bounds_array()):
             updates["bounds"] = _array_to_user_value(bounds)
     return axis.updated(**updates) if updates else axis
@@ -144,7 +141,7 @@ def _normalize_bounds_shape(
     if bounds is None:
         return values, bounds
     values_shape = values.shape
-    if axis.get("scalar", False) and values.size == 1:
+    if (axis.scalar or False) and values.size == 1:
         if bounds.size == 2:
             return values, bounds.reshape(2)
         raise AxisValidationError("Scalar coordinate bounds must have 2 values.")
@@ -154,13 +151,13 @@ def _normalize_bounds_shape(
     if bounds.shape[:-1] == values_shape and bounds.shape[-1] >= 2:
         return values, bounds
     raise AxisValidationError(
-        f"axis {axis.get('name')!r} bounds shape {bounds.shape!r} does not "
+        f"axis {axis.name!r} bounds shape {bounds.shape!r} does not "
         f"match coordinate value shape {values_shape!r}."
     )
 
 
 def _validate_requested_values(axis: Axis, values: np.ndarray, name: str) -> None:
-    requested = _numeric_list(axis.get("requested"))
+    requested = _numeric_list(axis.requested)
     if not requested:
         return
     flat_values = values.reshape(-1)
@@ -176,9 +173,9 @@ def _validate_requested_values(axis: Axis, values: np.ndarray, name: str) -> Non
 
 
 def _validate_requested_bounds(axis: Axis, bounds: np.ndarray, name: str) -> None:
-    requested = _numeric_list(axis.get("requested_bounds", axis.get("bounds_values")))
+    requested = _numeric_list(axis.requested_bounds or axis.bounds_values)
     if not requested:
-        requested = _numeric_list(axis.get("bounds_values"))
+        requested = _numeric_list(axis.bounds_values)
     if not requested:
         return
     pairs = bounds.reshape(-1, bounds.shape[-1])
@@ -208,8 +205,8 @@ def _validate_valid_range(
 ) -> None:
     if _is_longitude(axis):
         return
-    valid_min = _numeric_or_none(axis.get("valid_min"))
-    valid_max = _numeric_or_none(axis.get("valid_max"))
+    valid_min = _numeric_or_none(axis.valid_min)
+    valid_max = _numeric_or_none(axis.valid_max)
     flat = values.reshape(-1)
     if valid_min is not None:
         eps = abs(1.0e-6 * valid_min)
@@ -236,7 +233,7 @@ def _validate_monotonic(
 ) -> None:
     if values.ndim != 1 and not is_bounds:
         return
-    climatology = _is_truthy(axis.get("climatology"))
+    climatology = _is_truthy(axis.climatology)
     if is_bounds:
         if values.shape[-1] < 2:
             return
@@ -325,14 +322,10 @@ def _validate_time_interval(
     axis: Axis,
     values: np.ndarray,
 ) -> None:
-    # Require a frequency attribute whenever a time axis is present and we
-    # have a real dataset context.  An empty dict ({}) is used as a
-    # placeholder when validate_components is called without a dataset for
-    # structure-only validation; in that case the frequency check is
-    # deferred until a full dataset is available.
-    frequency = str(dataset.get("frequency", variable.get("frequency", "")))
+    var_freq = variable.get("frequency", "") if isinstance(variable, dict) else str(getattr(variable, "frequency", "") or "")
+    frequency = str(dataset.get("frequency", var_freq))
     if not frequency:
-        if dataset:  # non-empty dict or DatasetInfo — real dataset context
+        if dataset:
             raise AxisValidationError(
                 "No frequency attribute provided in the dataset configuration. "
                 "A 'frequency' value is required when a time axis is present. "
@@ -346,8 +339,11 @@ def _validate_time_interval(
     spec = _interval_spec(dataset, variable)
     if spec is None or spec.days <= 0:
         return
-    units = str(axis.get("units", "days since ?"))
-    calendar = str(axis.get("calendar", dataset.get("calendar", "standard")))
+    # calendar may be stored in axis.attrs (user-supplied) or in dataset
+    units = str(axis.units or "days since ?")
+    calendar = str(
+        axis.attrs.get("calendar") or dataset.get("calendar", "standard")
+    )
     interval_days = _time_interval_days(flat, units, calendar)
     if interval_days.size == 0:
         return
@@ -357,7 +353,8 @@ def _validate_time_interval(
     if not np.any(bad_errors | bad_warnings):
         return
     index = int(np.nonzero(bad_errors | bad_warnings)[0][0])
-    frequency = str(dataset.get("frequency", variable.get("frequency", "")))
+    var_freq = variable.get("frequency", "") if isinstance(variable, dict) else str(getattr(variable, "frequency", "") or "")
+    frequency = str(dataset.get("frequency", var_freq))
     message = (
         f"Time interval mismatch detected for frequency: {frequency!r}. "
         f"Expected interval between time axis values: {spec.days:g} days. "
@@ -381,7 +378,8 @@ def _time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.nda
 def _interval_spec(
     dataset: Mapping[str, Any], variable: Mapping[str, Any]
 ) -> _IntervalSpec | None:
-    frequency = str(dataset.get("frequency", variable.get("frequency", "")))
+    var_freq = variable.get("frequency", "") if isinstance(variable, dict) else str(getattr(variable, "frequency", "") or "")
+    frequency = str(dataset.get("frequency", var_freq))
     if not frequency:
         return None
     project = getattr(dataset, "project", None)
@@ -405,8 +403,8 @@ def _interval_spec(
 def _normalize_longitude(
     axis: Axis, values: np.ndarray, bounds: np.ndarray | None
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    valid_min = _numeric_or_none(axis.get("valid_min"))
-    valid_max = _numeric_or_none(axis.get("valid_max"))
+    valid_min = _numeric_or_none(axis.valid_min)
+    valid_max = _numeric_or_none(axis.valid_max)
     if valid_min is None or valid_max is None:
         return values, bounds
     span = valid_max - valid_min
@@ -452,38 +450,14 @@ def _time_unit_days(units: str) -> float:
 
 
 def _validate_stored_direction(axis: Axis, values: np.ndarray, name: str) -> None:
-    """Raise if axis values conflict with the declared stored_direction.
-
-    The coordinate table may declare ``stored_direction = "increasing"`` or
-    ``"decreasing"`` to specify the expected ordering of coordinate values.
-    For example, pressure levels are conventionally stored from surface to
-    model top (decreasing pressure).  When the user provides values in the
-    opposite order the axis will produce physically incorrect output.
-
-    Longitude axes are excluded because they wrap around and may start
-    anywhere within their valid range.
-
-    Parameters
-    ----------
-    axis
-        Axis metadata record, which may carry a ``stored_direction`` entry
-        from the coordinate table.
-    values
-        1-D array of coordinate values already converted to float64.
-    name
-        Axis name for use in error messages.
-    """
     if _is_longitude(axis):
         return
-    direction = str(axis.get("stored_direction", "") or "").lower().strip()
+    direction = str(axis.stored_direction or "").lower().strip()
     if direction not in ("increasing", "decreasing"):
         return
     flat = values.reshape(-1)
     if flat.size < 2:
         return
-    # Use the overall direction of the sequence (first vs. last value) rather
-    # than strict monotonicity so that a single out-of-order value does not
-    # produce a false negative from this check.
     actual_increasing = flat[-1] > flat[0]
     if direction == "increasing" and not actual_increasing:
         raise AxisValidationError(
@@ -497,39 +471,14 @@ def _validate_stored_direction(axis: Axis, values: np.ndarray, name: str) -> Non
         )
 
 
-# Calendars recognised by cftime but inappropriate for MIP data, mirroring
-# the check in CMOR3's cmor_calendar_c2i().
-_MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset(
-    {
-        "all_leap",
-        "366_day",
-    }
-)
+_MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset({"all_leap", "366_day"})
 
 
 def _validate_calendar(dataset: DatasetInfo) -> None:
-    """Validate the calendar declared in the dataset metadata.
-
-    Uses ``cftime`` (a required dependency) to distinguish three cases:
-
-    * Empty / absent calendar — no check.
-    * Calendar unknown to cftime (e.g. ``"utc"``, ``"tai"``) — raises
-      ``AxisValidationError``: the string is not a recognised CF calendar.
-    * Calendar known to cftime but inappropriate for MIP data
-      (``"all_leap"`` or ``"366_day"``) — issues a ``RuntimeWarning``.
-    * All other cftime-recognised calendars — accepted silently.
-
-    Parameters
-    ----------
-    dataset
-        Dataset metadata mapping, which may contain a ``calendar`` key.
-    """
-
+    """Validate the calendar declared in the dataset metadata."""
     calendar = str(dataset.get("calendar", "") or "").strip()
     if not calendar:
         return
-
-    # Use cftime to decide whether the string is a valid CF calendar at all.
     try:
         cftime.datetime(2000, 1, 1, calendar=calendar)
     except ValueError:
@@ -540,9 +489,7 @@ def _validate_calendar(dataset: DatasetInfo) -> None:
             "'julian', 'all_leap', and '366_day'."
         )
     except Exception:
-        # Unexpected error from cftime — leave the calendar unchecked.
         return
-
     if calendar.lower() in _MIP_INAPPROPRIATE_CALENDARS:
         warnings.warn(
             f"calendar={calendar!r} is not appropriate for MIP data. "
@@ -555,18 +502,18 @@ def _validate_calendar(dataset: DatasetInfo) -> None:
 
 
 def _requires_bounds(axis: Axis) -> bool:
-    return _is_truthy(axis.get("must_have_bounds", ""))
+    return _is_truthy(axis.must_have_bounds)
 
 
 def _is_time_axis(axis: Axis) -> bool:
-    return str(axis.get("axis", "")).upper() == "T" or (
-        str(axis.get("standard_name", "")).lower() == "time"
+    return str(axis.axis or "").upper() == "T" or (
+        str(axis.standard_name or "").lower() == "time"
     )
 
 
 def _is_longitude(axis: Axis) -> bool:
-    units = str(axis.get("units", "")).lower()
-    return str(axis.get("axis", "")).upper() == "X" and (
+    units = str(axis.units or "").lower()
+    return str(axis.axis or "").upper() == "X" and (
         units.startswith("degree") and units != "degrees"
     )
 
@@ -591,7 +538,7 @@ def _is_truthy(value: Any) -> bool:
 
 
 def _tolerance(axis: Axis) -> float:
-    value = _numeric_or_none(axis.get("tolerance"))
+    value = _numeric_or_none(axis.tolerance)
     return value if value is not None else 1.0
 
 

@@ -113,7 +113,7 @@ def create_dataset(
 
     # Add lat/lon grid coordinates from Grid if provided
     grid_lat_lon_axes = _grid_axes(
-        grid, variable.get("dimensions") or (), dataset.project
+        grid, tuple(variable.dimensions or ()), dataset.project
     )
     axes = list(axes) + grid_lat_lon_axes
 
@@ -140,7 +140,7 @@ def create_dataset(
             grid.mapping_attributes(),
         )
         auxiliary_coord_names.extend(
-            str(name) for name in grid.get("coordinates", ()) if name
+            str(name) for name in (grid.coordinates or ()) if name
         )
 
     zfactor_names: list[str] = []
@@ -154,11 +154,11 @@ def create_dataset(
     else:
         dim_names = None
     if dim_names is None:
-        if "dimensions" in variable:
-            dim_names = tuple(str(name) for name in variable["dimensions"])
+        if variable.dimensions is not None:
+            dim_names = tuple(str(name) for name in variable.dimensions)
         else:
             dim_names = tuple(
-                str(axis["name"]) for axis in axes if not axis.get("auxiliary", False)
+                axis.name for axis in axes if not (axis.auxiliary or False)
             )
     dims = tuple(dim for name in dim_names for dim in axis_dims.get(name, ()))
 
@@ -171,7 +171,7 @@ def create_dataset(
     validate_variable_values(variable, axes, data, dims, axis_dims)
 
     var_attrs = variable.attributes(var_labels)
-    explicit_coordinates = variable.get("coordinates")
+    explicit_coordinates = variable.coordinates
     if explicit_coordinates:
         coord_attr = (
             " ".join(str(value) for value in explicit_coordinates)
@@ -211,12 +211,12 @@ def create_dataset(
     if zfactor_names:
         _set_formula_terms(ds, axes, variable, zfactor_names)
 
-    missing_value = variable.get("missing_value", variable.get("fill_value"))
+    missing_value = variable.missing_value or variable.fill_value
     if missing_value is not None:
         ds[var_name].attrs["missing_value"] = missing_value
         ds[var_name].encoding["_FillValue"] = missing_value
 
-    chunksizes = variable.get("chunksizes", variable.get("chunks"))
+    chunksizes = variable.chunksizes or variable.chunks
     if chunksizes:
         ds[var_name].encoding["chunksizes"] = tuple(int(value) for value in chunksizes)
 
@@ -398,7 +398,7 @@ def _collect_external_variables(
     set[str]
         External variable names that are referenced but not provided.
     """
-    cell_measures = str(variable.get("cell_measures", "") or "")
+    cell_measures = str(variable.cell_measures or "")
     if not cell_measures.strip():
         return set()
     return {
@@ -557,32 +557,37 @@ def _grid_axes(
 
     # Create latitude axis if provided
     if grid.latitude is not None:
-        lat_axis = Axis(
-            name="latitude",
-            grid_coordinate="latitude",
-            values=grid.latitude,
-            dimensions=spatial_dims,
-            bounds=grid.latitude_vertices,
-            bounds_name="vertices_latitude",
-            bounds_dim=grid.vertices_dim,
-            auxiliary=True,
-            project=project,
-        )
+        lat_data: dict[str, Any] = {
+            "name": "latitude",
+            "grid_coordinate": "latitude",
+            "values": grid.latitude,
+            "dimensions": spatial_dims,
+            "bounds": grid.latitude_vertices,
+            "bounds_name": "vertices_latitude",
+            "bounds_dim": grid.vertices_dim,
+            "auxiliary": True,
+        }
+        if project is not None:
+            from . import _table_resolution as _tr
+            lat_data = _tr._apply_axis_defaults(lat_data, project)
+        lat_axis = Axis.model_validate(lat_data)
         axes.append(lat_axis)
 
     # Create longitude axis if provided
     if grid.longitude is not None:
-        lon_axis = Axis(
-            name="longitude",
-            grid_coordinate="longitude",
-            values=grid.longitude,
-            dimensions=spatial_dims,
-            bounds=grid.longitude_vertices,
-            bounds_name="vertices_longitude",
-            bounds_dim=grid.vertices_dim,
-            auxiliary=True,
-            project=project,
-        )
+        lon_data: dict[str, Any] = {
+            "name": "longitude",
+            "grid_coordinate": "longitude",
+            "values": grid.longitude,
+            "dimensions": spatial_dims,
+            "bounds": grid.longitude_vertices,
+            "bounds_name": "vertices_longitude",
+            "bounds_dim": grid.vertices_dim,
+            "auxiliary": True,
+        }
+        if project is not None:
+            lon_data = _tr._apply_axis_defaults(lon_data, project)
+        lon_axis = Axis.model_validate(lon_data)
         axes.append(lon_axis)
 
     return axes
@@ -596,12 +601,12 @@ def _add_axis(
     scalar_coord_names: list[str],
     auxiliary_coord_names: list[str],
 ) -> None:
-    name = str(axis["name"])
-    out_name = str(axis.get("out_name") or axis["name"])
+    name = axis.name
+    out_name = str(axis.out_name or axis.name)
     values = axis.values_array()
     coord_attrs = axis.attributes()
 
-    if axis.get("scalar", False):
+    if axis.scalar or False:
         if values.shape == ():
             scalar_value = values.item()
         elif values.size == 1:
@@ -612,7 +617,7 @@ def _add_axis(
         axis_dims[name] = ()
         _add_axis_dim_aliases(axis, axis_dims, ())
         scalar_coord_names.append(out_name)
-    elif axis.get("auxiliary_name"):
+    elif axis.auxiliary_name:
         axis_dims[name] = (out_name,)
         _add_axis_dim_aliases(axis, axis_dims, (out_name,))
         coords[out_name] = (
@@ -620,7 +625,7 @@ def _add_axis(
             np.arange(len(values), dtype="i4"),
             axis.attributes(include_units=False),
         )
-        aux_name = str(axis["auxiliary_name"])
+        aux_name = str(axis.auxiliary_name)
         data_vars[aux_name] = (
             (out_name,),
             values.astype(str),
@@ -629,33 +634,33 @@ def _add_axis(
         auxiliary_coord_names.append(aux_name)
     else:
         dims = (
-            _named_dimensions(axis["dimensions"], axis_dims)
-            if "dimensions" in axis
+            _named_dimensions(axis.dimensions, axis_dims)
+            if axis.dimensions is not None
             else (out_name,)
         )
         coords[out_name] = (dims, values, coord_attrs)
         if len(dims) == 1:
             axis_dims[name] = dims
             _add_axis_dim_aliases(axis, axis_dims, dims)
-        auxiliary = bool(axis.get("auxiliary", False)) or len(dims) > 1
+        auxiliary = bool(axis.auxiliary or False) or len(dims) > 1
         if auxiliary:
             auxiliary_coord_names.append(out_name)
         else:
             axis_dims.setdefault(out_name, dims)
 
-    if "bounds" in axis:
-        climatology_axis = str(axis.get("climatology", "")).lower() in {
+    if axis.bounds is not None:
+        climatology_axis = str(axis.climatology or "").lower() in {
             "1",
             "true",
             "yes",
         }
         bounds_name = str(
-            axis.get("bounds_name")
+            axis.bounds_name
             or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
         )
         bounds = axis.bounds_array()
         bounds_dims = tuple(coords[out_name][0]) + (
-            str(axis.get("bounds_dim", "bnds")),
+            str(axis.bounds_dim or "bnds"),
         )
         data_vars[bounds_name] = (
             bounds_dims,
@@ -674,10 +679,10 @@ def _add_zfactor(
     data_vars: dict[str, Any],
     axis_dims: Mapping[str, tuple[str, ...]],
 ) -> str:
-    name = str(zfactor["name"])
-    out_name = str(zfactor.get("out_name") or name)
+    name = zfactor.name
+    out_name = str(zfactor.out_name or name)
     values = zfactor.values_array()
-    dims = _named_dimensions(zfactor.get("dimensions", ()), axis_dims)
+    dims = _named_dimensions(zfactor.dimensions or (), axis_dims)
     # If the formula term has no declared dimensions, treat it as a scalar.
     # Accept a size-1 array (CMOR3-compatible input) by squeezing it.
     if not dims:
@@ -691,14 +696,14 @@ def _add_zfactor(
         dims,
         axis_dims,
         name=out_name,
-        table_id=str(zfactor.get("table_entry", "formula_terms")),
+        table_id=str(zfactor.table_entry or "formula_terms"),
     )
     attrs = zfactor.attributes()
     data_vars[out_name] = (dims, values, attrs)
 
-    if "bounds" in zfactor:
-        bounds_name = str(zfactor.get("bounds_name") or f"{out_name}_bnds")
-        bounds_dims = dims + (str(zfactor.get("bounds_dim", "bnds")),)
+    if zfactor.bounds is not None:
+        bounds_name = str(zfactor.bounds_name or f"{out_name}_bnds")
+        bounds_dims = dims + (str(zfactor.bounds_dim or "bnds"),)
         validate_variable_values(
             zfactor,
             axes,
@@ -706,7 +711,7 @@ def _add_zfactor(
             bounds_dims,
             axis_dims,
             name=bounds_name,
-            table_id=str(zfactor.get("table_entry", "formula_terms")),
+            table_id=str(zfactor.table_entry or "formula_terms"),
         )
         data_vars[bounds_name] = (
             bounds_dims,
@@ -725,20 +730,20 @@ def _set_formula_terms(
     variable: Variable,
     zfactor_names: Sequence[str],
 ) -> None:
-    variable_dims = set(variable.get("dimensions", ()))
+    variable_dims = set(variable.dimensions or ())
     for axis in axes:
-        formula_terms = variable.get("formula_terms") or axis.get("z_factors")
+        formula_terms = variable.formula_terms or axis.z_factors
         if not formula_terms and set(zfactor_names).issuperset({"a", "b", "p0", "ps"}):
             formula_terms = "a: a b: b p0: p0 ps: ps"
         if not formula_terms:
             continue
-        axis_name = axis.get("name")
-        generic_level_name = axis.get("generic_level_name")
-        out_name = str(axis.get("out_name") or axis["name"])
+        axis_name = axis.name
+        generic_level_name = axis.generic_level_name
+        out_name = str(axis.out_name or axis.name)
         if {
             str(value) for value in (axis_name, generic_level_name, out_name) if value
         } & variable_dims:
-            coord_name = str(axis.get("out_name") or axis["name"])
+            coord_name = str(axis.out_name or axis.name)
             if coord_name in ds.coords:
                 ds[coord_name].attrs["formula_terms"] = formula_terms
 
@@ -792,24 +797,24 @@ def _validate_final_components(
 
 
 def _validate_final_axis(ds: xr.Dataset, axis: Axis) -> None:
-    out_name = str(axis.get("out_name") or axis["name"])
-    value_name = str(axis.get("auxiliary_name") or out_name)
+    out_name = str(axis.out_name or axis.name)
+    value_name = str(axis.auxiliary_name or out_name)
     if out_name not in ds.coords and value_name not in ds.variables:
-        raise ValueError(f"Axis {axis['name']!r} was not created.")
-    if "bounds" not in axis:
+        raise ValueError(f"Axis {axis.name!r} was not created.")
+    if axis.bounds is None:
         return
-    climatology_axis = str(axis.get("climatology", "")).lower() in {
+    climatology_axis = str(axis.climatology or "").lower() in {
         "1",
         "true",
         "yes",
     }
     bounds_name = str(
-        axis.get("bounds_name")
+        axis.bounds_name
         or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
     )
     if bounds_name not in ds.data_vars:
         raise ValueError(
-            f"Bounds variable {bounds_name!r} for axis {axis['name']!r} "
+            f"Bounds variable {bounds_name!r} for axis {axis.name!r} "
             "was not created."
         )
 
@@ -821,9 +826,9 @@ def _validate_final_zfactor(
 ) -> None:
     if out_name not in ds.variables:
         raise ValueError(f"Z-factor {out_name!r} was not created.")
-    if "bounds" not in zfactor:
+    if zfactor.bounds is None:
         return
-    bounds_name = str(zfactor.get("bounds_name") or f"{out_name}_bnds")
+    bounds_name = str(zfactor.bounds_name or f"{out_name}_bnds")
     if bounds_name not in ds.data_vars:
         raise ValueError(
             f"Bounds variable {bounds_name!r} for z-factor {out_name!r} "
@@ -857,8 +862,11 @@ def _add_axis_dim_aliases(
     axis_dims: dict[str, tuple[str, ...]],
     dims: tuple[str, ...],
 ) -> None:
-    for key in ("table_entry", "generic_level_name", "out_name"):
-        value = axis.get(key)
+    for key, value in (
+        ("table_entry", axis.table_entry),
+        ("generic_level_name", axis.generic_level_name),
+        ("out_name", axis.out_name),
+    ):
         if value:
             axis_dims.setdefault(str(value), dims)
 
@@ -883,7 +891,7 @@ def _template_tokens(
     ds: xr.Dataset | None,
 ) -> dict[str, Any]:
     var_name, labels = variable.names()
-    frequency = str(dataset.get("frequency", variable.get("frequency", "fx")))
+    frequency = str(dataset.get("frequency") or variable.frequency or "fx")
     variant_label = dataset.variant_label()
     version = str(dataset.get("version") or f"v{date.today():%Y%m%d}")
     time_range = _time_range(ds, frequency) if frequency != "fx" else None

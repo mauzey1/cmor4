@@ -230,11 +230,15 @@ class DatasetInfo(BaseModel, Mapping[str, Any]):
         ):
             if key in labels:
                 attrs.setdefault(key, labels[key])
-        for key in ("frequency", "realm", "table_id"):
-            if key in variable:
-                attrs.setdefault(key, variable[key])
-        if "table_info" in variable:
-            attrs.setdefault("table_info", variable["table_info"])
+        for key, val in (
+            ("frequency", variable.frequency),
+            ("realm", variable.realm),
+            ("table_id", variable.table_id),
+        ):
+            if val is not None:
+                attrs.setdefault(key, val)
+        if variable.table_info is not None:
+            attrs.setdefault("table_info", variable.table_info)
         attrs.setdefault("variant_label", self.variant_label())
         attrs.setdefault("creation_date", creation_date)
 

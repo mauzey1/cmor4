@@ -732,11 +732,13 @@ class ProjectTablesTest(unittest.TestCase):
         )
 
         with self.assertRaises(cmor4.TableValidationError):
-            cmor4.Variable(name="pr").resolve_table_entry(project)
+            cmor4._table_resolution.variable_table_entry(
+                project, cmor4.Variable(name="pr")
+            )
 
-        entry = cmor4.Variable(
-            name="pr", table_id="obs4MIPs_A1hrPt"
-        ).resolve_table_entry(project)
+        entry = cmor4._table_resolution.variable_table_entry(
+            project, cmor4.Variable(name="pr", table_id="obs4MIPs_A1hrPt")
+        )
 
         self.assertEqual(entry.table_id, "obs4MIPs_A1hrPt")
         self.assertEqual(entry.entry["frequency"], "1hr")
@@ -4151,10 +4153,9 @@ class ValidateComponentsTest(unittest.TestCase):
     def test_valid_grid_mapping_passes(self):
         """Grid with grid_mapping_name matching the table entry passes."""
         variable = self.project.variable("pr")
-        grid = Grid(
-            name="rotated_latitude_longitude",
+        grid = self.project.grid(
+            "rotated_latitude_longitude",
             grid_mapping_name="rotated_latitude_longitude",
-            project=self.project,
         )
         self.project.validate_components(
             None, variable, self._standard_axes(), grid=grid
@@ -4192,7 +4193,7 @@ class ValidateComponentsTest(unittest.TestCase):
         """Grid with no matching mapping entry skips mapping validation."""
         variable = self.project.variable("pr")
         # 'unknown_projection' doesn't exist in the grids table
-        grid = Grid(name=None, project=self.project)
+        grid = Grid()
         self.project.validate_components(
             None, variable, self._standard_axes(), grid=grid
         )
@@ -4230,16 +4231,16 @@ class ValidateComponentsTest(unittest.TestCase):
     def test_valid_zfactor_passes(self):
         """ZFactor with metadata matching the formula table passes."""
         variable = self.project.variable("pr")
-        zf = ZFactor(name="ps", units="Pa", project=self.project)
+        zf = self.project.zfactor("ps", units="Pa")
         self.project.validate_components(
             None, variable, self._standard_axes(), zfactors=[zf]
         )
 
     def test_zfactor_wrong_units_raises(self):
-        """ZFactor with units conflicting with formula table raises at construction."""
-        # Validation happens on ZFactor construction when project= is set
+        """ZFactor with units conflicting with formula table raises."""
+        # Validation happens at construction time via project.zfactor()
         with self.assertRaises(TableValidationError) as ctx:
-            ZFactor(name="ps", units="hPa", project=self.project)
+            self.project.zfactor("ps", units="hPa")
         self.assertIn("units", str(ctx.exception))
 
     def test_zfactor_not_in_formula_table_passes_without_error(self):
@@ -4281,8 +4282,8 @@ class ValidateComponentsTest(unittest.TestCase):
             project.axis("latitude", values=[-45.0, 45.0]),
             project.axis("longitude", values=[90.0, 270.0]),
         ]
-        zf_ps = ZFactor(name="ps", units="Pa", project=project)
-        zf_p0 = ZFactor(name="p0", units="Pa", project=project)
+        zf_ps = project.zfactor("ps", units="Pa")
+        zf_p0 = project.zfactor("p0", units="Pa")
         project.validate_components(None, variable, axes, zfactors=[zf_ps, zf_p0])
 
     # ==================================================================

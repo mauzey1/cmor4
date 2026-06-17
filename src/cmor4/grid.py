@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import Any, Mapping
 import warnings
 
 import numpy as np
 from pydantic import Field, model_validator
-from typing import Annotated
-from pydantic import BeforeValidator
 
-from ._table_utils import is_table_value
-from .metadata import MetadataModel
-
-if TYPE_CHECKING:
-    from .tables import ProjectTables
+from .metadata import MetadataModel, StrSeq, StrTuple
 
 
 _LATITUDE_PARAMS: frozenset[str] = frozenset(
@@ -43,33 +37,18 @@ _NONNEG_PARAMS: frozenset[str] = frozenset(
 )
 
 
-def _str_tuple(v: Any) -> tuple[str, ...] | None:
-    if v is None:
-        return None
-    if isinstance(v, str):
-        return (v,)
-    return tuple(str(x) for x in v)
-
-
-def _str_seq(v: Any) -> list[str] | tuple[str, ...] | None:
-    """Preserve list-or-tuple of str; wrap bare string as single-element list."""
-    if v is None:
-        return None
-    if isinstance(v, list):
-        return [str(x) for x in v]
-    if isinstance(v, tuple):
-        return tuple(str(x) for x in v)
-    if isinstance(v, str):
-        return [v]
-    return [str(x) for x in v]
-
-
-StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
-StrSeq = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
-
-
 class Grid(MetadataModel):
     """Runtime grid dimensions and optional CF grid-mapping metadata.
+
+    Construct via :meth:`ProjectTables.grid` to merge grid-table metadata::
+
+        grid = project.grid(
+            dimensions=["x", "y"],
+            mapping_name="lambert_azimuthal_equal_area",
+            params={...},
+            latitude=lat_2d,
+            longitude=lon_2d,
+        )
 
     Parameters
     ----------
@@ -142,85 +121,13 @@ class Grid(MetadataModel):
         return self
 
     # ------------------------------------------------------------------
-    # Project-table construction
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def from_project(
-        cls, project: ProjectTables, name: str | None = None, **values: Any
-    ) -> Grid:
-        """Create a Grid by merging grid-table metadata."""
-        data: dict[str, Any] = {
-            k: v for k, v in {"name": name, **values}.items() if v is not None
-        }
-        data = cls._apply_table_defaults(data, project)
-        return cls.model_validate(data)
-
-    @classmethod
-    def _apply_table_defaults(
-        cls, data: dict[str, Any], project: ProjectTables
-    ) -> dict[str, Any]:
-        requested = str(
-            data.get("table_entry")
-            or data.get("mapping_entry")
-            or data.get("name")
-            or ""
-        )
-        if not requested:
-            return data
-        ge: dict[str, Mapping[str, Any]] = getattr(project, "grid_mapping_entries", {})
-        entry = ge.get(requested)
-        if entry is None:
-            return data
-        for key in ("mapping_name", "grid_mapping_name", "mapping_var"):
-            val = entry.get(key)
-            if is_table_value(val):
-                data.setdefault(key, val)
-        coords = entry.get("coordinates")
-        if is_table_value(coords):
-            if isinstance(coords, str):
-                coords = coords.split()
-            data.setdefault("coordinates", coords)
-        # Merge explicit params dict from table entry (if any)
-        table_params = entry.get("params") or {}
-        if isinstance(table_params, dict):
-            mp = dict(data.get("params") or {})
-            for k, v in table_params.items():
-                mp.setdefault(k, v)
-            data["params"] = mp
-        # Merge "parameterN" keys: {"parameter1": "false_easting", ...}
-        # These declare which projection parameters belong to this mapping;
-        # their values default to 0.0 unless the user already supplied them.
-        params = dict(data.get("params") or {})
-        for key, param_name in entry.items():
-            if not key.startswith("parameter") or not is_table_value(param_name):
-                continue
-            params.setdefault(str(param_name), data.get(str(param_name), 0.0))
-        if params:
-            data["params"] = params
-        return data
-
-    # ------------------------------------------------------------------
-    # Public API
+    # NetCDF output helpers
     # ------------------------------------------------------------------
 
     @property
     def variable_name(self) -> str:
         """Return the output grid-mapping variable name (default: ``"crs"``)."""
         return str(self.mapping_var or "crs")
-
-    def resolve_table_entry(
-        self, project: Any
-    ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve the grid mapping table entry for this Grid."""
-        requested = str(self.table_entry or self.mapping_entry or self.name or "")
-        if not requested:
-            return None, None
-        ge: dict[str, Mapping[str, Any]] = getattr(project, "grid_mapping_entries", {})
-        entry = ge.get(requested)
-        if entry:
-            return requested, entry
-        return None, None
 
     def variable_dimensions(self, variable: Any) -> tuple[str, ...] | None:
         """Return the full dimension tuple for the data variable.
@@ -229,12 +136,12 @@ class Grid(MetadataModel):
         """
         if self.dimensions:
             grid_dims = tuple(str(n) for n in self.dimensions)
-            var_dims = variable.get("dimensions")
+            var_dims = variable.dimensions
             if var_dims:
                 time_dims = tuple(str(d) for d in var_dims if str(d).lower() == "time")
                 return time_dims + grid_dims
             return grid_dims
-        dims = variable.get("dimensions")
+        dims = variable.dimensions
         if dims:
             return tuple(str(n) for n in dims)
         return None

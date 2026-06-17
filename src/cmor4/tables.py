@@ -14,6 +14,7 @@ from ._table_utils import (
 from ._templates import is_unresolved_template as _is_unresolved_template
 from ._axis_validation import validate_axes as _validate_axes
 from ._axis_validation import _validate_calendar
+from . import _table_resolution as _tr
 from .axis import Axis
 from .cv import ControlledVocabulary
 from .dataset import DatasetInfo
@@ -189,7 +190,7 @@ class ProjectTables:
         happens later via validate_components.
         """
         normalized_dataset = self.cv.get_dataset_info(dataset)
-        variable_entry = variable.resolve_table_entry(self)
+        variable_entry = _tr.variable_table_entry(self, variable)
         self._add_table_header_defaults(normalized_dataset, variable_entry)
         self._add_variable_global_defaults(normalized_dataset, variable)
         self.validate_dataset(normalized_dataset)
@@ -204,7 +205,7 @@ class ProjectTables:
         # Quick validation check for dataset-variable consistency
         # This is duplicated in validate_components but done early for fast
         # failure
-        variable.validate_against_entry(variable_entry)
+        _tr.validate_variable_against_entry(variable, variable_entry)
         self._validate_dataset_variable_consistency(
             prepared_dataset, variable, variable_entry
         )
@@ -268,7 +269,7 @@ class ProjectTables:
             # Uses monthly atmospheric table specifically
         """
 
-        return Variable.from_project(self, name=name, **values)
+        return _tr.build_variable(self, name, **values)
 
     def axis(self, name: str, **values: Any) -> Axis:
         """Create an axis with metadata from the loaded coordinate tables.
@@ -338,7 +339,7 @@ class ProjectTables:
             )
         """
 
-        return self._mark_prepared_axis(Axis.from_project(self, name=name, **values))
+        return self._mark_prepared_axis(_tr.build_axis(self, name, **values))
 
     def _axes(
         self,
@@ -354,7 +355,7 @@ class ProjectTables:
         """
 
         merged_axes = [
-            axis if self._is_prepared_axis(axis) else axis._merge_table_entry(self)
+            axis if self._is_prepared_axis(axis) else _tr.merge_unprepared_axis(self, axis)
             for axis in axes
         ]
         if variable is not None:
@@ -429,20 +430,13 @@ class ProjectTables:
             if value
         }
         missing_axes: list[Axis] = []
-        for dimension in variable.get("dimensions", ()):
+        for dimension in (variable.dimensions or ()):
             dimension_name = str(dimension)
             if dimension_name in present:
                 continue
             if dimension_name not in self.scalar_axis_entries:
                 continue
-            _adata = {
-                "name": dimension_name,
-                "table_entry": dimension_name,
-                "scalar": True,
-            }
-            _adata = Axis._apply_table_defaults(_adata, self)
-            axis = Axis.model_validate(_adata)
-            axis._validate_values_early()
+            axis = _tr.build_axis(self, dimension_name, table_entry=dimension_name, scalar=True)
             missing_axes.append(axis)
             present.update(
                 str(value)
@@ -558,7 +552,7 @@ class ProjectTables:
             )
         """
 
-        return Grid.from_project(self, name=name, **values)
+        return _tr.build_grid(self, name, **values)
 
     def zfactor(self, name: str, **values: Any) -> ZFactor:
         """Create a z-factor with metadata from formula-term tables.
@@ -630,7 +624,7 @@ class ProjectTables:
             )
         """
 
-        return ZFactor.from_project(self, name=name, **values)
+        return _tr.build_zfactor(self, name, **values)
 
     def validate_components(
         self,
@@ -705,8 +699,8 @@ class ProjectTables:
         # Note: This may be redundant with validation in _dataset_for_variable,
         # but we validate again here to ensure consistency when called directly
         # by users or if variable was modified after _dataset_for_variable
-        variable_entry = variable.resolve_table_entry(self)
-        variable.validate_against_entry(variable_entry)
+        variable_entry = _tr.variable_table_entry(self, variable)
+        _tr.validate_variable_against_entry(variable, variable_entry)
 
         # Dataset-variable consistency checks
         if dataset is not None:
@@ -718,31 +712,22 @@ class ProjectTables:
         for axis in axes:
             if not self._is_prepared_axis(axis):
                 # Check if this is a grid coordinate (auxiliary lat/lon)
-                grid_entry_name, grid_entry = axis.resolve_grid_coordinate(self)
+                grid_entry_name, grid_entry = _tr.axis_grid_coordinate(self, axis)
                 if grid_entry is not None:
                     # Grid coordinates are only validated against grid table
-                    axis._validate_metadata_instance(
-                        "grid coordinate",
-                        grid_entry_name,
-                        grid_entry,
+                    _tr.validate_axis_metadata(
+                        axis, "grid coordinate",
+                        grid_entry_name, grid_entry,
                         ("units", "standard_name", "long_name"),
                     )
                 else:
                     # Regular coordinates validated against coordinate table
-                    entry_name, entry = axis.resolve_table_entry(self)
+                    entry_name, entry = _tr.axis_table_entry(self, axis)
                     if entry is not None:
-                        axis._validate_metadata_instance(
-                            "axis",
-                            entry_name,
-                            entry,
-                            (
-                                "units",
-                                "standard_name",
-                                "long_name",
-                                "axis",
-                                "positive",
-                                "formula",
-                            ),
+                        _tr.validate_axis_metadata(
+                            axis, "axis", entry_name, entry,
+                            ("units", "standard_name", "long_name",
+                             "axis", "positive", "formula"),
                         )
 
         # Dataset-axis consistency checks
@@ -772,7 +757,7 @@ class ProjectTables:
             if value
         }
 
-        for dimension in variable.get("dimensions", ()):
+        for dimension in (variable.dimensions or ()):
             dimension_name = str(dimension)
             if dimension_name not in present_names:
                 if dimension_name in self.scalar_axis_entries:
@@ -788,19 +773,21 @@ class ProjectTables:
 
         # Grid validation: ensure stored attributes match tables
         if grid is not None:
-            entry_name, entry = grid.resolve_table_entry(self)
+            entry_name, entry = _tr.grid_table_entry(self, grid)
             if entry is not None:
-                user_values = grid.to_dict()
-                for key in ("mapping_name", "grid_mapping_name"):
+                for key, user_val in (
+                    ("mapping_name", grid.mapping_name),
+                    ("grid_mapping_name", grid.grid_mapping_name),
+                ):
                     expected = entry.get(key)
                     if (
                         _is_table_value(expected)
-                        and key in user_values
-                        and str(user_values[key]) != str(expected)
+                        and user_val is not None
+                        and str(user_val) != str(expected)
                     ):
                         raise TableValidationError(
                             f"grid mapping {entry_name!r} {key}="
-                            f"{user_values[key]!r} does not match table value "
+                            f"{user_val!r} does not match table value "
                             f"{expected!r}."
                         )
 
@@ -811,15 +798,14 @@ class ProjectTables:
 
         # ZFactor validation: ensure stored attributes match tables
         for zfactor in zfactors:
-            entry_name, entry = zfactor.resolve_table_entry(self)
+            entry_name, entry = _tr.zfactor_table_entry(self, zfactor)
             if entry is None:
                 continue
 
             # Units must be dimensionally convertible, not just equal.
             # Use the same cf_units-based check as Variable units validation.
-            user_values = zfactor.to_dict()
             table_units = entry.get("units")
-            user_units = user_values.get("units")
+            user_units = zfactor.units
             if (
                 _is_table_value(table_units)
                 and str(table_units) != "?"
@@ -835,10 +821,8 @@ class ProjectTables:
 
             # Validate remaining metadata (standard_name, long_name)
             # by exact match.
-            zfactor._validate_metadata_instance(
-                "formula term",
-                entry_name,
-                entry,
+            _tr.validate_zfactor_metadata(
+                zfactor, "formula term", entry_name, entry,
                 ("standard_name", "long_name"),
             )
 
@@ -865,13 +849,13 @@ class ProjectTables:
         # Check frequency consistency
         if (
             "frequency" in dataset
-            and "frequency" in variable
-            and str(dataset["frequency"]) != str(variable["frequency"])
+            and variable.frequency is not None
+            and str(dataset["frequency"]) != str(variable.frequency)
         ):
             raise TableValidationError(
                 f"Dataset frequency={dataset['frequency']!r} does not match "
                 f"variable {variable_entry.table_id}:{variable_entry.name} "
-                f"frequency={variable['frequency']!r}."
+                f"frequency={variable.frequency!r}."
             )
 
     def validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
@@ -942,7 +926,7 @@ class ProjectTables:
                 if key not in dataset or _is_unresolved_template(dataset[key]):
                     dataset[key] = labels[key]
         for key in ("frequency", "realm", "table_id"):
-            value = variable.get(key)
+            value = getattr(variable, key, None)
             if _is_table_value(value):
                 dataset.setdefault(key, _single_or_original(value))
 
