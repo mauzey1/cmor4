@@ -8,9 +8,6 @@ from pydantic import Field
 
 from .metadata import CoercedF, IntTuple, MetadataModel, StrOrTuple, StrSeq
 
-
-
-
 # ---------------------------------------------------------------------------
 # Variable
 # ---------------------------------------------------------------------------

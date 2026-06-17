@@ -8,7 +8,6 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic import BeforeValidator
 
-
 # ---------------------------------------------------------------------------
 # Shared coercion helpers and annotated type aliases
 # ---------------------------------------------------------------------------

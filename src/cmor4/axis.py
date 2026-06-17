@@ -149,4 +149,3 @@ class Axis(MetadataModel):
     def bounds_array(self) -> np.ndarray:
         """Return coordinate bounds as a NetCDF-ready numpy array."""
         return self.netcdf_array(self.bounds)
-

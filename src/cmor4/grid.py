@@ -10,7 +10,6 @@ from pydantic import Field, model_validator
 
 from .metadata import MetadataModel, StrSeq, StrTuple
 
-
 _LATITUDE_PARAMS: frozenset[str] = frozenset(
     {
         "grid_north_pole_latitude",
@@ -208,4 +207,3 @@ def _primary_num(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
-

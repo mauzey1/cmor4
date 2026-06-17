@@ -16,7 +16,13 @@ from ._templates import is_unresolved_template as _is_unresolved_template
 from ._axis_validation import validate_axes as _validate_axes
 from ._axis_validation import validate_axis_values_early as _validate_axis_values_early
 from ._axis_validation import _validate_calendar
-from ._tables import CoordinateTable, FormulaTable, GridTable, VariableEntry, VariableTable
+from ._tables import (
+    CoordinateTable,
+    FormulaTable,
+    GridTable,
+    VariableEntry,
+    VariableTable,
+)
 from .axis import Axis
 from .cv import ControlledVocabulary
 from .dataset import DatasetInfo
@@ -83,7 +89,9 @@ class ProjectTables:
         raw_coord: dict[str, Mapping[str, Any]] = {}
         if self.coordinate_table_file is not None:
             raw_coord = self._read_entries(self.coordinate_table_file, "axis_entry")
-        self.coordinate_table = CoordinateTable(raw_coord, raw_grid_axis, raw_grid_coord)
+        self.coordinate_table = CoordinateTable(
+            raw_coord, raw_grid_axis, raw_grid_coord
+        )
 
         raw_formula: dict[str, Mapping[str, Any]] = {}
         if self.formula_table_file is not None:
@@ -396,8 +404,11 @@ class ProjectTables:
         """
 
         merged_axes = [
-            axis if self._is_prepared_axis(axis)
-            else Axis.model_validate(self.coordinate_table.build(axis.to_dict()))
+            (
+                axis
+                if self._is_prepared_axis(axis)
+                else Axis.model_validate(self.coordinate_table.build(axis.to_dict()))
+            )
             for axis in axes
         ]
         if variable is not None:
@@ -472,13 +483,15 @@ class ProjectTables:
             if value
         }
         missing_axes: list[Axis] = []
-        for dimension in (variable.dimensions or ()):
+        for dimension in variable.dimensions or ():
             dimension_name = str(dimension)
             if dimension_name in present:
                 continue
             if dimension_name not in self.coordinate_table.scalar_entries:
                 continue
-            data = self.coordinate_table.build({"name": dimension_name, "table_entry": dimension_name, "scalar": True})
+            data = self.coordinate_table.build(
+                {"name": dimension_name, "table_entry": dimension_name, "scalar": True}
+            )
             axis = Axis.model_validate(data)
             _validate_axis_values_early(axis)
             missing_axes.append(axis)
@@ -759,18 +772,30 @@ class ProjectTables:
             if not self._is_prepared_axis(axis):
                 # Check if this is a grid coordinate (auxiliary lat/lon)
                 adict = axis.to_dict()
-                if (ae := self.coordinate_table.resolve_grid_coord(adict)):
+                if ae := self.coordinate_table.resolve_grid_coord(adict):
                     # Grid coordinates validated against grid coordinate table
                     _validate_table_metadata(
-                        adict, ae.name, ae.entry,
-                        ("units", "standard_name", "long_name"), "grid coordinate",
+                        adict,
+                        ae.name,
+                        ae.entry,
+                        ("units", "standard_name", "long_name"),
+                        "grid coordinate",
                     )
-                elif (ae := self.coordinate_table.resolve_coord(adict)):
+                elif ae := self.coordinate_table.resolve_coord(adict):
                     # Regular coordinates validated against coordinate table
                     _validate_table_metadata(
-                        adict, ae.name, ae.entry,
-                        ("units", "standard_name", "long_name",
-                         "axis", "positive", "formula"), "axis",
+                        adict,
+                        ae.name,
+                        ae.entry,
+                        (
+                            "units",
+                            "standard_name",
+                            "long_name",
+                            "axis",
+                            "positive",
+                            "formula",
+                        ),
+                        "axis",
                     )
 
         # Dataset-axis consistency checks
@@ -800,7 +825,7 @@ class ProjectTables:
             if value
         }
 
-        for dimension in (variable.dimensions or ()):
+        for dimension in variable.dimensions or ():
             dimension_name = str(dimension)
             if dimension_name not in present_names:
                 if dimension_name in self.scalar_axis_entries:
@@ -868,8 +893,11 @@ class ProjectTables:
             # Validate remaining metadata (standard_name, long_name)
             # by exact match.
             _validate_table_metadata(
-                zfactor.to_dict(), entry_name, entry,
-                ("standard_name", "long_name"), "formula term",
+                zfactor.to_dict(),
+                entry_name,
+                entry,
+                ("standard_name", "long_name"),
+                "formula term",
             )
 
             # When the formula-term table entry has no declared
@@ -1147,7 +1175,6 @@ class ProjectTables:
         }
 
 
-
 def _validate_grid_dimensions(
     grid: Grid,
     axes: Sequence[Axis],
@@ -1221,7 +1248,6 @@ def _validate_grid_dimensions(
                     f"coordinate values but {label} has size "
                     f"{arr.shape[i]} along that axis."
                 )
-
 
 
 def _resolve_optional_table(

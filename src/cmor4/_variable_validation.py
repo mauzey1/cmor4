@@ -27,8 +27,8 @@ def validate_variable_values(
         return
 
     valid_mask = ~np.ma.getmaskarray(values)
-    missing_value = (
-        getattr(variable, "missing_value", None) or getattr(variable, "fill_value", None)
+    missing_value = getattr(variable, "missing_value", None) or getattr(
+        variable, "fill_value", None
     )
     if missing_value is not None:
         try:

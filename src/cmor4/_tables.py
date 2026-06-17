@@ -32,12 +32,8 @@ from ._table_utils import (
     validate_table_metadata,
 )
 from ._unit_conversion import units_are_convertible as _units_convertible
-from .axis import Axis
 from .exceptions import TableValidationError
-from .grid import Grid
 from .variable import Variable
-from .zfactor import ZFactor
-
 
 # ---------------------------------------------------------------------------
 # Entry classes
@@ -172,7 +168,8 @@ class CoordinateTable:
         self._coord = coord_entries
         self._grid_coord = grid_coord_entries
         self._all_coord: dict[str, Mapping[str, Any]] = {
-            **coord_entries, **grid_axis_entries
+            **coord_entries,
+            **grid_axis_entries,
         }
         self.scalar_entries: dict[str, Mapping[str, Any]] = {
             name: entry
@@ -292,11 +289,25 @@ class CoordinateTable:
             "axis",
         )
         for key in (
-            "out_name", "units", "standard_name", "long_name", "axis", "positive",
-            "formula", "climatology", "generic_level_name", "z_factors",
-            "z_bounds_factors", "valid_min", "valid_max", "requested",
-            "requested_bounds", "bounds_values", "must_have_bounds",
-            "stored_direction", "tolerance",
+            "out_name",
+            "units",
+            "standard_name",
+            "long_name",
+            "axis",
+            "positive",
+            "formula",
+            "climatology",
+            "generic_level_name",
+            "z_factors",
+            "z_bounds_factors",
+            "valid_min",
+            "valid_max",
+            "requested",
+            "requested_bounds",
+            "bounds_values",
+            "must_have_bounds",
+            "stored_direction",
+            "tolerance",
         ):
             val = entry.get(key)
             if is_table_value(val):
@@ -328,7 +339,12 @@ class CoordinateTable:
         entry = axis_entry.entry
         data.setdefault("grid_table_entry", entry_name)
         for key in (
-            "out_name", "units", "standard_name", "long_name", "valid_min", "valid_max"
+            "out_name",
+            "units",
+            "standard_name",
+            "long_name",
+            "valid_min",
+            "valid_max",
         ):
             val = entry.get(key)
             if is_table_value(val):
@@ -353,8 +369,13 @@ class CoordinateTable:
         if not matches:
             return []
         for key in (
-            "standard_name", "formula", "z_factors", "z_bounds_factors",
-            "positive", "units", "long_name",
+            "standard_name",
+            "formula",
+            "z_factors",
+            "z_bounds_factors",
+            "positive",
+            "units",
+            "long_name",
         ):
             val = data.get(key)
             if val in (None, ""):
@@ -379,9 +400,7 @@ class CoordinateTable:
         for key, val in (("out_name", out_name), ("standard_name", std_name)):
             if val in (None, ""):
                 continue
-            narrowed = [
-                (n, e) for n, e in matches if str(e.get(key, "")) == str(val)
-            ]
+            narrowed = [(n, e) for n, e in matches if str(e.get(key, "")) == str(val)]
             if narrowed:
                 matches = narrowed
         return matches if len(matches) == 1 else []
@@ -452,8 +471,11 @@ class FormulaTable:
         entry = zf_entry.entry
         data.setdefault("table_entry", entry_name)
         validate_table_metadata(
-            data, entry_name, entry,
-            ("units", "standard_name", "long_name"), "formula term",
+            data,
+            entry_name,
+            entry,
+            ("units", "standard_name", "long_name"),
+            "formula term",
         )
         for key in ("out_name", "units", "standard_name", "long_name"):
             val = entry.get(key)
@@ -542,7 +564,10 @@ class GridTable:
     def build(self, data: dict[str, Any]) -> dict[str, Any]:
         """Merge grid-mapping-table defaults into *data* and return it."""
         requested = str(
-            data.get("table_entry") or data.get("mapping_entry") or data.get("name") or ""
+            data.get("table_entry")
+            or data.get("mapping_entry")
+            or data.get("name")
+            or ""
         )
         if not requested:
             return data
@@ -704,8 +729,15 @@ class VariableTable:
             if is_table_value(value):
                 data.setdefault(key, parse_table_value(value))
         for key in (
-            "units", "standard_name", "long_name", "cell_methods", "cell_measures",
-            "comment", "positive", "flag_values", "flag_meanings",
+            "units",
+            "standard_name",
+            "long_name",
+            "cell_methods",
+            "cell_measures",
+            "comment",
+            "positive",
+            "flag_values",
+            "flag_meanings",
         ):
             if e.get(key) not in (None, ""):
                 data[key] = e[key]
@@ -719,13 +751,19 @@ class VariableTable:
         """
         e = entry.entry
         out_name = str(e.get("out_name", entry.name.split("_", 1)[0]))
-        for attr, user_val in (("id", variable.id), ("variable_id", variable.variable_id)):
+        for attr, user_val in (
+            ("id", variable.id),
+            ("variable_id", variable.variable_id),
+        ):
             if user_val is not None and str(user_val) != out_name:
                 raise TableValidationError(
                     f"{attr}={user_val!r} does not match table out_name {out_name!r}."
                 )
         expected_dims = table_dimensions(e)
-        if variable.dimensions is not None and tuple(variable.dimensions) != expected_dims:
+        if (
+            variable.dimensions is not None
+            and tuple(variable.dimensions) != expected_dims
+        ):
             raise TableValidationError(
                 f"dimensions={tuple(variable.dimensions)!r} does not match "
                 f"{entry.table_id}:{entry.name} dimensions {expected_dims!r}."
@@ -743,7 +781,13 @@ class VariableTable:
                 f"units={user_units!r} does not match {entry.table_id}:{entry.name} "
                 f"value {table_units!r} and the two are not dimensionally convertible."
             )
-        for key in ("standard_name", "long_name", "cell_methods", "cell_measures", "comment"):
+        for key in (
+            "standard_name",
+            "long_name",
+            "cell_methods",
+            "cell_measures",
+            "comment",
+        ):
             expected = e.get(key)
             user_val = getattr(variable, key, None)
             if (
@@ -764,12 +808,19 @@ class VariableTable:
                     f"positive={user_pos!r} is not valid; "
                     "allowed values are 'up' and 'down'."
                 )
-            if is_table_value(table_pos) and str(user_pos).lower() != str(table_pos).lower():
+            if (
+                is_table_value(table_pos)
+                and str(user_pos).lower() != str(table_pos).lower()
+            ):
                 raise TableValidationError(
                     f"positive={user_pos!r} does not match "
                     f"{entry.table_id}:{entry.name} value {table_pos!r}."
                 )
-        if "positive" in required and is_table_value(table_pos) and user_pos in (None, ""):
+        if (
+            "positive" in required
+            and is_table_value(table_pos)
+            and user_pos in (None, "")
+        ):
             raise TableValidationError(
                 f"variable {entry.table_id}:{entry.name} requires 'positive' "
                 f"(expected {table_pos!r})."

@@ -658,9 +658,7 @@ def _add_axis(
             or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
         )
         bounds = axis.bounds_array()
-        bounds_dims = tuple(coords[out_name][0]) + (
-            str(axis.bounds_dim or "bnds"),
-        )
+        bounds_dims = tuple(coords[out_name][0]) + (str(axis.bounds_dim or "bnds"),)
         data_vars[bounds_name] = (
             bounds_dims,
             bounds,

@@ -322,7 +322,11 @@ def _validate_time_interval(
     axis: Axis,
     values: np.ndarray,
 ) -> None:
-    var_freq = variable.get("frequency", "") if isinstance(variable, dict) else str(getattr(variable, "frequency", "") or "")
+    var_freq = (
+        variable.get("frequency", "")
+        if isinstance(variable, dict)
+        else str(getattr(variable, "frequency", "") or "")
+    )
     frequency = str(dataset.get("frequency", var_freq))
     if not frequency:
         if dataset:
@@ -341,9 +345,7 @@ def _validate_time_interval(
         return
     # calendar may be stored in axis.attrs (user-supplied) or in dataset
     units = str(axis.units or "days since ?")
-    calendar = str(
-        axis.attrs.get("calendar") or dataset.get("calendar", "standard")
-    )
+    calendar = str(axis.attrs.get("calendar") or dataset.get("calendar", "standard"))
     interval_days = _time_interval_days(flat, units, calendar)
     if interval_days.size == 0:
         return
@@ -353,7 +355,11 @@ def _validate_time_interval(
     if not np.any(bad_errors | bad_warnings):
         return
     index = int(np.nonzero(bad_errors | bad_warnings)[0][0])
-    var_freq = variable.get("frequency", "") if isinstance(variable, dict) else str(getattr(variable, "frequency", "") or "")
+    var_freq = (
+        variable.get("frequency", "")
+        if isinstance(variable, dict)
+        else str(getattr(variable, "frequency", "") or "")
+    )
     frequency = str(dataset.get("frequency", var_freq))
     message = (
         f"Time interval mismatch detected for frequency: {frequency!r}. "
@@ -378,7 +384,11 @@ def _time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.nda
 def _interval_spec(
     dataset: Mapping[str, Any], variable: Mapping[str, Any]
 ) -> _IntervalSpec | None:
-    var_freq = variable.get("frequency", "") if isinstance(variable, dict) else str(getattr(variable, "frequency", "") or "")
+    var_freq = (
+        variable.get("frequency", "")
+        if isinstance(variable, dict)
+        else str(getattr(variable, "frequency", "") or "")
+    )
     frequency = str(dataset.get("frequency", var_freq))
     if not frequency:
         return None
