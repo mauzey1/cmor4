@@ -168,7 +168,6 @@ class ProjectTables:
             Validated and defaulted dataset metadata.
         """
 
-        user_info = dataset.user_info if isinstance(dataset, DatasetInfo) else dataset
         normalized_dataset = self.cv.get_dataset_info(dataset)
         self.cv.validate_dataset_values(normalized_dataset)
         self.cv.validate_variant_indices(normalized_dataset)
@@ -189,7 +188,6 @@ class ProjectTables:
         dataset and perform initial validation. Full component validation
         happens later via validate_components.
         """
-        user_info = dataset.user_info
         normalized_dataset = self.cv.get_dataset_info(dataset)
         variable_entry = variable.resolve_table_entry(self)
         self._add_table_header_defaults(normalized_dataset, variable_entry)

@@ -1012,8 +1012,10 @@ _CV_WITH_DRS: dict = {
     "CV": {
         **_MINIMAL_CV["CV"],
         "DRS": {
-            "directory_path_example": "PROJ/CMIP/NCAR/CESM2/amip/r1i1p1f1/tas/gn/v20240101",
-            "directory_path_template": "<mip_era><activity_id><institution_id><source_id><experiment_id>"
+            "directory_path_example": "PROJ/CMIP/NCAR/CESM2/amip/r1i1p1f1/tas/gn/"
+            "v20240101",
+            "directory_path_template": "<mip_era><activity_id><institution_id>"
+            "<source_id><experiment_id>"
             "<variant_label>",
             "filename_example": "tas_mon_CESM2_amip_r1i1p1f1_gn.nc",
             "filename_template": "<variable_id><frequency><source_id><experiment_id>"
@@ -1803,13 +1805,15 @@ class TestNestedCVAttributes(unittest.TestCase):
                             "experiment_id": "amip",
                             "activity_id": ["CMIP"],
                             # experiment entry also has 'description'
-                            "description": "Experiment description from dedicated handler.",
+                            "description": "Experiment description from dedicated "
+                            "handler.",
                         }
                     },
                     # A nested entry that would also inject 'description'
                     "profile": {
                         "standard": {
-                            "description": "Should NOT win over experiment description.",
+                            "description": "Should NOT win over experiment "
+                            "description.",
                             "org": "PCMDI",
                         }
                     },

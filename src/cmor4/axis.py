@@ -16,7 +16,7 @@ from ._table_utils import (
     metadata_value_matches,
     parse_table_value,
 )
-from .exceptions import AxisValidationError, TableValidationError
+from .exceptions import TableValidationError
 from .metadata import MetadataModel
 
 if TYPE_CHECKING:

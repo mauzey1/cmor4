@@ -270,14 +270,16 @@ def _valid_param(name: str, value: Any) -> bool:
         return True
     if name in _LATITUDE_PARAMS and not -90.0 <= num <= 90.0:
         warnings.warn(
-            f"{name} parameter must be between -90 and 90 degrees_north; it will not be set.",
+            f"{name} parameter must be between -90 and 90 degrees_north; "
+            "it will not be set.",
             RuntimeWarning,
             stacklevel=3,
         )
         return False
     if name in _LONGITUDE_PARAMS and not -180.0 <= num <= 180.0:
         warnings.warn(
-            f"{name} parameter must be between -180 and 180 degrees_east; it will not be set.",
+            f"{name} parameter must be between -180 and 180 degrees_east; "
+            "it will not be set.",
             RuntimeWarning,
             stacklevel=3,
         )

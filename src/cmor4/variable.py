@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping
 
-import numpy as np
 from pydantic import Field
 from typing import Annotated
 from pydantic import BeforeValidator
@@ -435,7 +434,8 @@ class Variable(MetadataModel):
         if user_pos not in (None, ""):
             if str(user_pos).lower() not in {"up", "down"}:
                 raise TableValidationError(
-                    f"positive={user_pos!r} is not valid; allowed values are 'up' and 'down'."
+                    f"positive={user_pos!r} is not valid; "
+                    "allowed values are 'up' and 'down'."
                 )
             if (
                 is_table_value(table_pos)
@@ -468,7 +468,8 @@ class Variable(MetadataModel):
             missing = "flag_meanings" if hfv else "flag_values"
             present = "flag_values" if hfv else "flag_meanings"
             raise TableValidationError(
-                f"{entry.table_id}:{entry.name} has {present!r} but missing {missing!r}."
+                f"{entry.table_id}:{entry.name} has "
+                f"{present!r} but missing {missing!r}."
             )
         if hfv and hfm:
             nv = len(str(tfv).split())
