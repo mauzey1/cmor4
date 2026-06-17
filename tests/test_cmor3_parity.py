@@ -53,11 +53,11 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import xarray as xr
 
-import cmor4
-from cmor4 import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
+from cmor4 import Axis, ControlledVocabulary, ProjectTables, Variable
 from cmor4._axis_validation import _validate_time_interval, _is_time_axis
-from cmor4.core import _collect_external_variables, create_dataset
+from cmor4.core import _collect_external_variables, create_dataset, build_output_path
 from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
 
 # ---------------------------------------------------------------------------
@@ -380,7 +380,9 @@ class TestExternalVariables(unittest.TestCase):
     # -----------------------------------------------------------------------
 
     def _run_create_dataset(self, cell_measures: str, tmp: Path) -> dict:
-        """Build a minimal dataset with the given cell_measures and return global attrs."""
+        """
+        Build a minimal dataset with the given cell_measures and return global attrs.
+        """
         variables = {
             "tos": {
                 "dimensions": ["time", "lat", "lon"],
@@ -459,7 +461,10 @@ class TestExternalVariables(unittest.TestCase):
         self.assertEqual(ds.attrs["external_variables"], "custom_var")
 
     def test_no_external_variables_when_all_provided_as_coords(self):
-        """If areacello is provided as a coordinate it does not appear in external_variables."""
+        """
+        If areacello is provided as a coordinate it does not appear in
+        external_variables.
+        """
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             variables = {
@@ -1003,20 +1008,18 @@ if __name__ == "__main__":
 # 5. DRS path/filename templates read from the CV DRS section
 # ---------------------------------------------------------------------------
 
-from cmor4.core import (
-    build_output_path,
-    DEFAULT_OUTPUT_PATH_TEMPLATE,
-    DEFAULT_OUTPUT_FILE_TEMPLATE,
-)  # noqa: E402
-
 _CV_WITH_DRS: dict = {
     "CV": {
         **_MINIMAL_CV["CV"],
         "DRS": {
-            "directory_path_example": "PROJ/CMIP/NCAR/CESM2/amip/r1i1p1f1/tas/gn/v20240101",
-            "directory_path_template": "<mip_era><activity_id><institution_id><source_id><experiment_id><variant_label>",
+            "directory_path_example":
+            "PROJ/CMIP/NCAR/CESM2/amip/r1i1p1f1/tas/gn/v20240101",
+            "directory_path_template":
+            "<mip_era><activity_id><institution_id><source_id><experiment_id>"
+            "<variant_label>",
             "filename_example": "tas_mon_CESM2_amip_r1i1p1f1_gn.nc",
-            "filename_template": "<variable_id><frequency><source_id><experiment_id><variant_label><grid_label>",
+            "filename_template": "<variable_id><frequency><source_id><experiment_id>"
+            "<variant_label><grid_label>",
         },
     }
 }
@@ -1043,11 +1046,13 @@ class TestDrsTemplates(unittest.TestCase):
         path_tmpl, file_tmpl = cv.drs_templates()
         self.assertEqual(
             path_tmpl,
-            "<mip_era><activity_id><institution_id><source_id><experiment_id><variant_label>",
+            "<mip_era><activity_id><institution_id><source_id><experiment_id>"
+            "<variant_label>",
         )
         self.assertEqual(
             file_tmpl,
-            "<variable_id><frequency><source_id><experiment_id><variant_label><grid_label>",
+            "<variable_id><frequency><source_id><experiment_id><variant_label>"
+            "<grid_label>",
         )
 
     def test_drs_templates_returns_none_when_no_drs_section(self):
@@ -1157,7 +1162,9 @@ class TestDrsTemplates(unittest.TestCase):
         self.assertNotIn("mon", filename)
 
     def test_hard_coded_default_used_when_no_cv_drs_and_no_user_override(self):
-        """When neither the CV nor the user supplies templates, fall back to defaults."""
+        """
+        When neither the CV nor the user supplies templates, fall back to defaults.
+        """
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             dataset_info, variable = self._make_dataset_and_variable(
@@ -1215,7 +1222,8 @@ if __name__ == "__main__":
 
 
 class TestCVStructureValidation(unittest.TestCase):
-    """Double-nested CV entries emit RuntimeWarning and are reported by validate_structure().
+    """Double-nested CV entries emit RuntimeWarning and are reported by
+    validate_structure().
 
     CMOR3 reference: ``cmor_CV.c``; GitHub issue #829
     (obs4MIPs double-nested ``nominal_resolution`` silently skipped validation).
@@ -1307,7 +1315,9 @@ class TestCVStructureValidation(unittest.TestCase):
         self.assertEqual(cv.validate_structure(), [])
 
     def test_mapping_with_different_key_is_not_double_nested(self):
-        """A mapping value whose single key differs from the parent is a lookup table."""
+        """
+        A mapping value whose single key differs from the parent is a lookup table.
+        """
         cv = ControlledVocabulary(
             {"CV": {"institution_id": {"NCAR": "National Center …"}}}
         )
@@ -1476,7 +1486,8 @@ import re as _re  # noqa: E402 (appended)
 
 
 class TestHistoryAttribute(unittest.TestCase):
-    """history attribute uses actual Conventions and mip_era tokens, not hard-coded strings.
+    """history attribute uses actual Conventions and mip_era tokens, not hard-coded
+    strings.
 
     CMOR3 reference: ``Test/test_cmor_CMIP7.py``::
 
@@ -1491,14 +1502,15 @@ class TestHistoryAttribute(unittest.TestCase):
     """
 
     # Regex matching the full history format:
-    #   "<ISO-8601Z> ; CMOR rewrote data to be consistent with <X> and <Y> data requirements."
+    #   "<ISO-8601Z> ; CMOR rewrote data to be consistent with "
+    #   "<X> and <Y> data requirements."
     _HISTORY_RE = _re.compile(
         r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"
         r" ; CMOR rewrote data to be consistent with "
         r".+ and .+ data requirements\.$"
     )
 
-    def _make_dataset(self, tmp: Path, extra: dict | None = None) -> "xr.Dataset":
+    def _make_dataset(self, tmp: Path, extra: dict | None = None) -> xr.Dataset:
         """Build a minimal dataset and return the resulting xarray Dataset."""
         import numpy as np
         from cmor4.core import create_dataset
@@ -1793,13 +1805,15 @@ class TestNestedCVAttributes(unittest.TestCase):
                             "experiment_id": "amip",
                             "activity_id": ["CMIP"],
                             # experiment entry also has 'description'
-                            "description": "Experiment description from dedicated handler.",
+                            "description":
+                            "Experiment description from dedicated handler.",
                         }
                     },
                     # A nested entry that would also inject 'description'
                     "profile": {
                         "standard": {
-                            "description": "Should NOT win over experiment description.",
+                            "description":
+                            "Should NOT win over experiment description.",
                             "org": "PCMDI",
                         }
                     },
