@@ -248,7 +248,11 @@ def write_netcdf(
     ds:
         Dataset to write.
     dataset:
-        Dataset metadata used to build the default output path.
+        Dataset metadata used to build the default output path.  When the
+        metadata contains ``create_subdirectories=False``, the output
+        directory must already exist; CMOR4 will not create it.  The default
+        behaviour (``create_subdirectories=True``) mirrors CMOR4's original
+        behaviour and creates the full directory tree automatically.
     variable:
         Variable metadata used to build the default output path.
     path:
@@ -261,12 +265,34 @@ def write_netcdf(
     -------
     pathlib.Path
         Path to the written NetCDF file.
+
+    Raises
+    ------
+    ValueError
+        When ``create_subdirectories=False`` and the output directory does
+        not already exist.
     """
 
     output_path = (
         Path(path) if path is not None else build_output_path(dataset, variable, ds)
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Honour create_subdirectories.  The flag mirrors CMOR3's own behaviour:
+    # when False, the output directory must already exist; CMOR3 errors when
+    # it cannot create the directory (e.g. a non-existent /CMIP6 root).
+    # Default is True for backwards-compatibility with CMOR4's original
+    # always-create behaviour.
+    create_subdirs = bool(dataset.get("create_subdirectories", True))
+    if create_subdirs:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+    elif not output_path.parent.exists():
+        raise ValueError(
+            f"Output directory {str(output_path.parent)!r} does not exist "
+            "and create_subdirectories is disabled. "
+            "Create the directory first or set create_subdirectories=True "
+            "in the dataset metadata."
+        )
+
     ds.to_netcdf(output_path, **to_netcdf_kwargs)
     return output_path
 

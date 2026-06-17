@@ -2017,3 +2017,210 @@ class TestGridLabelFallback(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# GAP-10 — outpath / output directory existence check
+# ---------------------------------------------------------------------------
+
+import numpy as _np  # noqa: E402
+
+
+class TestCreateSubdirectories(unittest.TestCase):
+    """GAP-10: create_subdirectories=False requires the output dir to exist.
+
+    CMOR3 reference: ``Test/test_python_CMIP6_CV_baddirectory.py``.
+    When ``create_subdirectories=0`` and the outpath cannot be created, CMOR3
+    errors with "unable to create this directory".  CMOR4 mirrors this by
+    raising ``ValueError`` when ``create_subdirectories=False`` and the
+    output parent directory is absent.
+
+    The tests pass an explicit ``path=`` argument to ``write_netcdf`` so the
+    directory-existence check is exercised independently of ``build_output_path``
+    (whose DRS template rendering is project-specific).
+    """
+
+    def _build_minimal_ds(self, tmp: Path) -> tuple:
+        """Return (xr.Dataset, DatasetInfo, Variable) for the minimal project."""
+        from cmor4.core import create_dataset
+
+        project = _make_project(
+            tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+        )
+        dataset_info = project.dataset_info(_MINIMAL_DATASET)
+        variable = project.variable("tas")
+        time_axis = project.axis(
+            "time", values=[15.0, 45.0], units="days since 2000-01-01"
+        )
+        lat_axis = project.axis("lat", values=[-45.0, 45.0])
+        lon_axis = project.axis("lon", values=[0.0, 90.0])
+        ds = create_dataset(
+            dataset_info, variable, [time_axis, lat_axis, lon_axis],
+            _np.ones((2, 2, 2)),
+        )
+        return ds, dataset_info, variable
+
+    def _patch_dataset(self, dataset_info, extra: dict):
+        """Return a new DatasetInfo with extra keys merged in."""
+        from cmor4.dataset import DatasetInfo
+        return DatasetInfo(
+            {**dict(dataset_info), **extra},
+            project=dataset_info.project,
+        )
+
+    # -----------------------------------------------------------------------
+    # create_subdirectories=False error cases
+    # -----------------------------------------------------------------------
+
+    def test_missing_output_dir_raises_when_create_subdirectories_false(self):
+        """Non-existent output dir with create_subdirectories=False raises ValueError.
+
+        Mirrors CMOR3 test_python_CMIP6_CV_baddirectory: CMOR3 errors when it
+        cannot write to the requested outpath.
+        """
+        from cmor4.core import write_netcdf
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            ds, info, variable = self._build_minimal_ds(tmp)
+            patched = self._patch_dataset(info, {"create_subdirectories": False})
+
+            nonexistent = tmp / "missing_dir" / "output.nc"
+            with self.assertRaises(ValueError) as ctx:
+                write_netcdf(ds, patched, variable, path=nonexistent)
+
+        self.assertIn("does not exist", str(ctx.exception))
+        self.assertIn("create_subdirectories", str(ctx.exception))
+
+    def test_error_message_guides_user(self):
+        """Error message tells the user how to fix the problem."""
+        from cmor4.core import write_netcdf
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            ds, info, variable = self._build_minimal_ds(tmp)
+            patched = self._patch_dataset(info, {"create_subdirectories": False})
+
+            with self.assertRaises(ValueError) as ctx:
+                write_netcdf(ds, patched, variable, path=tmp / "no_dir" / "f.nc")
+
+        self.assertIn("create_subdirectories", str(ctx.exception))
+
+    def test_deeply_nested_missing_dir_raises(self):
+        """The check fires even for deeply nested missing paths."""
+        from cmor4.core import write_netcdf
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            ds, info, variable = self._build_minimal_ds(tmp)
+            patched = self._patch_dataset(info, {"create_subdirectories": False})
+
+            nested = tmp / "a" / "b" / "c" / "d" / "output.nc"
+            with self.assertRaises(ValueError):
+                write_netcdf(ds, patched, variable, path=nested)
+
+    # -----------------------------------------------------------------------
+    # create_subdirectories=False happy path
+    # -----------------------------------------------------------------------
+
+    def test_existing_output_dir_passes_when_create_subdirectories_false(self):
+        """Pre-existing output dir with create_subdirectories=False succeeds."""
+        from cmor4.core import write_netcdf
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            ds, info, variable = self._build_minimal_ds(tmp)
+            patched = self._patch_dataset(info, {"create_subdirectories": False})
+
+            existing_dir = tmp / "existing"
+            existing_dir.mkdir()
+            output_file = existing_dir / "output.nc"
+
+            path = write_netcdf(ds, patched, variable, path=output_file)
+            self.assertTrue(path.exists())
+
+    # -----------------------------------------------------------------------
+    # create_subdirectories=True (default) — existing behaviour unchanged
+    # -----------------------------------------------------------------------
+
+    def test_missing_dir_created_automatically_by_default(self):
+        """Default behaviour creates the output directory tree automatically."""
+        from cmor4.core import write_netcdf
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            ds, info, variable = self._build_minimal_ds(tmp)
+
+            # No create_subdirectories set — defaults to True
+            nonexistent = tmp / "auto" / "created" / "output.nc"
+            path = write_netcdf(ds, info, variable, path=nonexistent)
+            self.assertTrue(path.exists())
+
+    def test_create_subdirectories_true_creates_dirs(self):
+        """Explicit create_subdirectories=True also creates directories."""
+        from cmor4.core import write_netcdf
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            ds, info, variable = self._build_minimal_ds(tmp)
+            patched = self._patch_dataset(info, {"create_subdirectories": True})
+
+            nonexistent = tmp / "auto_true" / "output.nc"
+            path = write_netcdf(ds, patched, variable, path=nonexistent)
+            self.assertTrue(path.exists())
+
+    # -----------------------------------------------------------------------
+    # create_subdirectories is not written as a global attribute
+    # -----------------------------------------------------------------------
+
+    def test_create_subdirectories_not_in_output_global_attrs(self):
+        """create_subdirectories must never appear as a NetCDF global attribute."""
+        from cmor4.core import create_dataset
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            project = _make_project(
+                tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
+            attrs = {**_MINIMAL_DATASET, "create_subdirectories": False}
+            dataset_info = project.dataset_info(attrs)
+            variable = project.variable("tas")
+            time_axis = project.axis(
+                "time", values=[15.0, 45.0], units="days since 2000-01-01"
+            )
+            lat_axis = project.axis("lat", values=[-45.0, 45.0])
+            lon_axis = project.axis("lon", values=[0.0, 90.0])
+            ds = create_dataset(
+                dataset_info, variable, [time_axis, lat_axis, lon_axis],
+                _np.ones((2, 2, 2)),
+            )
+
+        self.assertNotIn("create_subdirectories", ds.attrs)
+
+    def test_outpath_not_in_output_global_attrs(self):
+        """outpath must never appear as a NetCDF global attribute (pre-existing)."""
+        from cmor4.core import create_dataset
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            project = _make_project(
+                tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
+            dataset_info = project.dataset_info(_MINIMAL_DATASET)
+            variable = project.variable("tas")
+            time_axis = project.axis(
+                "time", values=[15.0, 45.0], units="days since 2000-01-01"
+            )
+            lat_axis = project.axis("lat", values=[-45.0, 45.0])
+            lon_axis = project.axis("lon", values=[0.0, 90.0])
+            ds = create_dataset(
+                dataset_info, variable, [time_axis, lat_axis, lon_axis],
+                _np.ones((2, 2, 2)),
+            )
+
+        self.assertNotIn("outpath", ds.attrs)
+
+
+if __name__ == "__main__":
+    unittest.main()

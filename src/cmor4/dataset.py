@@ -9,6 +9,7 @@ from .metadata import _MetadataRecord
 
 INTERNAL_DATASET_KEYS = {
     "_history_template",
+    "create_subdirectories",
     "outpath",
     "output_file_template",
     "output_path_template",
