@@ -54,6 +54,16 @@ _NESTED_INJECTION_SKIP_KEYS: frozenset[str] = frozenset({
     "frequency",   # approx_interval / approx_interval_error used by axis validator
 })
 
+# Fallback regex for grid_label when the CV does not define an allowed set.
+# Mirrors CMOR3's built-in check: labels must start with 'g', 'c', or 'r'
+# (the three grid families) and contain only lowercase letters and digits —
+# no hyphens or special characters.  Examples of valid labels: gn, gr, gr1,
+# cn, rn, g999.  Examples of invalid labels: gr-0 (hyphen), GN (uppercase),
+# 1gn (digit-first).
+# When the CV *does* define grid_label (as an enumeration or regex list),
+# validate_dataset_values already enforces it and this fallback is skipped.
+_GRID_LABEL_RE: re.Pattern[str] = re.compile(r"^[gcr][a-z0-9]*$")
+
 
 class ControlledVocabulary(Mapping[str, Any]):
     """Project controlled vocabulary with defaulting and validation helpers.
@@ -624,6 +634,23 @@ class ControlledVocabulary(Mapping[str, Any]):
             ):
                 raise ControlledVocabularyError(
                     f"{key}={value!r} is not allowed by {self.filename}."
+                )
+
+        # GAP-09: hard-coded fallback when the CV does not define grid_label.
+        # validate_dataset_values already enforces CV-defined grid_label values
+        # above, so this only fires when no CV definition exists.  It prevents
+        # obviously malformed labels (hyphens, wrong starting character, etc.)
+        # from passing silently when the CV is incomplete or absent.
+        gl = dataset.get("grid_label")
+        if gl not in (None, "") and self.definition_for("grid_label") is None:
+            if not _GRID_LABEL_RE.fullmatch(str(gl)):
+                raise ControlledVocabularyError(
+                    f"grid_label={gl!r} does not match the required format. "
+                    "Grid labels must start with 'g', 'c', or 'r' followed by "
+                    "lowercase letters and digits only (no hyphens or special "
+                    "characters). "
+                    f"Valid examples: 'gn', 'gr1', 'cn', 'g999'. "
+                    "Define grid_label in the project CV to allow a custom set."
                 )
 
     def validate_required_global_attributes(self, dataset: Mapping[str, Any]) -> None:

@@ -1849,3 +1849,171 @@ class TestNestedCVAttributes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# ---------------------------------------------------------------------------
+# GAP-09 — grid_label regex fallback when CV is absent
+# ---------------------------------------------------------------------------
+
+
+class TestGridLabelFallback(unittest.TestCase):
+    """GAP-09: when the CV does not define grid_label, a built-in regex guards it.
+
+    CMOR3 reference: ``cmor.c`` hard-coded grid_label check;
+    ``Test/test_python_CMIP6_CV_badgridgr.py`` (gr-0 rejected),
+    ``Test/test_python_CMIP6_CV_badgridlabel.py`` (gs1n is outside enumeration).
+
+    The fallback regex ``^[gcr][a-z0-9]*$`` ensures:
+    - labels start with one of the three grid families (g, c, r)
+    - only lowercase letters and digits follow (no hyphens, no uppercase,
+      no special characters)
+
+    When the CV *does* define ``grid_label`` (enumeration or regex list),
+    ``validate_dataset_values`` enforces the CV definition instead and the
+    fallback is not applied.
+    """
+
+    def _cv_without_grid_label(self) -> ControlledVocabulary:
+        """A CV that deliberately omits the grid_label key."""
+        return ControlledVocabulary(
+            {
+                "CV": {
+                    "activity_id": ["CMIP"],
+                    "institution_id": {"NCAR": "National Center …"},
+                    # no grid_label entry
+                }
+            }
+        )
+
+    def _cv_with_grid_label(self) -> ControlledVocabulary:
+        """A CV that provides an explicit grid_label enumeration."""
+        return ControlledVocabulary(
+            {
+                "CV": {
+                    "activity_id": ["CMIP"],
+                    "grid_label": {"gn": "native grid", "gr1": "regridded"},
+                }
+            }
+        )
+
+    # -----------------------------------------------------------------------
+    # Fallback fires when CV lacks grid_label
+    # -----------------------------------------------------------------------
+
+    def test_hyphen_in_label_rejected_by_fallback(self):
+        """gr-0 is rejected — mirrors CMOR3 test_python_CMIP6_CV_badgridgr."""
+        cv = self._cv_without_grid_label()
+        with self.assertRaises(ControlledVocabularyError) as ctx:
+            cv.validate_dataset_values({"grid_label": "gr-0"})
+        self.assertIn("gr-0", str(ctx.exception))
+
+    def test_uppercase_label_rejected_by_fallback(self):
+        cv = self._cv_without_grid_label()
+        with self.assertRaises(ControlledVocabularyError):
+            cv.validate_dataset_values({"grid_label": "GN"})
+
+    def test_digit_first_label_rejected_by_fallback(self):
+        cv = self._cv_without_grid_label()
+        with self.assertRaises(ControlledVocabularyError):
+            cv.validate_dataset_values({"grid_label": "1gn"})
+
+    def test_wrong_starting_character_rejected(self):
+        """Labels starting with something other than g, c, or r are invalid."""
+        cv = self._cv_without_grid_label()
+        for bad in ("abc", "xgn", "zonal", "native"):
+            with self.subTest(label=bad):
+                with self.assertRaises(ControlledVocabularyError):
+                    cv.validate_dataset_values({"grid_label": bad})
+
+    def test_special_characters_rejected(self):
+        cv = self._cv_without_grid_label()
+        for bad in ("gn!", "gr_1", "g.999", "c@n"):
+            with self.subTest(label=bad):
+                with self.assertRaises(ControlledVocabularyError):
+                    cv.validate_dataset_values({"grid_label": bad})
+
+    def test_empty_string_not_checked(self):
+        """An empty or None grid_label skips the fallback check."""
+        cv = self._cv_without_grid_label()
+        cv.validate_dataset_values({"grid_label": ""})
+        cv.validate_dataset_values({})
+
+    # -----------------------------------------------------------------------
+    # Fallback happy-path: labels that should pass
+    # -----------------------------------------------------------------------
+
+    def test_cmip6_style_native_passes(self):
+        cv = self._cv_without_grid_label()
+        for valid in ("gn", "gr", "gr1", "gr2", "cn", "rn", "gna", "grz"):
+            with self.subTest(label=valid):
+                cv.validate_dataset_values({"grid_label": valid})
+
+    def test_cmip7_style_numeric_passes(self):
+        cv = self._cv_without_grid_label()
+        for valid in ("g100", "g101", "g999", "g1"):
+            with self.subTest(label=valid):
+                cv.validate_dataset_values({"grid_label": valid})
+
+    def test_single_letter_label_passes(self):
+        """A label consisting of just the starting character is valid."""
+        cv = self._cv_without_grid_label()
+        cv.validate_dataset_values({"grid_label": "g"})
+
+    # -----------------------------------------------------------------------
+    # CV definition takes precedence over the fallback
+    # -----------------------------------------------------------------------
+
+    def test_cv_enumeration_wins_over_fallback(self):
+        """When the CV defines grid_label, only CV-listed values are accepted."""
+        cv = self._cv_with_grid_label()
+        # 'gn' is in the CV → accepted
+        cv.validate_dataset_values({"grid_label": "gn"})
+        # 'gr' is NOT in the CV (only 'gr1' is) → rejected by CV, not fallback
+        with self.assertRaises(ControlledVocabularyError):
+            cv.validate_dataset_values({"grid_label": "gr"})
+
+    def test_cv_defined_value_outside_fallback_regex_is_accepted(self):
+        """A CV-defined label that wouldn't pass the fallback regex is still accepted.
+
+        This confirms the fallback is skipped when the CV provides a definition —
+        even a label that the fallback would reject (e.g. one with a hyphen)
+        is fine when it's an explicit CV entry.
+        """
+        cv = ControlledVocabulary(
+            {
+                "CV": {
+                    "grid_label": {
+                        "gn": "native",
+                        "custom-label": "custom grid with hyphen in CV",
+                    }
+                }
+            }
+        )
+        # 'custom-label' is explicitly in the CV → accepted
+        cv.validate_dataset_values({"grid_label": "custom-label"})
+
+    def test_cmip7_real_project_grid_label_validated_by_cv(self):
+        """With real CMIP7 tables, grid_label is validated against the CV dict."""
+        from table_helpers import cmip7_project
+        project = cmip7_project()
+
+        # A CMIP7 CV-defined label passes
+        project.cv.validate_dataset_values({"grid_label": "g999"})
+
+        # A label not in the CMIP7 CV dict is rejected (by CV, not fallback)
+        with self.assertRaises(ControlledVocabularyError):
+            project.cv.validate_dataset_values({"grid_label": "gn"})
+
+    def test_fallback_not_applied_when_cmip7_cv_defines_grid_label(self):
+        """The fallback must not run when the CMIP7 CV enumerates grid_label.
+
+        This verifies that a CMIP7-format label like 'g100' is NOT
+        double-checked by the fallback after passing the CV enumeration.
+        """
+        from table_helpers import cmip7_project
+        project = cmip7_project()
+        # 'g100' is in the CMIP7 CV — should pass cleanly, no fallback noise
+        project.cv.validate_dataset_values({"grid_label": "g100"})
+
+
+if __name__ == "__main__":
+    unittest.main()
