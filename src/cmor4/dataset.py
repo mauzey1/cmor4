@@ -239,10 +239,15 @@ class DatasetInfo(Mapping[str, Any]):
         attrs.setdefault("variant_label", self.variant_label())
         attrs.setdefault("creation_date", creation_date)
 
-        # Add CMOR3-compatible history attribute
+        # Add CMOR3-compatible history attribute.  Both tokens are read from
+        # the attrs dict that has already been populated above, so the string
+        # is always accurate regardless of project or CV configuration.
+        # Using the same defensive fallback as the title block below.
+        conventions = attrs.get("Conventions", "CF-1.12")
+        mip_era_hist = attrs.get("mip_era") or self.get("mip_era", "CMIP")
         history_msg = (
             f"{creation_date} ; CMOR rewrote data to be consistent with "
-            f"CF-1.12 and CMIP7 data requirements."
+            f"{conventions} and {mip_era_hist} data requirements."
         )
         attrs.setdefault("history", history_msg)
 

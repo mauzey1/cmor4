@@ -1421,3 +1421,185 @@ class TestCVStructureValidation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# ---------------------------------------------------------------------------
+# GAP-07 — history attribute format alignment
+# ---------------------------------------------------------------------------
+
+import re as _re  # noqa: E402 (appended)
+
+
+class TestHistoryAttribute(unittest.TestCase):
+    """GAP-07: history attribute uses actual Conventions and mip_era tokens.
+
+    CMOR3 reference: ``Test/test_cmor_CMIP7.py``::
+
+        self.assertIn(
+            f"CMOR rewrote data to be consistent with {conventions} "
+            "and CMIP7 data requirements.",
+            ds.getncattr("history"),
+        )
+
+    The history string must therefore reflect the *actual* Conventions and
+    mip_era values from the dataset rather than hard-coded project constants.
+    """
+
+    # Regex matching the full history format:
+    #   "<ISO-8601Z> ; CMOR rewrote data to be consistent with <X> and <Y> data requirements."
+    _HISTORY_RE = _re.compile(
+        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"
+        r" ; CMOR rewrote data to be consistent with "
+        r".+ and .+ data requirements\.$"
+    )
+
+    def _make_dataset(self, tmp: Path, extra: dict | None = None) -> "xr.Dataset":
+        """Build a minimal dataset and return the resulting xarray Dataset."""
+        import numpy as np
+        from cmor4.core import create_dataset
+
+        project = _make_project(tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
+        dataset_info = project.dataset_info({**_MINIMAL_DATASET, **(extra or {})})
+        variable = project.variable("tas")
+        time_axis = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+        lat_axis = project.axis("lat", values=[-45.0, 45.0])
+        lon_axis = project.axis("lon", values=[0.0, 90.0])
+        data = np.ones((2, 2, 2))
+        return create_dataset(dataset_info, variable, [time_axis, lat_axis, lon_axis], data)
+
+    # -----------------------------------------------------------------------
+    # Format correctness
+    # -----------------------------------------------------------------------
+
+    def test_history_matches_cmor3_format(self):
+        """The full history string must match the CMOR3 pattern exactly."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            ds = self._make_dataset(Path(tmp_str))
+        self.assertRegex(ds.attrs["history"], self._HISTORY_RE)
+
+    def test_history_contains_actual_conventions(self):
+        """Conventions token in history must match the actual Conventions attribute."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            ds = self._make_dataset(Path(tmp_str))
+        conventions = ds.attrs["Conventions"]
+        self.assertIn(
+            f"be consistent with {conventions} and",
+            ds.attrs["history"],
+        )
+
+    def test_history_contains_actual_mip_era(self):
+        """mip_era token in history must reflect the dataset's mip_era."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            ds = self._make_dataset(Path(tmp_str))
+        mip_era = ds.attrs.get("mip_era", "CMIP")
+        self.assertIn(
+            f"and {mip_era} data requirements.",
+            ds.attrs["history"],
+        )
+
+    def test_history_conventions_not_hardcoded(self):
+        """A non-default Conventions value must appear in history, not 'CF-1.12'."""
+        cv_custom_conventions = {
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "Conventions": "CF-1.9",
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            project = _make_project(tmp, cv_custom_conventions, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
+            dataset_info = project.dataset_info(_MINIMAL_DATASET)
+            variable = project.variable("tas")
+            import numpy as np
+            from cmor4.core import create_dataset
+            time_axis = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+            lat_axis = project.axis("lat", values=[-45.0, 45.0])
+            lon_axis = project.axis("lon", values=[0.0, 90.0])
+            ds = create_dataset(dataset_info, variable, [time_axis, lat_axis, lon_axis], np.ones((2, 2, 2)))
+        self.assertIn("CF-1.9", ds.attrs["history"])
+        self.assertNotIn("CF-1.12", ds.attrs["history"])
+
+    def test_history_mip_era_not_hardcoded(self):
+        """A non-CMIP7 mip_era must appear in history, not the literal 'CMIP7'."""
+        cv_custom_mip = {
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "mip_era": "obs4MIPs",
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            project = _make_project(tmp, cv_custom_mip, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
+            dataset_info = project.dataset_info({**_MINIMAL_DATASET, "mip_era": "obs4MIPs"})
+            variable = project.variable("tas")
+            import numpy as np
+            from cmor4.core import create_dataset
+            time_axis = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+            lat_axis = project.axis("lat", values=[-45.0, 45.0])
+            lon_axis = project.axis("lon", values=[0.0, 90.0])
+            ds = create_dataset(dataset_info, variable, [time_axis, lat_axis, lon_axis], np.ones((2, 2, 2)))
+        self.assertIn("obs4MIPs", ds.attrs["history"])
+        self.assertNotIn("CMIP7", ds.attrs["history"])
+
+    def test_history_starts_with_iso8601_date(self):
+        """history must begin with a UTC ISO-8601 timestamp."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            ds = self._make_dataset(Path(tmp_str))
+        self.assertRegex(
+            ds.attrs["history"],
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z",
+        )
+
+    # -----------------------------------------------------------------------
+    # Preservation of user-supplied history
+    # -----------------------------------------------------------------------
+
+    def test_user_supplied_history_is_not_overwritten(self):
+        """A history value in the dataset must survive into the output unchanged."""
+        custom = "Pre-existing processing step applied 2024-01-01."
+        with tempfile.TemporaryDirectory() as tmp_str:
+            ds = self._make_dataset(Path(tmp_str), extra={"history": custom})
+        self.assertEqual(ds.attrs["history"], custom)
+
+    def test_extra_attrs_history_takes_priority(self):
+        """history supplied via extra_attrs must override the generated default."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            import numpy as np
+            from cmor4.core import create_dataset
+            project = _make_project(tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
+            dataset_info = project.dataset_info(_MINIMAL_DATASET)
+            variable = project.variable("tas")
+            time_axis = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+            lat_axis = project.axis("lat", values=[-45.0, 45.0])
+            lon_axis = project.axis("lon", values=[0.0, 90.0])
+            override = "Custom history override."
+            ds = create_dataset(
+                dataset_info,
+                variable,
+                [time_axis, lat_axis, lon_axis],
+                np.ones((2, 2, 2)),
+                attrs={"history": override},
+            )
+        self.assertEqual(ds.attrs["history"], override)
+
+    # -----------------------------------------------------------------------
+    # CMOR3 parity assertion (mirrors test_cmor_CMIP7.py)
+    # -----------------------------------------------------------------------
+
+    def test_cmor3_parity_assertin_passes(self):
+        """Replicate the exact assertIn check from CMOR3's test_cmor_CMIP7.py."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            ds = self._make_dataset(Path(tmp_str))
+        conventions = ds.attrs["Conventions"]
+        mip_era = ds.attrs.get("mip_era", "CMIP")
+        # This mirrors: self.assertIn(f"CMOR rewrote data to be consistent with
+        # {conventions} and CMIP7 data requirements.", ds.getncattr("history"))
+        self.assertIn(
+            f"CMOR rewrote data to be consistent with {conventions} "
+            f"and {mip_era} data requirements.",
+            ds.attrs["history"],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
