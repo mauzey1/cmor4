@@ -1,160 +1,211 @@
+"""Pydantic base class shared by all CMOR4 metadata records."""
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from dataclasses import fields
-from typing import Any, TypeVar
+from collections.abc import Iterator, KeysView, ItemsView, Mapping
+from typing import Any
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-MetadataRecordT = TypeVar("MetadataRecordT", bound="_MetadataRecord")
 
+class MetadataModel(BaseModel):
+    """Frozen Pydantic base with Mapping protocol and NetCDF helpers.
 
-class _MetadataRecord(Mapping[str, Any]):
-    """Base for metadata records with controlled serialization helpers.
-
-    Parameters
-    ----------
-    extra:
-        Additional mapping keys preserved by concrete metadata records.
+    Key design decisions
+    --------------------
+    * **No direct ``Mapping`` inheritance.** ``MetadataModel`` implements the
+      full :class:`~collections.abc.Mapping` interface manually and is
+      registered as a virtual ``Mapping`` subclass via
+      ``Mapping.register(MetadataModel)``.  This avoids Pydantic's
+      "Field name 'values' shadows an attribute in parent" warning that
+      would occur because ``Mapping`` supplies a ``values()`` method and
+      ``Axis`` / ``ZFactor`` declare a field named ``values``.
+    * ``extra`` is a **declared field** (``dict[str, Any]``), not Pydantic's
+      ``model_extra``.  This preserves backward compatibility: callers may
+      still pass ``Variable(..., extra={"k": "v"})`` *or* pass unknown kwargs
+      directly (``Variable(..., k="v")``); both end up in ``self.extra``.
+      It also lets test code do ``object.__setattr__(model, "extra", {})`` to
+      bypass the frozen guard in setup helpers.
+    * ``extra="ignore"`` is set in model_config; truly unknown keys are
+      routed into ``self.extra`` by the ``_collect_extras`` before-validator.
+    * ``coerce_numbers_to_str=True`` means numeric values from JSON table
+      entries (e.g. ``"units": 1``) are quietly converted for ``str`` fields.
+    * ``frozen=True`` enforces immutability.  Use :meth:`updated` for copies.
     """
 
-    extra: Mapping[str, Any]
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",         # unknown keys handled by _collect_extras below
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+        coerce_numbers_to_str=True,
+    )
 
+    # Explicit extra-metadata bucket (mirrors original dataclass field)
+    extra: dict[str, Any] = Field(default_factory=dict, repr=False)
+
+    # ------------------------------------------------------------------
+    # Before-validator: normalise extra= kwarg and unknown kwargs
+    # ------------------------------------------------------------------
+
+    @model_validator(mode="before")
     @classmethod
-    def from_mapping(
-        cls: type[MetadataRecordT], values: Mapping[str, Any]
-    ) -> MetadataRecordT:
-        """Create a metadata record from a mapping.
+    def _collect_extras(cls, data: Any) -> Any:
+        """Spread ``extra=`` dict and collect truly unknown kwargs into it.
 
-        Parameters
-        ----------
-        values:
-            Metadata values to map onto dataclass fields and ``extra`` keys.
-
-        Returns
-        -------
-        _MetadataRecord
-            Instance of the concrete metadata record class.
+        This runs for both ``Model(**kwargs)`` and ``Model.model_validate(d)``
+        construction paths, so the ``extra`` field is always the single
+        authoritative location for non-declared keys.
         """
-
-        field_names = {field.name for field in fields(cls)}
-        kwargs = {
-            key: value
-            for key, value in values.items()
-            if key in field_names and key != "extra"
-        }
-        extra = {
-            str(key): value
-            for key, value in values.items()
-            if key not in field_names and value is not None
-        }
-        if extra:
-            kwargs["extra"] = extra
-        return cls(**kwargs)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return metadata as a dictionary without empty optional values.
-
-        Returns
-        -------
-        dict[str, Any]
-            Serializable metadata values, including preserved ``extra`` keys.
-        """
-
-        data: dict[str, Any] = {}
-        for field_info in fields(self):
-            if field_info.name == "extra":
-                continue
-            value = getattr(self, field_info.name)
-            if value is None:
-                continue
-            if isinstance(value, Mapping) and not value:
-                continue
-            data[field_info.name] = value
-        for key, value in self.extra.items():
-            if value is not None:
-                data.setdefault(str(key), value)
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data.pop("project", None)   # consumed by __init__ before Pydantic sees it
+        # Spread an explicit extra= dict first
+        explicit_extra = data.pop("extra", None)
+        if isinstance(explicit_extra, dict):
+            for k, v in explicit_extra.items():
+                data.setdefault(k, v)
+        # Collect all remaining unknown keys into extra
+        known = set(cls.model_fields.keys())
+        unknown = {k: v for k, v in list(data.items()) if k not in known}
+        if unknown:
+            for k in unknown:
+                del data[k]
+            data["extra"] = {**unknown, **(data.get("extra") or {})}
         return data
 
-    def updated(self: MetadataRecordT, **updates: Any) -> MetadataRecordT:
-        """Return a copy of this record with updates applied.
+    # ------------------------------------------------------------------
+    # Backward-compatible project= kwarg support
+    # ------------------------------------------------------------------
 
-        Parameters
-        ----------
-        **updates:
-            Metadata values to override or add.
+    def __init__(self, **data: Any) -> None:
+        """Accept an optional ``project=`` kwarg for table-backed construction.
 
-        Returns
-        -------
-        _MetadataRecord
-            New metadata record of the same concrete type.
+        ``project`` is popped here — *before* Pydantic validation — so any
+        :exc:`~cmor4.exceptions.TableValidationError` raised by the table
+        merging propagates directly to the caller, not wrapped in a
+        ``pydantic.ValidationError``.
         """
+        project = data.pop("project", None)
+        if project is not None:
+            data = type(self)._apply_table_defaults(data, project)
+        super().__init__(**data)
+        if project is not None:
+            self._post_project_init()
 
-        return type(self).from_mapping({**self.to_dict(), **updates})
+    @classmethod
+    def _apply_table_defaults(
+        cls, data: dict[str, Any], project: Any
+    ) -> dict[str, Any]:
+        """Merge project-table defaults into *data*.  No-op on the base class."""
+        return data
+
+    def _post_project_init(self) -> None:
+        """Called after frozen construction when ``project=`` was supplied."""
+
+    # ------------------------------------------------------------------
+    # Serialisation
+    # ------------------------------------------------------------------
+
+    def _data(self) -> dict[str, Any]:
+        """Return all meaningful (non-None, non-empty-dict) field values.
+
+        The ``extra`` field itself is *not* included; its contents are inlined
+        at the top level (mirroring the original ``_MetadataRecord.to_dict``).
+        Fields with ``exclude=True`` are also omitted.
+        """
+        result: dict[str, Any] = {}
+        for name, info in type(self).model_fields.items():
+            if name == "extra" or getattr(info, "exclude", False):
+                continue
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if isinstance(value, dict) and not value:
+                continue
+            result[name] = value
+        # Inline extra contents
+        for key, value in self.extra.items():
+            if value is not None:
+                result.setdefault(key, value)
+        return result
+
+    # ------------------------------------------------------------------
+    # Mapping protocol (explicit, no ABC inheritance)
+    #
+    # Inheriting from Mapping[str, Any] would put Mapping.values() in the
+    # MRO, causing Pydantic to warn that the 'values' field in Axis and
+    # ZFactor shadows that method.  Instead we implement the protocol by
+    # hand and register MetadataModel as a virtual Mapping subclass at the
+    # bottom of this module so that isinstance(obj, Mapping) still holds.
+    # ------------------------------------------------------------------
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data()[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data())
+
+    def __len__(self) -> int:
+        return len(self._data())
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._data()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Return the value for *key*, or *default* if absent."""
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def keys(self) -> KeysView[str]:
+        """Return a view of all Mapping keys."""
+        return self._data().keys()
+
+    def items(self) -> ItemsView[str, Any]:
+        """Return a view of all ``(key, value)`` pairs."""
+        return self._data().items()
+
+    # Note: no .values() method — 'values' is a data field on Axis/ZFactor.
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, Any]) -> MetadataModel:
+        """Construct from a plain mapping."""
+        return cls.model_validate(dict(values))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a mutable copy of the Mapping view."""
+        return self._data()
+
+    def updated(self, **updates: Any) -> MetadataModel:
+        """Return a new instance with *updates* applied (no table re-merge)."""
+        return type(self).model_validate({**self.to_dict(), **updates})
+
+    # NetCDF helpers -------------------------------------------------
 
     @staticmethod
     def is_netcdf_attr_value(value: Any) -> bool:
-        """Return whether a value can be written as a simple NetCDF attribute.
-
-        Parameters
-        ----------
-        value:
-            Value to test.
-
-        Returns
-        -------
-        bool
-            ``True`` for scalar string, bytes, integer, or floating values.
-        """
-
         return isinstance(value, (str, bytes, int, float, np.integer, np.floating))
 
     @staticmethod
     def netcdf_attrs(values: Mapping[str, Any]) -> dict[str, Any]:
-        """Filter a mapping to NetCDF-safe attribute values.
-
-        Parameters
-        ----------
-        values:
-            Candidate attribute values.
-
-        Returns
-        -------
-        dict[str, Any]
-            Attributes whose values can be written directly to NetCDF.
-        """
-
         return {
-            str(key): value
-            for key, value in values.items()
-            if _MetadataRecord.is_netcdf_attr_value(value)
+            str(k): v
+            for k, v in values.items()
+            if MetadataModel.is_netcdf_attr_value(v)
         }
 
     @staticmethod
     def netcdf_array(value: Any) -> np.ndarray:
-        """Convert a value to a NetCDF-ready array.
+        arr = np.asarray(value)
+        if arr.dtype.kind in {"U", "S", "O"}:
+            return arr.astype(str)
+        return arr
 
-        Parameters
-        ----------
-        value:
-            Scalar or array-like value.
 
-        Returns
-        -------
-        numpy.ndarray
-            Array with object and string-like dtypes normalized to strings.
-        """
-
-        array = np.asarray(value)
-        if array.dtype.kind in {"U", "S", "O"}:
-            return array.astype(str)
-        return array
-
-    def __getitem__(self, key: str) -> Any:
-        return self.to_dict()[key]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.to_dict())
-
-    def __len__(self) -> int:
-        return len(self.to_dict())
+# Register as a virtual Mapping subclass so that
+# isinstance(variable, Mapping) and isinstance(axis, Mapping) remain True
+# without putting Mapping.values() in the MRO.
+Mapping.register(MetadataModel)

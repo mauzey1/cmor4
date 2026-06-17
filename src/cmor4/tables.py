@@ -176,11 +176,7 @@ class ProjectTables:
         self.validate_source_attributes(normalized_dataset)
         self.validate_experiment(normalized_dataset)
         self.validate_parent_attributes(normalized_dataset)
-        return DatasetInfo(
-            normalized_dataset,
-            project=self,
-            user_info=user_info,
-        )
+        return DatasetInfo.from_mapping(normalized_dataset, project=self)
 
     def _dataset_for_variable(
         self,
@@ -205,11 +201,7 @@ class ProjectTables:
 
         # Note: Full variable and dataset-variable consistency validation
         # happens in validate_components, not here
-        prepared_dataset = DatasetInfo(
-            normalized_dataset,
-            project=self,
-            user_info=user_info,
-        )
+        prepared_dataset = DatasetInfo.from_mapping(normalized_dataset, project=self)
 
         # Quick validation check for dataset-variable consistency
         # This is duplicated in validate_components but done early for fast
@@ -278,7 +270,7 @@ class ProjectTables:
             # Uses monthly atmospheric table specifically
         """
 
-        return Variable(name=name, project=self, **values)
+        return Variable.from_project(self, name=name, **values)
 
     def axis(self, name: str, **values: Any) -> Axis:
         """Create an axis with metadata from the loaded coordinate tables.
@@ -348,7 +340,7 @@ class ProjectTables:
             )
         """
 
-        return self._mark_prepared_axis(Axis(name=name, project=self, **values))
+        return self._mark_prepared_axis(Axis.from_project(self, name=name, **values))
 
     def _axes(
         self,
@@ -445,12 +437,10 @@ class ProjectTables:
                 continue
             if dimension_name not in self.scalar_axis_entries:
                 continue
-            axis = Axis(
-                name=dimension_name,
-                table_entry=dimension_name,
-                scalar=True,
-                project=self,
-            )
+            _adata = {"name": dimension_name, "table_entry": dimension_name, "scalar": True}
+            _adata = Axis._apply_table_defaults(_adata, self)
+            axis = Axis.model_validate(_adata)
+            axis._validate_values_early()
             missing_axes.append(axis)
             present.update(
                 str(value)
@@ -566,7 +556,7 @@ class ProjectTables:
             )
         """
 
-        return Grid(name=name, project=self, **values)
+        return Grid.from_project(self, name=name, **values)
 
     def zfactor(self, name: str, **values: Any) -> ZFactor:
         """Create a z-factor with metadata from formula-term tables.
@@ -638,7 +628,7 @@ class ProjectTables:
             )
         """
 
-        return ZFactor(name=name, project=self, **values)
+        return ZFactor.from_project(self, name=name, **values)
 
     def validate_components(
         self,
@@ -729,7 +719,7 @@ class ProjectTables:
                 grid_entry_name, grid_entry = axis.resolve_grid_coordinate(self)
                 if grid_entry is not None:
                     # Grid coordinates are only validated against grid table
-                    axis._validate_metadata(
+                    axis._validate_metadata_instance(
                         "grid coordinate",
                         grid_entry_name,
                         grid_entry,
@@ -739,7 +729,7 @@ class ProjectTables:
                     # Regular coordinates validated against coordinate table
                     entry_name, entry = axis.resolve_table_entry(self)
                     if entry is not None:
-                        axis._validate_metadata(
+                        axis._validate_metadata_instance(
                             "axis",
                             entry_name,
                             entry,
@@ -843,7 +833,7 @@ class ProjectTables:
 
             # Validate remaining metadata (standard_name, long_name)
             # by exact match.
-            zfactor._validate_metadata(
+            zfactor._validate_metadata_instance(
                 "formula term",
                 entry_name,
                 entry,

@@ -11,11 +11,11 @@ from .variable import Variable
 
 
 def validate_variable_values(
-    variable: Mapping[str, Any],
-    axes: Sequence[Axis],
+    variable: Variable,
+    axes: list[Axis],
     data: Any,
-    dims: Sequence[str],
-    axis_dims: Mapping[str, tuple[str, ...]],
+    dims: list[str],
+    axis_dims: dict[str, tuple[str, ...]],
     *,
     name: str | None = None,
     table_id: str | None = None,

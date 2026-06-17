@@ -1,563 +1,273 @@
+"""Grid metadata record for runtime grid dimensions and CF projections."""
 from __future__ import annotations
 
-from dataclasses import InitVar, dataclass, field
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 import warnings
 
-from ._table_utils import is_table_value
-from .metadata import _MetadataRecord
+import numpy as np
+from pydantic import Field, model_validator
+from typing import Annotated
+from pydantic import BeforeValidator
 
-_LATITUDE_PARAMETERS = {
+from ._table_utils import is_table_value
+from .metadata import MetadataModel
+
+if TYPE_CHECKING:
+    from .tables import ProjectTables
+
+
+_LATITUDE_PARAMS: frozenset[str] = frozenset({
     "grid_north_pole_latitude",
     "latitude_of_projection_origin",
-    "standard_parallel",
-    "standard_parallel1",
-    "standard_parallel2",
-}
-
-_LONGITUDE_PARAMETERS = {
+    "standard_parallel", "standard_parallel1", "standard_parallel2",
+})
+_LONGITUDE_PARAMS: frozenset[str] = frozenset({
     "grid_north_pole_longitude",
     "longitude_of_prime_meridian",
     "longitude_of_central_meridian",
     "longitude_of_projection_origin",
     "north_pole_grid_longitude",
-}
-
-_NON_NEGATIVE_PARAMETERS = {
+})
+_NONNEG_PARAMS: frozenset[str] = frozenset({
     "scale_factor_at_central_meridian",
     "scale_factor_at_projection_origin",
-}
+})
 
 
-@dataclass(frozen=True)
-class Grid(_MetadataRecord):
-    """Runtime grid dimensions and optional grid-mapping metadata.
+def _str_tuple(v: Any) -> tuple[str, ...] | None:
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return (v,)
+    return tuple(str(x) for x in v)
+
+
+def _str_seq(v: Any) -> list[str] | tuple[str, ...] | None:
+    """Preserve list-or-tuple of str; wrap bare string as single-element list."""
+    if v is None:
+        return None
+    if isinstance(v, list):
+        return [str(x) for x in v]
+    if isinstance(v, tuple):
+        return tuple(str(x) for x in v)
+    if isinstance(v, str):
+        return [v]
+    return [str(x) for x in v]
+
+
+StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
+StrSeq   = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
+
+
+class Grid(MetadataModel):
+    """Runtime grid dimensions and optional CF grid-mapping metadata.
 
     Parameters
     ----------
-    dimensions
-        Spatial dimensions for grid (e.g., ``["x", "y"]`` or ``["j", "i"]``).
-        Should not include time dimension. If provided, these override the
-        variable's default dimensions for the data variable.
-    name
-        Requested grid mapping entry name.
-    table_entry
-        Grid table entry name selector.
-    mapping_entry
-        Grid table entry name selector.
-    mapping_var
+    dimensions:
+        Spatial (non-time) dimensions for the data variable.
+    name, table_entry, mapping_entry:
+        Grid table entry name selectors.
+    mapping_var:
         Name of the scalar grid-mapping variable to write.
-    mapping_name
-        CF grid mapping name.
-    grid_mapping_name
-        CF grid mapping name.
-    coordinates
-        Auxiliary coordinate names associated with the grid.
-    params
-        Grid-mapping parameter values.
-    attrs
+    mapping_name, grid_mapping_name:
+        CF ``grid_mapping_name``.
+    coordinates:
+        Auxiliary coordinate names.
+    params:
+        Grid-mapping parameter dict.  Each value may be a scalar or a
+        ``(value, units)`` tuple.
+    attrs:
         Extra NetCDF attributes for the grid-mapping variable.
-    latitude
-        Optional 2D array of latitude values on the grid. When provided, this
-        will be added as an auxiliary coordinate with the grid's spatial
-        dimensions. Shape should match the spatial dimensions only.
-    longitude
-        Optional 2D array of longitude values on the grid. When provided, this
-        will be added as an auxiliary coordinate with the grid's spatial
-        dimensions. Shape should match the spatial dimensions only.
-    latitude_vertices
-        Optional 3D array of latitude cell vertices. Shape should be
-        ``(*latitude.shape, n_vertices)`` where n_vertices is typically 4.
-    longitude_vertices
-        Optional 3D array of longitude cell vertices. Shape should be
-        ``(*longitude.shape, n_vertices)`` where n_vertices is typically 4.
-    vertices_dim
-        Name for the vertices dimension. Defaults to ``"vertices"``.
-    extra
-        Additional mapping keys preserved by the metadata record.
-    project
-        Optional project tables used to resolve and merge grid metadata during
-        construction.
-
-    Notes
-    -----
-    Grid dimensions should only include spatial axes (e.g., x, y or i, j), not
-    the time dimension. The latitude and longitude arrays are 2D spatial grids
-    that share only the spatial dimensions of the data variable.
-
-    Examples
-    --------
-    Create a grid with embedded lat/lon coordinates for a projected grid::
-
-        grid = project.grid(
-            dimensions=["x", "y"],
-            mapping_name="lambert_azimuthal_equal_area",
-            params={
-                "latitude_of_projection_origin": [90.0, "degrees_north"],
-                "longitude_of_projection_origin": [0.0, "degrees_east"],
-            },
-            latitude=lat_values,  # shape: (nx, ny)
-            longitude=lon_values,
-            latitude_vertices=lat_verts,  # shape: (nx, ny, 4)
-            longitude_vertices=lon_verts,
-        )
-
-        # Now just pass x, y, time axes - grid handles lat/lon
-        axes = [
-            project.axis("time", ...),
-            project.axis("x", ...),
-            project.axis("y", ...),
-        ]
-        ds = cmor4.create_dataset(
-            dataset_info, variable, axes, data, grid=grid
-        )
+    latitude, longitude:
+        Optional 2-D geographic coordinate arrays on the grid.
+    latitude_vertices, longitude_vertices:
+        Optional cell-vertex arrays (shape ``(*spatial, n_vertices)``).
+    vertices_dim:
+        Name for the vertices dimension (default ``"vertices"``).
     """
 
-    dimensions: tuple[str, ...] | list[str] | None = None
+    dimensions: StrTuple = None
     name: str | None = None
     table_entry: str | None = None
     mapping_entry: str | None = None
     mapping_var: str | None = None
     mapping_name: str | None = None
     grid_mapping_name: str | None = None
-    coordinates: tuple[str, ...] | list[str] | None = None
-    params: Mapping[str, Any] = field(default_factory=dict)
-    attrs: Mapping[str, Any] = field(default_factory=dict)
+    coordinates: StrSeq = None
+    params: dict[str, Any] = Field(default_factory=dict)
+    attrs: dict[str, Any] = Field(default_factory=dict)
     latitude: Any = None
     longitude: Any = None
     latitude_vertices: Any = None
     longitude_vertices: Any = None
     vertices_dim: str = "vertices"
-    extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
-    project: InitVar[Any | None] = None
 
-    def __post_init__(self, project: Any | None) -> None:
-        # Validate latitude/longitude array shapes
-        self._validate_spatial_arrays()
+    @model_validator(mode="after")
+    def _check_spatial_arrays(self) -> Grid:
+        """Validate that latitude / longitude shapes are consistent."""
+        lat, lon = self.latitude, self.longitude
+        if lat is None or lon is None:
+            return self
+        la, lo = np.asarray(lat), np.asarray(lon)
+        if la.shape != lo.shape:
+            raise ValueError(
+                f"latitude shape {la.shape} does not match longitude shape {lo.shape}."
+            )
+        if self.dimensions is not None and la.ndim != len(self.dimensions):
+            raise ValueError(
+                f"lat/lon arrays have {la.ndim} dimension(s) but "
+                f"{len(self.dimensions)} grid dimension(s) were specified."
+            )
+        for name, arr, ref in (
+            ("latitude_vertices",  self.latitude_vertices,  la),
+            ("longitude_vertices", self.longitude_vertices, lo),
+        ):
+            if arr is not None:
+                a = np.asarray(arr)
+                if a.shape[:ref.ndim] != ref.shape:
+                    raise ValueError(
+                        f"{name} shape {a.shape} is incompatible "
+                        f"with coordinate shape {ref.shape}."
+                    )
+        return self
 
-        if project is None:
-            return
-        merged = self._merge_table_entry(project)
-        for key, value in merged.to_dict().items():
-            object.__setattr__(self, key, value)
+    # ------------------------------------------------------------------
+    # Project-table construction
+    # ------------------------------------------------------------------
 
-    def _validate_spatial_arrays(self) -> None:
-        """Validate that latitude/longitude arrays are consistent.
+    @classmethod
+    def from_project(
+        cls, project: ProjectTables, name: str | None = None, **values: Any
+    ) -> Grid:
+        """Create a Grid by merging grid-table metadata."""
+        data: dict[str, Any] = {k: v for k, v in {"name": name, **values}.items()
+                                 if v is not None}
+        data = cls._apply_table_defaults(data, project)
+        return cls.model_validate(data)
 
-        Checks:
-        - If both latitude and longitude are provided, they must have the same
-          shape
-        - If dimensions are provided with lat/lon, array ndim must match
-          number of spatial dimensions
-        - If vertices are provided, they must have shape
-          (*base_shape, n_vertices)
-        """
-        import numpy as np
-
-        lat = self.latitude
-        lon = self.longitude
-        lat_verts = self.latitude_vertices
-        lon_verts = self.longitude_vertices
-
-        # Check that lat and lon have the same shape if both provided
-        if lat is not None and lon is not None:
-            lat_array = np.asarray(lat)
-            lon_array = np.asarray(lon)
-            if lat_array.shape != lon_array.shape:
-                raise ValueError(
-                    "Grid latitude and longitude arrays must have the same "
-                    f"shape. Got latitude shape {lat_array.shape} and "
-                    f"longitude shape {lon_array.shape}."
-                )
-
-        # Validate array ndim matches dimensions if both provided
-        if self.dimensions and lat is not None:
-            lat_array = np.asarray(lat)
-            # Filter out time from dimensions to get spatial dims
-            spatial_dims = [d for d in self.dimensions if str(d).lower() != "time"]
-            if lat_array.ndim != len(spatial_dims):
-                raise ValueError(
-                    f"Grid latitude array has {lat_array.ndim} dimensions but "
-                    f"grid spatial dimensions {spatial_dims} implies "
-                    f"{len(spatial_dims)} dimensions."
-                )
-
-        if self.dimensions and lon is not None:
-            lon_array = np.asarray(lon)
-            spatial_dims = [d for d in self.dimensions if str(d).lower() != "time"]
-            if lon_array.ndim != len(spatial_dims):
-                raise ValueError(
-                    f"Grid longitude array has {lon_array.ndim} dimensions "
-                    f"but grid spatial dimensions {spatial_dims} implies "
-                    f"{len(spatial_dims)} dimensions."
-                )
-
-        # Validate vertices have correct shape if provided
-        if lat is not None and lat_verts is not None:
-            lat_array = np.asarray(lat)
-            lat_verts_array = np.asarray(lat_verts)
-            expected_ndim = lat_array.ndim + 1
-            if lat_verts_array.ndim != expected_ndim:
-                raise ValueError(
-                    f"Grid latitude_vertices must have ndim={expected_ndim} "
-                    f"(latitude.ndim + 1), got {lat_verts_array.ndim}."
-                )
-            if lat_verts_array.shape[:-1] != lat_array.shape:
-                raise ValueError(
-                    f"Grid latitude_vertices shape {lat_verts_array.shape} "
-                    f"does not match latitude shape {lat_array.shape} "
-                    "in the first dimensions."
-                )
-
-        if lon is not None and lon_verts is not None:
-            lon_array = np.asarray(lon)
-            lon_verts_array = np.asarray(lon_verts)
-            expected_ndim = lon_array.ndim + 1
-            if lon_verts_array.ndim != expected_ndim:
-                raise ValueError(
-                    f"Grid longitude_vertices must have ndim={expected_ndim} "
-                    f"(longitude.ndim + 1), got {lon_verts_array.ndim}."
-                )
-            if lon_verts_array.shape[:-1] != lon_array.shape:
-                raise ValueError(
-                    f"Grid longitude_vertices shape {lon_verts_array.shape} "
-                    f"does not match longitude shape {lon_array.shape} "
-                    "in the first dimensions."
-                )
-
-    def _merge_table_entry(self, project: Any) -> "Grid":
-        """Merge grid-mapping metadata from the loaded grids table.
-
-        Parameters
-        ----------
-        project
-            Project table loader containing grid mapping entries.
-
-        Returns
-        -------
-        Grid
-            New grid metadata record with table defaults applied.
-        """
-
-        merged = self.to_dict()
-        entry_name, entry = self.resolve_table_entry(project)
+    @classmethod
+    def _apply_table_defaults(
+        cls, data: dict[str, Any], project: ProjectTables
+    ) -> dict[str, Any]:
+        requested = str(
+            data.get("table_entry") or data.get("mapping_entry") or data.get("name") or ""
+        )
+        if not requested:
+            return data
+        ge: dict[str, Mapping[str, Any]] = getattr(project, "grid_mapping_entries", {})
+        entry = ge.get(requested)
         if entry is None:
-            return Grid.from_mapping(merged)
-        merged.setdefault("table_entry", entry_name)
-        for key in ("mapping_name", "grid_mapping_name"):
-            value = entry.get(key)
-            if is_table_value(value):
-                merged.setdefault(key, value)
-        coordinates = entry.get("coordinates")
-        if "coordinates" not in merged and is_table_value(coordinates):
-            merged["coordinates"] = str(coordinates).split()
-        params = dict(merged.get("params", {}))
-        for key, value in entry.items():
-            if not key.startswith("parameter") or not is_table_value(value):
+            return data
+        for key in ("mapping_name", "grid_mapping_name", "mapping_var"):
+            val = entry.get(key)
+            if is_table_value(val):
+                data.setdefault(key, val)
+        coords = entry.get("coordinates")
+        if is_table_value(coords):
+            if isinstance(coords, str):
+                coords = coords.split()
+            data.setdefault("coordinates", coords)
+        # Merge explicit params dict from table entry (if any)
+        table_params = entry.get("params") or {}
+        if isinstance(table_params, dict):
+            mp = dict(data.get("params") or {})
+            for k, v in table_params.items():
+                mp.setdefault(k, v)
+            data["params"] = mp
+        # Merge "parameterN" keys: {"parameter1": "false_easting", ...}
+        # These declare which projection parameters belong to this mapping;
+        # their values default to 0.0 unless the user already supplied them.
+        params = dict(data.get("params") or {})
+        for key, param_name in entry.items():
+            if not key.startswith("parameter") or not is_table_value(param_name):
                 continue
-            params.setdefault(str(value), merged.get(str(value), 0.0))
+            params.setdefault(str(param_name), data.get(str(param_name), 0.0))
         if params:
-            merged["params"] = params
-        return Grid.from_mapping(merged)
+            data["params"] = params
+        return data
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    @property
+    def variable_name(self) -> str:
+        """Return the output grid-mapping variable name (default: ``"crs"``)."""
+        return str(self.mapping_var or "crs")
 
     def resolve_table_entry(
         self, project: Any
     ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve a grid mapping entry from this grid definition.
-
-        Grid mapping entries define CF-compliant coordinate reference systems
-        and projection parameters for non-geographic coordinate systems (e.g.,
-        Lambert Conformal Conic, Polar Stereographic).
-
-        Parameters
-        ----------
-        project
-            Project table loader containing grid mapping entries from the
-            loaded grids table.
-
-        Returns
-        -------
-        tuple[str | None, Mapping[str, Any] | None]
-            A tuple containing:
-
-            - entry_name (str or None): Matched grid mapping entry name
-            - entry (dict or None): Grid mapping entry metadata including
-              mapping_name and projection parameters
-
-            Returns ``(None, None)`` if no matching entry is found.
-
-        Examples
-        --------
-        Resolve a standard grid mapping::
-
-            grid = Grid(name="lambert_conformal_conic")
-            entry_name, entry = grid.resolve_table_entry(project)
-            # Returns ("lambert_conformal_conic", {...}) with projection params
-
-        Explicit table entry selection::
-
-            grid = Grid(table_entry="rotated_latitude_longitude")
-            entry_name, entry = grid.resolve_table_entry(project)
-            # Returns ("rotated_latitude_longitude", {...})
-        """
-
-        requested = str(self.table_entry or self.mapping_entry or self.name or "")
-        if requested in project.grid_mapping_entries:
-            return requested, project.grid_mapping_entries[requested]
+        """Resolve the grid mapping table entry for this Grid."""
+        requested = str(
+            self.table_entry or self.mapping_entry or self.name or ""
+        )
+        if not requested:
+            return None, None
+        ge: dict[str, Mapping[str, Any]] = getattr(project, "grid_mapping_entries", {})
+        entry = ge.get(requested)
+        if entry:
+            return requested, entry
         return None, None
 
-    @property
-    def variable_name(self) -> str:
-        """Return the output grid-mapping variable name.
-
-        The grid mapping variable is a scalar NetCDF variable that holds
-        projection parameters as attributes. This property returns the name
-        that will be used for that variable in the output file.
-
-        Returns
-        -------
-        str
-            The grid mapping variable name. Returns the explicitly set
-            ``mapping_var`` if provided, otherwise defaults to ``"crs"``
-            (Coordinate Reference System).
-
-        Examples
-        --------
-        Default grid mapping variable name::
-
-            grid = Grid(mapping_name="lambert_conformal_conic")
-            grid.variable_name  # Returns "crs"
-
-        Custom grid mapping variable name::
-
-            grid = Grid(
-                mapping_name="polar_stereographic",
-                mapping_var="projection"
-            )
-            grid.variable_name  # Returns "projection"
-        """
-
-        return str(self.mapping_var or "crs")
-
     def variable_dimensions(self, variable: Any) -> tuple[str, ...] | None:
-        """Return data-variable dimensions implied by this grid.
+        """Return the full dimension tuple for the data variable.
 
-        When a grid specifies spatial dimensions, this method returns the full
-        set of variable dimensions by combining any time dimension from the
-        variable with the grid's spatial dimensions. This is useful for
-        variables on non-rectilinear grids where spatial dimension names
-        differ from coordinate table defaults.
-
-        Parameters
-        ----------
-        variable
-            Variable metadata used as a source of time dimensions and as a
-            fallback when the grid doesn't specify spatial dimensions.
-
-        Returns
-        -------
-        tuple[str, ...] | None
-            Ordered tuple of dimension names for the data variable. If grid
-            dimensions are specified, returns time dimension (if present in
-            variable) followed by grid spatial dimensions. Otherwise returns
-            variable dimensions if defined, otherwise ``None``.
-
-        Notes
-        -----
-        Grid dimensions should only specify spatial axes. Time dimensions from
-        the variable metadata are automatically prepended when grid dimensions
-        are used.
-
-        Examples
-        --------
-        Grid with explicit spatial dimensions::
-
-            grid = Grid(dimensions=("x", "y"))
-            variable = Variable(name="tos", dimensions=("time", "lat", "lon"))
-            dims = grid.variable_dimensions(variable)
-            # Returns ("time", "x", "y"), combining time from variable with
-            # spatial dims from grid
-
-        Grid spatial dimensions without time in variable::
-
-            grid = Grid(dimensions=("j", "i"))
-            variable = Variable(name="orog", dimensions=("lat", "lon"))
-            dims = grid.variable_dimensions(variable)
-            # Returns ("j", "i"), using only grid spatial dimensions
-
-        Grid without dimensions uses variable defaults::
-
-            grid = Grid(mapping_name="lambert_conformal_conic")
-            variable = Variable(name="tas", dimensions=("time", "y", "x"))
-            dims = grid.variable_dimensions(variable)
-            # Returns ("time", "y", "x") from variable
-
-        Neither grid nor variable specify dimensions::
-
-            grid = Grid()
-            variable = Variable(name="orog")
-            dims = grid.variable_dimensions(variable)
-            # Returns None
+        Combines time from *variable* with the grid's spatial dimensions.
         """
-
         if self.dimensions:
-            # Spatial dimensions only - combine with time from variable
-            grid_dims = tuple(str(name) for name in self.dimensions)
-
-            # Extract time dimension from variable if present
-            var_dims = variable.get("dimensions")
+            grid_dims = tuple(str(n) for n in self.dimensions)
+            var_dims  = variable.get("dimensions")
             if var_dims:
                 time_dims = tuple(str(d) for d in var_dims if str(d).lower() == "time")
-                # Return time dimension(s) first, then grid spatial dimensions
                 return time_dims + grid_dims
             return grid_dims
-
-        dimensions = variable.get("dimensions")
-        if dimensions:
-            return tuple(str(name) for name in dimensions)
+        dims = variable.get("dimensions")
+        if dims:
+            return tuple(str(n) for n in dims)
         return None
 
     @property
     def has_mapping(self) -> bool:
-        """Return whether this grid should write a grid-mapping variable.
-
-        A grid mapping variable is only created if the grid defines projection
-        parameters, a mapping name, or attributes. Grids that only specify
-        dimensions without projection information do not produce a mapping
-        variable.
-
-        Returns
-        -------
-        bool
-            ``True`` if a grid mapping variable should be written to the NetCDF
-            file, ``False`` otherwise. Returns ``True`` when any of
-            mapping_name, grid_mapping_name, params, or attrs are defined.
-
-        Examples
-        --------
-        Grid with projection requires mapping variable::
-
-            grid = Grid(
-                mapping_name="lambert_conformal_conic",
-                params={
-                    "standard_parallel": (30.0, "degrees_north"),
-                    "longitude_of_central_meridian": (-100.0, "degrees_east")
-                }
-            )
-            grid.has_mapping  # Returns True
-
-        Grid with only dimensions doesn't need mapping::
-
-            grid = Grid(dimensions=("j", "i"))
-            grid.has_mapping  # Returns False
-
-        Empty grid doesn't need mapping::
-
-            grid = Grid()
-            grid.has_mapping  # Returns False
-        """
-
-        return bool(
-            self.mapping_name or self.grid_mapping_name or self.params or self.attrs
-        )
+        """True when this grid needs a CF grid-mapping variable."""
+        return bool(self.mapping_name or self.grid_mapping_name or self.params or self.attrs)
 
     def mapping_attributes(self) -> dict[str, Any]:
-        """Return NetCDF attributes for the grid-mapping variable.
-
-        This method constructs the complete set of CF-compliant grid mapping
-        attributes, including the grid_mapping_name and all projection
-        parameters. Parameters are validated to ensure they fall within
-        CF-required ranges (e.g., latitudes between -90 and 90).
-
-        Returns
-        -------
-        dict[str, Any]
-            NetCDF-safe grid mapping attributes suitable for assignment to
-            the scalar grid mapping variable. Includes grid_mapping_name and
-            all validated projection parameters. Parameters with units are
-            split into value and units attributes (e.g., "standard_parallel"
-            and "standard_parallel_units").
-
-        Notes
-        -----
-        Parameters are validated during attribute construction:
-
-        - Latitude parameters must be in [-90, 90] degrees_north
-        - Longitude parameters must be in [-180, 180] degrees_east
-        - Scale factor parameters must be non-negative
-
-        Invalid parameters trigger warnings and are excluded from output.
-
-        Examples
-        --------
-        Get attributes for Lambert Conformal Conic projection::
-
-            grid = Grid(
-                mapping_name="lambert_conformal_conic",
-                params={
-                    "standard_parallel": ([30.0, 60.0], "degrees_north"),
-                    "longitude_of_central_meridian": (-100.0, "degrees_east"),
-                    "latitude_of_projection_origin": (40.0, "degrees_north")
-                }
-            )
-            attrs = grid.mapping_attributes()
-            # attrs = {
-            #     "grid_mapping_name": "lambert_conformal_conic",
-            #     "standard_parallel": [30.0, 60.0],
-            #     "standard_parallel_units": "degrees_north",
-            #     "longitude_of_central_meridian": -100.0,
-            #     "longitude_of_central_meridian_units": "degrees_east",
-            #     ...
-            # }
-        """
-
+        """Return NetCDF attributes for the grid-mapping scalar variable."""
         attrs = self.netcdf_attrs(self.attrs)
-        mapping_name = self.mapping_name or self.grid_mapping_name
-        if mapping_name:
-            attrs["grid_mapping_name"] = mapping_name
-        for key, value in self.params.items():
-            if not _valid_mapping_parameter(str(key), value):
+        mname = self.mapping_name or self.grid_mapping_name
+        if mname:
+            attrs["grid_mapping_name"] = mname
+        for key, val in self.params.items():
+            if not _valid_param(str(key), val):
                 continue
-            if isinstance(value, (list, tuple)) and value:
-                attrs[key] = value[0]
-                if len(value) > 1 and value[1]:
-                    attrs[f"{key}_units"] = value[1]
+            if isinstance(val, (list, tuple)) and val:
+                attrs[key] = val[0]
+                if len(val) > 1 and val[1]:
+                    attrs[f"{key}_units"] = val[1]
             else:
-                attrs[key] = value
+                attrs[key] = val
         return self.netcdf_attrs(attrs)
 
 
-def _valid_mapping_parameter(name: str, value: Any) -> bool:
-    numeric = _primary_numeric_value(value)
-    if numeric is None:
+def _valid_param(name: str, value: Any) -> bool:
+    num = _primary_num(value)
+    if num is None:
         return True
-    if name in _LATITUDE_PARAMETERS and not -90.0 <= numeric <= 90.0:
-        warnings.warn(
-            f"{name} parameter must be between -90 and 90 degrees_north; "
-            "it will not be set.",
-            RuntimeWarning,
-            stacklevel=3,
-        )
+    if name in _LATITUDE_PARAMS and not -90.0 <= num <= 90.0:
+        warnings.warn(f"{name} parameter must be between -90 and 90 degrees_north; it will not be set.", RuntimeWarning, stacklevel=3)
         return False
-    if name in _LONGITUDE_PARAMETERS and not -180.0 <= numeric <= 180.0:
-        warnings.warn(
-            f"{name} parameter must be between -180 and 180 degrees_east; "
-            "it will not be set.",
-            RuntimeWarning,
-            stacklevel=3,
-        )
+    if name in _LONGITUDE_PARAMS and not -180.0 <= num <= 180.0:
+        warnings.warn(f"{name} parameter must be between -180 and 180 degrees_east; it will not be set.", RuntimeWarning, stacklevel=3)
         return False
-    if name in _NON_NEGATIVE_PARAMETERS and numeric < 0.0:
-        warnings.warn(
-            f"{name} parameter must be positive; it will not be set.",
-            RuntimeWarning,
-            stacklevel=3,
-        )
+    if name in _NONNEG_PARAMS and num < 0.0:
+        warnings.warn(f"{name} parameter must be positive; it will not be set.", RuntimeWarning, stacklevel=3)
         return False
     return True
 
 
-def _primary_numeric_value(value: Any) -> float | None:
+def _primary_num(value: Any) -> float | None:
     if isinstance(value, (list, tuple)) and value:
         value = value[0]
     try:

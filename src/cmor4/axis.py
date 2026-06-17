@@ -1,9 +1,12 @@
+"""Axis metadata record."""
 from __future__ import annotations
 
-from dataclasses import InitVar, dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 import numpy as np
+from pydantic import Field
+from typing import Annotated
+from pydantic import BeforeValidator
 
 from ._table_utils import (
     entry_bounds,
@@ -12,95 +15,133 @@ from ._table_utils import (
     metadata_value_matches,
     parse_table_value,
 )
-from .exceptions import TableValidationError
-from .metadata import _MetadataRecord
+from .exceptions import AxisValidationError, TableValidationError
+from .metadata import MetadataModel
+
+if TYPE_CHECKING:
+    from .tables import ProjectTables
 
 
-@dataclass(frozen=True)
-class Axis(_MetadataRecord):
+def _str_tuple(v: Any) -> tuple[str, ...] | None:
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return (v,)
+    return tuple(str(x) for x in v)
+
+
+def _str_seq(v: Any) -> list[str] | tuple[str, ...] | None:
+    """Preserve list-or-tuple of str."""
+    if v is None:
+        return None
+    if isinstance(v, list):
+        return [str(x) for x in v]
+    if isinstance(v, tuple):
+        return tuple(str(x) for x in v)
+    if isinstance(v, str):
+        return [v]
+    return [str(x) for x in v]
+
+
+def _float_or_none(v: Any) -> float | None:
+    if v is None or v == "":
+        return None
+    return float(v)
+
+
+def _upper_str(v: Any) -> Any:
+    """Upper-case the axis designator so 't'/'x'/'y'/'z' are accepted."""
+    if isinstance(v, str):
+        return v.upper()
+    return v
+
+
+StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
+StrSeq   = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
+CoercedF = Annotated[float | None,           BeforeValidator(_float_or_none)]
+# axis: upper-case but no Literal — invalid values caught by validate_against_entry
+AxisStr  = Annotated[str | None, BeforeValidator(_upper_str)]
+
+
+class Axis(MetadataModel):
     """Metadata and coordinate values for one data axis.
+
+    Construct directly when project tables are not available::
+
+        axis = Axis(name="latitude", values=np.linspace(-90, 90, 180),
+                    units="degrees_north", axis="Y")
+
+    Construct via :meth:`ProjectTables.axis` to merge authoritative
+    coordinate-table metadata::
+
+        axis = project.axis("latitude", values=np.linspace(-90, 90, 180))
 
     Parameters
     ----------
-    name
-        Logical axis name used by variable dimensions.
-    values
-        Coordinate values.
-    bounds
-        Optional coordinate bounds.
-    dimensions
+    name:
+        Logical axis name matching a variable dimension.
+    values:
+        Coordinate values (list, numpy array, scalar).
+    bounds:
+        Optional coordinate cell bounds.
+    dimensions:
         Underlying dimensions for auxiliary coordinates.
-    units
-        Coordinate units attribute.
-    standard_name
-        CF standard_name attribute.
-    long_name
-        Coordinate long_name attribute.
-    axis
-        CF axis attribute (X, Y, Z, or T).
-    positive
-        CF positive attribute for vertical coordinates (up or down).
-    formula
+    units:
+        CF units string.
+    standard_name, long_name:
+        CF / NetCDF attributes.
+    axis:
+        CF axis designator — ``"X"``, ``"Y"``, ``"Z"``, or ``"T"``.
+        Lower-case inputs are automatically upper-cased.
+    positive:
+        CF ``"up"`` or ``"down"`` for vertical axes.
+    formula:
         Formula for computing coordinate values.
-    valid_min
-        Minimum valid coordinate value.
-    valid_max
-        Maximum valid coordinate value.
-    out_name
+    valid_min, valid_max:
+        Valid coordinate value range.
+    out_name:
         Output coordinate variable name.
-    table_entry
-        Coordinate table entry name selector.
-    axis_entry
-        Coordinate table entry name selector.
-    coordinate
-        Coordinate table entry name selector.
-    grid_table_entry
-        Grid coordinate table entry name selector.
-    grid_coordinate
-        Grid coordinate table entry name selector.
-    scalar
-        Whether this axis is written as a scalar coordinate.
-    auxiliary
-        Whether this axis is written as an auxiliary coordinate.
-    auxiliary_name
+    table_entry, axis_entry, coordinate:
+        Coordinate-table entry name selectors, tried in order.
+    grid_table_entry, grid_coordinate:
+        Grid coordinate-table entry selectors.
+    scalar:
+        Write as a scalar coordinate.
+    auxiliary:
+        Write as an auxiliary coordinate.
+    auxiliary_name:
         Output name for the auxiliary coordinate variable.
-    auxiliary_attrs
-        Extra attributes for the auxiliary coordinate variable.
-    climatology
+    auxiliary_attrs:
+        Extra attributes for the auxiliary variable.
+    climatology:
         Climatology bounds control.
-    generic_level_name
-        Generic level selector from coordinate tables.
-    z_factors
-        Formula-term names associated with this axis.
-    z_bounds_factors
-        Formula-term names associated with this axis bounds.
-    bounds_name
-        Output bounds variable name.
-    bounds_dim
-        Output bounds dimension name.
-    bounds_attrs
+    generic_level_name:
+        Generic level selector.
+    z_factors, z_bounds_factors:
+        Formula-term names for this axis.
+    bounds_name, bounds_dim:
+        Output bounds variable name / dimension name.
+    bounds_attrs:
         Extra attributes for the bounds variable.
-    attrs
+    attrs:
         Extra attributes for the coordinate variable.
-    extra
-        Additional mapping keys preserved by the metadata record.
-    project
-        Optional project tables used to resolve and merge axis metadata during
-        construction.
+    stored_direction:
+        Expected ordering of coordinate values: ``"increasing"`` or
+        ``"decreasing"``.
     """
 
     name: str
     values: Any = None
     bounds: Any = None
-    dimensions: tuple[str, ...] | list[str] | None = None
+    dimensions: StrSeq = None
     units: str | None = None
     standard_name: str | None = None
     long_name: str | None = None
-    axis: str | None = None
-    positive: str | None = None
+    axis: AxisStr = None
+    positive: Literal["up", "down"] | None = None
     formula: str | None = None
-    valid_min: Any = None
-    valid_max: Any = None
+    valid_min: CoercedF = None
+    valid_max: CoercedF = None
     out_name: str | None = None
     table_entry: str | None = None
     axis_entry: str | None = None
@@ -110,7 +151,7 @@ class Axis(_MetadataRecord):
     scalar: bool | None = None
     auxiliary: bool | None = None
     auxiliary_name: str | None = None
-    auxiliary_attrs: Mapping[str, Any] = field(default_factory=dict)
+    auxiliary_attrs: dict[str, Any] = Field(default_factory=dict)
     climatology: str | bool | None = None
     generic_level_name: str | None = None
     z_factors: str | None = None
@@ -120,594 +161,291 @@ class Axis(_MetadataRecord):
     bounds_values: Any = None
     must_have_bounds: Any = None
     stored_direction: str | None = None
-    tolerance: Any = None
+    tolerance: CoercedF = None
     bounds_name: str | None = None
     bounds_dim: str | None = None
-    bounds_attrs: Mapping[str, Any] = field(default_factory=dict)
-    attrs: Mapping[str, Any] = field(default_factory=dict)
-    extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
-    project: InitVar[Any | None] = None
+    bounds_attrs: dict[str, Any] = Field(default_factory=dict)
+    attrs: dict[str, Any] = Field(default_factory=dict)
 
-    def __post_init__(self, project: Any | None) -> None:
-        if project is None:
-            return
-        merged = self._merge_table_entry(project)
-        merged._validate_values_early()
-        for key, value in merged.to_dict().items():
-            object.__setattr__(self, key, value)
+    # ------------------------------------------------------------------
+    # Project-table construction
+    # ------------------------------------------------------------------
 
-    def _merge_table_entry(self, project: Any) -> "Axis":
-        """Merge authoritative coordinate metadata into this axis.
+    @classmethod
+    def from_project(cls, project: ProjectTables, name: str, **values: Any) -> Axis:
+        """Create an Axis by merging authoritative coordinate-table metadata.
 
-        Parameters
-        ----------
-        project
-            Project table loader containing coordinate and grid entries.
-
-        Returns
-        -------
-        Axis
-            New axis metadata record with table defaults applied.
+        Also runs :meth:`_validate_values_early` on the result.
+        Called by :meth:`ProjectTables.axis`.
         """
+        data: dict[str, Any] = {"name": name, **values}
+        data = cls._apply_table_defaults(data, project)
+        axis = cls.model_validate(data)
+        axis._validate_values_early()
+        return axis
 
-        merged = self.to_dict()
+    @classmethod
+    def _apply_table_defaults(
+        cls, data: dict[str, Any], project: ProjectTables
+    ) -> dict[str, Any]:
+        """Resolve coordinate-table entry and merge its defaults into *data*."""
+        # Grid coordinates take a separate path (no main coordinate table)
+        if data.get("grid_coordinate") or data.get("grid_table_entry"):
+            entry_name, entry = cls._resolve_grid_entry(data, project)
+            if entry is not None:
+                cls._merge_grid_entry(data, entry_name, entry, project)
+            return data
 
-        # For grid coordinates (auxiliary lat/lon with explicit grid_coordinate
-        # or grid_table_entry), skip coordinate table and use ONLY grid table
-        if self.grid_coordinate or self.grid_table_entry:
-            grid_entry_name, grid_entry = self.resolve_grid_coordinate(project)
-            if grid_entry is not None:
-                temp_axis = Axis.from_mapping(merged)
-                temp_axis._merge_grid_coordinate_metadata(project, merged)
-                return Axis.from_mapping(merged)
-
-        # For regular coordinates, use coordinate table
-        entry_name, entry = self.resolve_table_entry(project)
+        entry_name, entry = cls._resolve_coord_entry(data, project)
         if entry is None:
-            return Axis.from_mapping(merged)
-        merged.setdefault("table_entry", entry_name)
-        self._validate_metadata(
-            "axis",
-            entry_name,
-            entry,
-            (
-                "units",
-                "standard_name",
-                "long_name",
-                "axis",
-                "positive",
-                "formula",
-            ),
+            return data
+
+        data.setdefault("table_entry", entry_name)
+        cls._validate_metadata(
+            data, entry_name, entry,
+            ("units", "standard_name", "long_name", "axis", "positive", "formula"),
         )
         for key in (
-            "out_name",
-            "units",
-            "standard_name",
-            "long_name",
-            "axis",
-            "positive",
-            "formula",
-            "climatology",
-            "generic_level_name",
-            "z_factors",
-            "z_bounds_factors",
-            "valid_min",
-            "valid_max",
-            "requested",
-            "requested_bounds",
-            "bounds_values",
-            "must_have_bounds",
-            "stored_direction",
-            "tolerance",
+            "out_name", "units", "standard_name", "long_name", "axis", "positive",
+            "formula", "climatology", "generic_level_name", "z_factors",
+            "z_bounds_factors", "valid_min", "valid_max", "requested",
+            "requested_bounds", "bounds_values", "must_have_bounds",
+            "stored_direction", "tolerance",
         ):
-            value = entry.get(key)
-            if is_table_value(value):
-                merged.setdefault(key, parse_table_value(value))
-        merged.setdefault("out_name", entry_name)
-        if "values" not in merged:
-            values = entry_values(entry)
-            if values is not None:
-                merged["values"] = values
-        if "bounds" not in merged:
-            bounds = entry_bounds(entry)
-            if bounds is not None:
-                merged["bounds"] = bounds
-        Axis.from_mapping(merged)._merge_grid_coordinate_metadata(project, merged)
-        return Axis.from_mapping(merged)
+            val = entry.get(key)
+            if is_table_value(val):
+                data.setdefault(key, parse_table_value(val))
+        data.setdefault("out_name", entry_name)
+        if "values" not in data:
+            v = entry_values(entry)
+            if v is not None:
+                data["values"] = v
+        if "bounds" not in data:
+            b = entry_bounds(entry)
+            if b is not None:
+                data["bounds"] = b
+        # Also pull in any matching grid coordinate
+        cls._merge_grid_entry_from_data(data, project)
+        return data
 
-    def resolve_table_entry(
-        self, project: Any
+    # -- coordinate-table resolution ------------------------------------
+
+    @classmethod
+    def _resolve_coord_entry(
+        cls, data: dict[str, Any], project: ProjectTables
     ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve a coordinate table entry from this axis.
-
-        This method searches the project's coordinate tables for an entry
-        matching this axis. It tries multiple strategies in order: exact name
-        match, generic level name disambiguation, out_name match, and finally
-        matching by out_name and standard_name combination.
-
-        Parameters
-        ----------
-        project
-            Project table loader containing coordinate and grid axis entries
-            from loaded coordinate and grid tables.
-
-        Returns
-        -------
-        tuple[str | None, Mapping[str, Any] | None]
-            A tuple containing:
-
-            - entry_name (str or None): The matched coordinate table entry name
-            - entry (dict or None): The table entry metadata dictionary
-
-            Returns ``(None, None)`` if no matching entry is found.
-
-        Raises
-        ------
-        TableValidationError
-            If a generic level name matches multiple entries without
-            disambiguation via table_entry or axis_entry.
-
-        Notes
-        -----
-        Resolution strategy:
-
-        1. Direct match by table_entry, axis_entry, coordinate, or name
-        2. Generic level name match (e.g., "alevel", "olevel"), narrowed by
-           standard_name, formula, z_factors, etc. if multiple matches exist
-        3. Match by out_name in coordinate entries
-        4. Match by out_name and standard_name combination
-
-        Examples
-        --------
-        Resolve standard coordinate::
-
-            axis = Axis(name="time", values=[...])
-            entry_name, entry = axis.resolve_table_entry(project)
-            # Returns ("time", {...}) from coordinate table
-
-        Resolve generic level::
-
-            axis = Axis(name="alevel", standard_name="altitude")
-            entry_name, entry = axis.resolve_table_entry(project)
-            # Returns specific altitude entry matching standard_name
-
-        Disambiguate with table_entry::
-
-            axis = Axis(name="plev", table_entry="plev19")
-            entry_name, entry = axis.resolve_table_entry(project)
-            # Returns ("plev19", {...}) specifically
-        """
-
         requested = str(
-            self.table_entry or self.axis_entry or self.coordinate or self.name or ""
+            data.get("table_entry") or data.get("axis_entry") or
+            data.get("coordinate")  or data.get("name") or ""
         )
-        if requested in project.coordinate_entries:
-            return requested, project.coordinate_entries[requested]
-        generic_matches = self._matching_generic_level_entries(project, requested)
-        if len(generic_matches) == 1:
-            return generic_matches[0]
-        if len(generic_matches) > 1:
-            choices = ", ".join(name for name, _ in generic_matches)
+        coord: dict[str, Mapping[str, Any]] = project.coordinate_entries
+        if requested in coord:
+            return requested, coord[requested]
+        # generic level
+        generic = cls._generic_level_matches(data, project, requested)
+        if len(generic) == 1:
+            return generic[0]
+        if len(generic) > 1:
+            choices = ", ".join(n for n, _ in generic)
             raise TableValidationError(
-                f"Generic level {requested!r} matches multiple coordinate "
-                "entries; specify table_entry or axis_entry. "
-                f"Choices: {choices}."
+                f"Generic level {requested!r} matches multiple coordinate entries; "
+                f"specify table_entry or axis_entry.  Choices: {choices}."
             )
-        matching_out_names = [
-            (name, entry)
-            for name, entry in project.coordinate_entries.items()
-            if str(entry.get("out_name", "")) == requested
-        ]
-        if len(matching_out_names) == 1:
-            return matching_out_names[0]
-        matches = self._matching_coordinate_entries(project)
-        if len(matches) == 1:
-            return matches[0]
+        # out_name match
+        by_out = [(n, e) for n, e in coord.items() if str(e.get("out_name", "")) == requested]
+        if len(by_out) == 1:
+            return by_out[0]
+        # out_name + standard_name match
+        m = cls._match_by_attrs(data, project)
+        if len(m) == 1:
+            return m[0]
         return None, None
 
-    def resolve_grid_coordinate(
-        self, project: Any
+    @classmethod
+    def _resolve_grid_entry(
+        cls, data: dict[str, Any], project: ProjectTables
     ) -> tuple[str | None, Mapping[str, Any] | None]:
-        """Resolve a grid-coordinate variable entry from this axis.
-
-        Grid coordinates are auxiliary coordinate variables defined in the
-        project's grid table, typically representing latitude and longitude
-        on non-rectilinear grids (e.g., curvilinear ocean grids). This method
-        searches for a matching grid coordinate entry by name or out_name.
-
-        Parameters
-        ----------
-        project
-            Project table loader containing grid coordinate entries from the
-            loaded grids table.
-
-        Returns
-        -------
-        tuple[str | None, Mapping[str, Any] | None]
-            A tuple containing:
-
-            - entry_name (str or None): Matched grid coordinate entry name
-            - entry (dict or None): Grid coordinate entry metadata
-
-            Returns ``(None, None)`` if no matching entry is found.
-
-        Notes
-        -----
-        Grid coordinates differ from regular axis coordinates in that they are
-        typically 2D auxiliary coordinates (e.g., ``lat(j,i)``, ``lon(j,i)``)
-        rather than 1D dimension coordinates.
-
-        Examples
-        --------
-        Resolve grid coordinate for curvilinear grid::
-
-            axis = Axis(name="latitude", dimensions=("j", "i"), values=lat_2d)
-            entry_name, entry = axis.resolve_grid_coordinate(project)
-            # Returns ("latitude", {...}) from grid coordinate table
-
-        Explicit grid coordinate selection::
-
-            axis = Axis(name="lat", grid_coordinate="latitude_bnds")
-            entry_name, entry = axis.resolve_grid_coordinate(project)
-            # Returns ("latitude_bnds", {...}) specifically
-        """
-
         requested = str(
-            self.grid_table_entry
-            or self.grid_coordinate
-            or self.out_name
-            or self.name
-            or ""
+            data.get("grid_table_entry") or data.get("grid_coordinate") or
+            data.get("out_name") or data.get("name") or ""
         )
-        if requested in project.grid_coordinate_entries:
-            return requested, project.grid_coordinate_entries[requested]
-        matches = [
-            (name, entry)
-            for name, entry in project.grid_coordinate_entries.items()
-            if str(entry.get("out_name", "")) == requested
-        ]
-        if len(matches) == 1:
-            return matches[0]
+        gc: dict[str, Mapping[str, Any]] = project.grid_coordinate_entries
+        if requested in gc:
+            return requested, gc[requested]
+        m = [(n, e) for n, e in gc.items() if str(e.get("out_name", "")) == requested]
+        if len(m) == 1:
+            return m[0]
         return None, None
 
-    def attributes(self, *, include_units: bool = True) -> dict[str, Any]:
-        """Return NetCDF attributes for this coordinate axis.
+    @classmethod
+    def _merge_grid_entry(
+        cls,
+        data: dict[str, Any],
+        entry_name: str | None,
+        entry: Mapping[str, Any],
+        project: ProjectTables,
+    ) -> None:
+        if entry_name:
+            data.setdefault("grid_table_entry", entry_name)
+        for key in ("out_name", "units", "standard_name", "long_name", "valid_min", "valid_max"):
+            val = entry.get(key)
+            if is_table_value(val):
+                data.setdefault(key, parse_table_value(val))
+        data.setdefault("out_name", entry_name)
+        bname = data.get("bounds_name")
+        if bname:
+            be = project.grid_coordinate_entries.get(str(bname))
+            if be:
+                ba = dict(data.get("bounds_attrs") or {})
+                for key in ("units", "standard_name", "long_name"):
+                    val = be.get(key)
+                    if is_table_value(val):
+                        ba.setdefault(key, parse_table_value(val))
+                if ba:
+                    data["bounds_attrs"] = ba
 
-        This method constructs the complete set of NetCDF attributes for the
-        coordinate variable, including CF-required and optional metadata.
+    @classmethod
+    def _merge_grid_entry_from_data(
+        cls, data: dict[str, Any], project: ProjectTables
+    ) -> None:
+        en, entry = cls._resolve_grid_entry(data, project)
+        if entry is not None:
+            cls._merge_grid_entry(data, en, entry, project)
 
-        Parameters
-        ----------
-        include_units
-            Whether to include the ``units`` attribute. Set to False when
-            creating index-based auxiliary coordinates that should not have
-            units (e.g., basin indices).
-
-        Returns
-        -------
-        dict[str, Any]
-            NetCDF-safe coordinate attributes suitable for assignment to an
-            xarray coordinate or NetCDF variable. Always includes attributes
-            like standard_name, long_name, axis, positive, formula, valid_min,
-            and valid_max when they are defined in the axis metadata.
-
-        Notes
-        -----
-        The units attribute is included by default but can be excluded for
-        special coordinate types. Other attributes from the ``attrs`` field
-        are merged first, allowing standard attributes to override them.
-
-        Examples
-        --------
-        Get attributes for a time axis::
-
-            axis = project.axis("time", values=[...])
-            attrs = axis.attributes()
-            # attrs = {
-            #     "units": "days since 1850-01-01",
-            #     "standard_name": "time",
-            #     "calendar": "noleap",
-            #     ...
-            # }
-
-        Get attributes without units for index coordinate::
-
-            axis = Axis(
-                name="basin",
-                values=[1, 2, 3],
-                auxiliary_name="basin_label"
-            )
-            attrs = axis.attributes(include_units=False)
-            # attrs does not include "units"
-        """
-
-        attrs = self.netcdf_attrs(self.attrs)
-        if include_units and "units" in self:
-            attrs["units"] = self["units"]
-        for key in (
-            "standard_name",
-            "long_name",
-            "axis",
-            "positive",
-            "formula",
-        ):
-            if key in self:
-                attrs[key] = self[key]
-        return attrs
-
-    def auxiliary_attributes(self) -> dict[str, Any]:
-        """Return NetCDF attributes for this axis' auxiliary variable.
-
-        Auxiliary coordinates are variables that provide alternate or
-        supplementary coordinate information, such as string labels for
-        integer indices (e.g., basin names for basin indices).
-
-        Returns
-        -------
-        dict[str, Any]
-            NetCDF-safe attributes for the auxiliary coordinate variable,
-            filtered to include only values compatible with NetCDF format.
-
-        Examples
-        --------
-        Create axis with auxiliary coordinate for basin labels::
-
-            axis = Axis(
-                name="basin",
-                values=[1, 2, 3],
-                auxiliary_name="basin_label",
-                auxiliary_attrs={
-                    "long_name": "Basin Name",
-                    "comment": "Integer basin indices"
-                }
-            )
-            attrs = axis.auxiliary_attributes()
-            # attrs = {"long_name": "Basin Name", "comment": "..."}
-        """
-
-        return self.netcdf_attrs(self.auxiliary_attrs)
-
-    def bounds_attributes(self) -> dict[str, Any]:
-        """Return NetCDF attributes for this axis' bounds variable.
-
-        Bounds variables define the edges or limits of coordinate cells and
-        are required for certain types of coordinates (especially time and
-        spatial coordinates used in integration or averaging).
-
-        Returns
-        -------
-        dict[str, Any]
-            NetCDF-safe attributes for the bounds variable, filtered to
-            include only values compatible with NetCDF format. May include
-            units, standard_name, and long_name from the bounds_attrs field
-            or grid coordinate bounds entries.
-
-        Examples
-        --------
-        Get bounds attributes from coordinate table::
-
-            axis = project.axis(
-                "time",
-                values=[0, 30, 60],
-                bounds=[[0, 30], [30, 60], [60, 90]]
-            )
-            attrs = axis.bounds_attributes()
-            # attrs may include units, long_name from table
-
-        Custom bounds attributes::
-
-            axis = Axis(
-                name="lat",
-                values=[-45, 0, 45],
-                bounds=[[-90, -22.5], [-22.5, 22.5], [22.5, 90]],
-                bounds_attrs={"comment": "Cell boundaries"}
-            )
-            attrs = axis.bounds_attributes()
-            # attrs = {"comment": "Cell boundaries"}
-        """
-
-        return self.netcdf_attrs(self.bounds_attrs)
-
-    def values_array(self) -> np.ndarray:
-        """Return this axis' values as a NetCDF-ready array.
-
-        This method converts the axis values to a numpy array with a dtype
-        suitable for NetCDF output, handling various input types including
-        lists, tuples, numpy arrays, xarray DataArrays, and datetime objects.
-
-        Returns
-        -------
-        numpy.ndarray
-            Coordinate values as a numpy array with appropriate dtype for
-            NetCDF serialization. Time coordinates are converted to numeric
-            values, and other types are converted to their NetCDF-compatible
-            representations.
-
-        Examples
-        --------
-        Convert time values::
-
-            axis = Axis(
-                name="time",
-                values=[datetime(2000, 1, 1), datetime(2000, 2, 1)],
-                units="days since 1850-01-01"
-            )
-            arr = axis.values_array()
-            # Returns numeric array relative to reference date
-
-        Convert latitude values::
-
-            axis = Axis(name="lat", values=[-90, -45, 0, 45, 90])
-            arr = axis.values_array()
-            # Returns np.array([-90., -45., 0., 45., 90.])
-        """
-
-        return self.netcdf_array(self.get("values", []))
-
-    def bounds_array(self) -> np.ndarray:
-        """Return this axis' bounds as a NetCDF-ready array.
-
-        This method converts the axis bounds to a numpy array with shape
-        (n_values, 2) or (n_values, n_bounds) for climatology, and with a
-        dtype suitable for NetCDF output.
-
-        Returns
-        -------
-        numpy.ndarray
-            Coordinate bounds as a numpy array with shape matching the number
-            of coordinate values. Standard bounds have shape (n, 2) where each
-            row contains [lower_bound, upper_bound] for the corresponding
-            coordinate cell. Climatology bounds may have additional vertices.
-
-        Raises
-        ------
-        KeyError
-            If the axis does not have bounds defined.
-
-        Examples
-        --------
-        Get bounds for latitude cells::
-
-            axis = Axis(
-                name="lat",
-                values=[-45, 0, 45],
-                bounds=[[-90, -22.5], [-22.5, 22.5], [22.5, 90]]
-            )
-            bnds = axis.bounds_array()
-            # Returns array([[-90., -22.5], [-22.5, 22.5], [22.5, 90.]])
-
-        Get bounds for time coordinate::
-
-            axis = Axis(
-                name="time",
-                values=[15, 45],
-                bounds=[[0, 31], [31, 59]],
-                units="days since 2000-01-01"
-            )
-            bnds = axis.bounds_array()
-            # Returns array([[0, 31], [31, 59]])
-        """
-
-        return self.netcdf_array(self["bounds"])
-
-    def _matching_coordinate_entries(
-        self, project: Any
+    @classmethod
+    def _generic_level_matches(
+        cls, data: dict[str, Any], project: ProjectTables, generic_name: str
     ) -> list[tuple[str, Mapping[str, Any]]]:
-        if not self.out_name and not self.standard_name:
-            return []
-        matches = list(project.coordinate_entries.items())
-        for key, value in (
-            ("out_name", self.out_name),
-            ("standard_name", self.standard_name),
-        ):
-            if value in (None, ""):
-                continue
-            narrowed = [
-                (name, entry)
-                for name, entry in matches
-                if str(entry.get(key, "")) == str(value)
-            ]
-            if narrowed:
-                matches = narrowed
-        return matches if len(matches) == 1 else []
-
-    def _matching_generic_level_entries(
-        self,
-        project: Any,
-        generic_level_name: str,
-    ) -> list[tuple[str, Mapping[str, Any]]]:
-        generic_entries = getattr(project, "generic_level_entries", {})
-        matches = list(generic_entries.get(generic_level_name, {}).items())
+        generic: dict[str, dict[str, Mapping[str, Any]]] = getattr(
+            project, "generic_level_entries", {}
+        )
+        matches = list(generic.get(generic_name, {}).items())
         if not matches:
             return []
-        for key, value in (
-            ("standard_name", self.standard_name),
-            ("formula", self.formula),
-            ("z_factors", self.z_factors),
-            ("z_bounds_factors", self.z_bounds_factors),
-            ("positive", self.positive),
-            ("units", self.units),
-            ("long_name", self.long_name),
-        ):
-            if value in (None, ""):
+        for key in ("standard_name", "formula", "z_factors", "z_bounds_factors",
+                    "positive", "units", "long_name"):
+            val = data.get(key)
+            if val in (None, ""):
                 continue
             narrowed = [
-                (name, entry)
-                for name, entry in matches
-                if is_table_value(entry.get(key))
-                and metadata_value_matches(value, entry[key])
+                (n, e) for n, e in matches
+                if is_table_value(e.get(key)) and metadata_value_matches(val, e[key])
             ]
             if narrowed:
                 matches = narrowed
         return matches
 
-    def _merge_grid_coordinate_metadata(
-        self, project: Any, axis: dict[str, Any]
-    ) -> None:
-        entry_name, entry = self.resolve_grid_coordinate(project)
-        if entry is None:
-            return
-        axis.setdefault("grid_table_entry", entry_name)
-        for key in (
-            "out_name",
-            "units",
-            "standard_name",
-            "long_name",
-            "valid_min",
-            "valid_max",
-        ):
-            value = entry.get(key)
-            if is_table_value(value):
-                axis.setdefault(key, parse_table_value(value))
-        # Ensure out_name defaults to entry name if not in table
-        axis.setdefault("out_name", entry_name)
-        bounds_name = axis.get("bounds_name")
-        if bounds_name:
-            bounds_entry = project.grid_coordinate_entries.get(str(bounds_name))
-            if bounds_entry:
-                bounds_attrs = dict(axis.get("bounds_attrs", {}))
-                for key in ("units", "standard_name", "long_name"):
-                    value = bounds_entry.get(key)
-                    if is_table_value(value):
-                        bounds_attrs.setdefault(key, parse_table_value(value))
-                if bounds_attrs:
-                    axis["bounds_attrs"] = bounds_attrs
+    @classmethod
+    def _match_by_attrs(
+        cls, data: dict[str, Any], project: ProjectTables
+    ) -> list[tuple[str, Mapping[str, Any]]]:
+        out_name = data.get("out_name")
+        std_name = data.get("standard_name")
+        if not out_name and not std_name:
+            return []
+        matches = list(project.coordinate_entries.items())
+        for key, val in (("out_name", out_name), ("standard_name", std_name)):
+            if val in (None, ""):
+                continue
+            narrowed = [(n, e) for n, e in matches if str(e.get(key, "")) == str(val)]
+            if narrowed:
+                matches = narrowed
+        return matches if len(matches) == 1 else []
 
+    @classmethod
     def _validate_metadata(
+        cls,
+        data: dict[str, Any],
+        entry_name: str | None,
+        table_values: Mapping[str, Any],
+        keys: Sequence[str],
+    ) -> None:
+        """Raise TableValidationError if user values conflict with the table."""
+        for key in keys:
+            expected = table_values.get(key)
+            user_val = data.get(key)
+            if (
+                is_table_value(expected)
+                and user_val not in (None, "")
+                and not metadata_value_matches(user_val, expected)
+            ):
+                raise TableValidationError(
+                    f"axis {entry_name!r} {key}={user_val!r} "
+                    f"does not match table value {expected!r}."
+                )
+
+    # ------------------------------------------------------------------
+    # Instance methods for post-construction validation (called by tables.py)
+    # ------------------------------------------------------------------
+
+    def _validate_metadata_instance(
         self,
         entry_type: str,
         entry_name: str | None,
         table_values: Mapping[str, Any],
         keys: Sequence[str],
     ) -> None:
-        user_values = self.to_dict()
-        for key in keys:
-            expected = table_values.get(key)
-            if (
-                is_table_value(expected)
-                and key in user_values
-                and not metadata_value_matches(user_values[key], expected)
-            ):
-                raise TableValidationError(
-                    f"{entry_type} {entry_name!r} {key}={user_values[key]!r} "
-                    f"does not match table value {expected!r}."
-                )
+        """Instance-method shim — validates self against a table entry.
+
+        Called by :meth:`ProjectTables.validate_components` for unprepared axes.
+        """
+        self._validate_metadata(self.to_dict(), entry_name, table_values, keys)
+
+    def _merge_table_entry(self, project: Any) -> Axis:
+        """Return a new Axis with project-table defaults merged in.
+
+        Called by :meth:`ProjectTables._axes` for unprepared axes.
+        """
+        merged = self._apply_table_defaults(self.to_dict(), project)
+        return type(self).model_validate(merged)
 
     def _validate_values_early(self) -> None:
-        """Run component-level axis checks that do not need dataset context.
-
-        This is partial validation performed during construction. It checks:
-        - Monotonicity
-        - Valid ranges
-        - Requested values
-        - Bounds shape and consistency
-
-        It skips:
-        - Time interval validation (needs frequency from dataset/variable)
-        - Required bounds enforcement (checked during full validation)
-        - Value normalization (done during full validation)
-        """
-
+        """Run lightweight value checks that don't need dataset context."""
         from ._axis_validation import validate_axis_values_early
-
         validate_axis_values_early(self)
+
+    def _post_project_init(self) -> None:
+        """Run lightweight axis-value checks after construction with project=."""
+        self._validate_values_early()
+
+        # ------------------------------------------------------------------
+    # Public API (existing interface preserved)
+    # ------------------------------------------------------------------
+
+    def resolve_table_entry(
+        self, project: ProjectTables
+    ) -> tuple[str | None, Mapping[str, Any] | None]:
+        """Resolve the coordinate table entry for this axis."""
+        return self._resolve_coord_entry(self.to_dict(), project)
+
+    def resolve_grid_coordinate(
+        self, project: ProjectTables
+    ) -> tuple[str | None, Mapping[str, Any] | None]:
+        """Resolve the grid coordinate table entry for this axis."""
+        return self._resolve_grid_entry(self.to_dict(), project)
+
+    def attributes(self, *, include_units: bool = True) -> dict[str, Any]:
+        """Return NetCDF attributes for this coordinate variable."""
+        attrs = self.netcdf_attrs(self.attrs)
+        if include_units and "units" in self:
+            attrs["units"] = self["units"]
+        for key in ("standard_name", "long_name", "axis", "positive", "formula"):
+            if key in self:
+                attrs[key] = self[key]
+        return attrs
+
+    def auxiliary_attributes(self) -> dict[str, Any]:
+        """Return NetCDF attributes for the auxiliary coordinate variable."""
+        return self.netcdf_attrs(self.auxiliary_attrs)
+
+    def bounds_attributes(self) -> dict[str, Any]:
+        """Return NetCDF attributes for the bounds variable."""
+        return self.netcdf_attrs(self.bounds_attrs)
+
+    def values_array(self) -> np.ndarray:
+        """Return coordinate values as a NetCDF-ready numpy array."""
+        return self.netcdf_array(self.get("values", []))
+
+    def bounds_array(self) -> np.ndarray:
+        """Return coordinate bounds as a NetCDF-ready numpy array."""
+        return self.netcdf_array(self["bounds"])

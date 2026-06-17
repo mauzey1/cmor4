@@ -10,6 +10,8 @@ import numpy as np
 
 from ._time_utils import cftime_interval_days
 from .axis import Axis
+from .dataset import DatasetInfo
+from .variable import Variable
 from .exceptions import AxisValidationError
 
 DEFAULT_INTERVAL_WARNING = 0.1
@@ -36,8 +38,8 @@ class _IntervalSpec:
 
 
 def validate_and_normalize_axes(
-    dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
+    dataset: DatasetInfo,
+    variable: Variable,
     axes: Sequence[Axis],
 ) -> tuple[Axis, ...]:
     """Return axes after CMOR-style coordinate validation."""
@@ -46,7 +48,7 @@ def validate_and_normalize_axes(
 
 
 def validate_axes(
-    dataset: Mapping[str, Any], variable: Mapping[str, Any], axes: Sequence[Axis]
+    dataset: DatasetInfo, variable: Variable, axes: Sequence[Axis]
 ) -> None:
     """Validate axis values with dataset and frequency-dependent checks."""
 
@@ -505,7 +507,7 @@ _MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset(
 )
 
 
-def _validate_calendar(dataset: Mapping[str, Any]) -> None:
+def _validate_calendar(dataset: DatasetInfo) -> None:
     """Validate the calendar declared in the dataset metadata.
 
     Uses ``cftime`` (a required dependency) to distinguish three cases:
