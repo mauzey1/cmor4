@@ -1,4 +1,5 @@
 """Variable metadata record."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Field-level coercions
 # ---------------------------------------------------------------------------
+
 
 def _str_tuple(v: Any) -> tuple[str, ...] | None:
     if v is None:
@@ -70,16 +72,17 @@ def _float_or_none(v: Any) -> float | None:
     return float(v)
 
 
-StrTuple   = Annotated[tuple[str, ...] | None,         BeforeValidator(_str_tuple)]
-StrSeq    = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
-IntTuple   = Annotated[tuple[int, ...] | None,         BeforeValidator(_int_tuple)]
-StrOrTuple = Annotated[str | tuple[str, ...] | None,   BeforeValidator(_str_or_tuple)]
-CoercedF   = Annotated[float | None,                   BeforeValidator(_float_or_none)]
+StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
+StrSeq = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
+IntTuple = Annotated[tuple[int, ...] | None, BeforeValidator(_int_tuple)]
+StrOrTuple = Annotated[str | tuple[str, ...] | None, BeforeValidator(_str_or_tuple)]
+CoercedF = Annotated[float | None, BeforeValidator(_float_or_none)]
 
 
 # ---------------------------------------------------------------------------
 # VariableEntry — lightweight result of a table lookup
 # ---------------------------------------------------------------------------
+
 
 class VariableEntry:
     """Resolved variable table entry.
@@ -118,6 +121,7 @@ class VariableEntry:
 # ---------------------------------------------------------------------------
 # Variable
 # ---------------------------------------------------------------------------
+
 
 class Variable(MetadataModel):
     """Metadata for the data variable being written.
@@ -232,7 +236,9 @@ class Variable(MetadataModel):
         requested = str(
             data.get("name") or data.get("variable_id") or data.get("id") or ""
         )
-        entries_by_name: dict[str, list[VariableEntry]] = project._variable_entries_by_name
+        entries_by_name: dict[str, list[VariableEntry]] = (
+            project._variable_entries_by_name
+        )
         table_id = data.get("table_id")
 
         if requested in entries_by_name:
@@ -254,7 +260,8 @@ class Variable(MetadataModel):
 
         # Fall back to out_name matching
         matches = [
-            e for e in project.variable_entries.values()
+            e
+            for e in project.variable_entries.values()
             if str(e.entry.get("out_name", e.name)) == requested
         ]
         if len(matches) == 1:
@@ -269,9 +276,7 @@ class Variable(MetadataModel):
         )
 
     @classmethod
-    def _merge_entry(
-        cls, data: dict[str, Any], entry: VariableEntry
-    ) -> dict[str, Any]:
+    def _merge_entry(cls, data: dict[str, Any], entry: VariableEntry) -> dict[str, Any]:
         """Merge *entry* defaults into *data* (modifies and returns *data*)."""
         e = entry.entry
         data.setdefault("name", entry.name)
@@ -292,8 +297,15 @@ class Variable(MetadataModel):
             if is_table_value(value):
                 data.setdefault(key, parse_table_value(value))
         for key in (
-            "units", "standard_name", "long_name", "cell_methods",
-            "cell_measures", "comment", "positive", "flag_values", "flag_meanings",
+            "units",
+            "standard_name",
+            "long_name",
+            "cell_methods",
+            "cell_measures",
+            "comment",
+            "positive",
+            "flag_values",
+            "flag_meanings",
         ):
             if e.get(key) not in (None, ""):
                 data[key] = e[key]
@@ -322,7 +334,9 @@ class Variable(MetadataModel):
         and ``"area_label"``.
         """
         branded = str(self.get("name") or self.get("id") or self.get("variable_id"))
-        var_id  = str(self.get("id") or self.get("variable_id") or branded.split("_", 1)[0])
+        var_id = str(
+            self.get("id") or self.get("variable_id") or branded.split("_", 1)[0]
+        )
         labels: dict[str, str] = {"branded_name": branded, "variable_id": var_id}
         if "_" in branded:
             suffix = branded.split("_", 1)[1]
@@ -338,15 +352,25 @@ class Variable(MetadataModel):
         """Return NetCDF attributes for this data variable."""
         attrs = self.netcdf_attrs(self.attrs)
         for key in (
-            "units", "standard_name", "long_name", "cell_methods",
-            "cell_measures", "comment", "positive", "flag_values", "flag_meanings",
+            "units",
+            "standard_name",
+            "long_name",
+            "cell_methods",
+            "cell_measures",
+            "comment",
+            "positive",
+            "flag_values",
+            "flag_meanings",
         ):
             if key in self:
                 attrs[key] = self[key]
         attrs.setdefault("branded_variable_name", labels["branded_name"])
         for key in (
-            "branding_suffix", "temporal_label", "vertical_label",
-            "horizontal_label", "area_label",
+            "branding_suffix",
+            "temporal_label",
+            "vertical_label",
+            "horizontal_label",
+            "area_label",
         ):
             if key in labels:
                 attrs.setdefault(key, labels[key])
@@ -376,7 +400,7 @@ class Variable(MetadataModel):
             )
         # Units
         table_units = e.get("units")
-        user_units  = values.get("units")
+        user_units = values.get("units")
         if (
             is_table_value(table_units)
             and str(table_units) != "?"
@@ -388,7 +412,13 @@ class Variable(MetadataModel):
                 f"units={user_units!r} does not match {entry.table_id}:{entry.name} "
                 f"value {table_units!r} and the two are not dimensionally convertible."
             )
-        for key in ("standard_name", "long_name", "cell_methods", "cell_measures", "comment"):
+        for key in (
+            "standard_name",
+            "long_name",
+            "cell_methods",
+            "cell_measures",
+            "comment",
+        ):
             expected = e.get(key)
             if (
                 expected not in (None, "")
@@ -401,18 +431,25 @@ class Variable(MetadataModel):
                 )
         required = set(str(e.get("required", "")).split())
         table_pos = e.get("positive")
-        user_pos  = values.get("positive")
+        user_pos = values.get("positive")
         if user_pos not in (None, ""):
             if str(user_pos).lower() not in {"up", "down"}:
                 raise TableValidationError(
                     f"positive={user_pos!r} is not valid; allowed values are 'up' and 'down'."
                 )
-            if is_table_value(table_pos) and str(user_pos).lower() != str(table_pos).lower():
+            if (
+                is_table_value(table_pos)
+                and str(user_pos).lower() != str(table_pos).lower()
+            ):
                 raise TableValidationError(
                     f"positive={user_pos!r} does not match "
                     f"{entry.table_id}:{entry.name} value {table_pos!r}."
                 )
-        if "positive" in required and is_table_value(table_pos) and user_pos in (None, ""):
+        if (
+            "positive" in required
+            and is_table_value(table_pos)
+            and user_pos in (None, "")
+        ):
             raise TableValidationError(
                 f"variable {entry.table_id}:{entry.name} requires 'positive' "
                 f"(expected {table_pos!r})."
@@ -429,12 +466,13 @@ class Variable(MetadataModel):
         hfv, hfm = is_table_value(tfv), is_table_value(tfm)
         if hfv != hfm:
             missing = "flag_meanings" if hfv else "flag_values"
-            present = "flag_values"   if hfv else "flag_meanings"
+            present = "flag_values" if hfv else "flag_meanings"
             raise TableValidationError(
                 f"{entry.table_id}:{entry.name} has {present!r} but missing {missing!r}."
             )
         if hfv and hfm:
-            nv = len(str(tfv).split()); nm = len(str(tfm).split())
+            nv = len(str(tfv).split())
+            nm = len(str(tfm).split())
             if nv != nm:
                 raise TableValidationError(
                     f"{entry.table_id}:{entry.name} flag_values has {nv} token(s) "
@@ -442,8 +480,8 @@ class Variable(MetadataModel):
                 )
         for key, expected in {
             "frequency": e.get("frequency"),
-            "realm":     e.get("modeling_realm"),
-            "table_id":  entry.table_id,
+            "realm": e.get("modeling_realm"),
+            "table_id": entry.table_id,
         }.items():
             if (
                 expected not in (None, "")

@@ -1,4 +1,5 @@
 """DatasetInfo — dataset-level metadata record."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
@@ -10,14 +11,16 @@ from pydantic import BaseModel, ConfigDict, Field
 from .metadata import MetadataModel
 
 # Keys that must not appear in NetCDF global attributes
-INTERNAL_DATASET_KEYS: frozenset[str] = frozenset({
-    "_history_template",
-    "create_subdirectories",
-    "outpath",
-    "output_file_template",
-    "output_path_template",
-    "tracking_prefix",
-})
+INTERNAL_DATASET_KEYS: frozenset[str] = frozenset(
+    {
+        "_history_template",
+        "create_subdirectories",
+        "outpath",
+        "output_file_template",
+        "output_path_template",
+        "tracking_prefix",
+    }
+)
 
 RIPF_KEYS: tuple[str, ...] = (
     "realization_index",
@@ -93,7 +96,6 @@ class DatasetInfo(BaseModel, Mapping[str, Any]):
     project: Any = Field(default=None, exclude=True, repr=False)
     user_info: dict[str, Any] = Field(default_factory=dict, exclude=True, repr=False)
 
-
     def __init__(
         self,
         data: Mapping[str, Any] | None = None,
@@ -164,7 +166,7 @@ class DatasetInfo(BaseModel, Mapping[str, Any]):
             Optional :class:`~cmor4.tables.ProjectTables` to attach.
         """
         data = dict(values)
-        data["project"]   = project
+        data["project"] = project
         data["user_info"] = dict(values)
         return cls.model_validate(data)
 
@@ -217,10 +219,15 @@ class DatasetInfo(BaseModel, Mapping[str, Any]):
                 attrs[key] = val
 
         var_id, labels = variable.names()
-        attrs.setdefault("variable_id",     var_id)
+        attrs.setdefault("variable_id", var_id)
         attrs.setdefault("branded_variable", labels["branded_name"])
-        for key in ("branding_suffix", "temporal_label", "vertical_label",
-                    "horizontal_label", "area_label"):
+        for key in (
+            "branding_suffix",
+            "temporal_label",
+            "vertical_label",
+            "horizontal_label",
+            "area_label",
+        ):
             if key in labels:
                 attrs.setdefault(key, labels[key])
         for key in ("frequency", "realm", "table_id"):
@@ -229,10 +236,10 @@ class DatasetInfo(BaseModel, Mapping[str, Any]):
         if "table_info" in variable:
             attrs.setdefault("table_info", variable["table_info"])
         attrs.setdefault("variant_label", self.variant_label())
-        attrs.setdefault("creation_date",  creation_date)
+        attrs.setdefault("creation_date", creation_date)
 
-        conv     = attrs.get("Conventions", "CF-1.12")
-        mip_era  = attrs.get("mip_era") or self._data().get("mip_era", "CMIP")
+        conv = attrs.get("Conventions", "CF-1.12")
+        mip_era = attrs.get("mip_era") or self._data().get("mip_era", "CMIP")
         attrs.setdefault(
             "history",
             f"{creation_date} ; CMOR rewrote data to be consistent with "

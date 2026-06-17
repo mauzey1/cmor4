@@ -1,4 +1,5 @@
 """Pydantic base class shared by all CMOR4 metadata records."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator, KeysView, ItemsView, Mapping
@@ -35,7 +36,7 @@ class MetadataModel(BaseModel):
 
     model_config = ConfigDict(
         frozen=True,
-        extra="ignore",         # unknown keys handled by _collect_extras below
+        extra="ignore",  # unknown keys handled by _collect_extras below
         arbitrary_types_allowed=True,
         populate_by_name=True,
         coerce_numbers_to_str=True,
@@ -60,7 +61,7 @@ class MetadataModel(BaseModel):
         if not isinstance(data, dict):
             return data
         data = dict(data)
-        data.pop("project", None)   # consumed by __init__ before Pydantic sees it
+        data.pop("project", None)  # consumed by __init__ before Pydantic sees it
         # Spread an explicit extra= dict first
         explicit_extra = data.pop("extra", None)
         if isinstance(explicit_extra, dict):

@@ -1,4 +1,5 @@
 """Grid metadata record for runtime grid dimensions and CF projections."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping
@@ -16,22 +17,30 @@ if TYPE_CHECKING:
     from .tables import ProjectTables
 
 
-_LATITUDE_PARAMS: frozenset[str] = frozenset({
-    "grid_north_pole_latitude",
-    "latitude_of_projection_origin",
-    "standard_parallel", "standard_parallel1", "standard_parallel2",
-})
-_LONGITUDE_PARAMS: frozenset[str] = frozenset({
-    "grid_north_pole_longitude",
-    "longitude_of_prime_meridian",
-    "longitude_of_central_meridian",
-    "longitude_of_projection_origin",
-    "north_pole_grid_longitude",
-})
-_NONNEG_PARAMS: frozenset[str] = frozenset({
-    "scale_factor_at_central_meridian",
-    "scale_factor_at_projection_origin",
-})
+_LATITUDE_PARAMS: frozenset[str] = frozenset(
+    {
+        "grid_north_pole_latitude",
+        "latitude_of_projection_origin",
+        "standard_parallel",
+        "standard_parallel1",
+        "standard_parallel2",
+    }
+)
+_LONGITUDE_PARAMS: frozenset[str] = frozenset(
+    {
+        "grid_north_pole_longitude",
+        "longitude_of_prime_meridian",
+        "longitude_of_central_meridian",
+        "longitude_of_projection_origin",
+        "north_pole_grid_longitude",
+    }
+)
+_NONNEG_PARAMS: frozenset[str] = frozenset(
+    {
+        "scale_factor_at_central_meridian",
+        "scale_factor_at_projection_origin",
+    }
+)
 
 
 def _str_tuple(v: Any) -> tuple[str, ...] | None:
@@ -56,7 +65,7 @@ def _str_seq(v: Any) -> list[str] | tuple[str, ...] | None:
 
 
 StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
-StrSeq   = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
+StrSeq = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
 
 
 class Grid(MetadataModel):
@@ -120,12 +129,12 @@ class Grid(MetadataModel):
                 f"{len(self.dimensions)} grid dimension(s) were specified."
             )
         for name, arr, ref in (
-            ("latitude_vertices",  self.latitude_vertices,  la),
+            ("latitude_vertices", self.latitude_vertices, la),
             ("longitude_vertices", self.longitude_vertices, lo),
         ):
             if arr is not None:
                 a = np.asarray(arr)
-                if a.shape[:ref.ndim] != ref.shape:
+                if a.shape[: ref.ndim] != ref.shape:
                     raise ValueError(
                         f"{name} shape {a.shape} is incompatible "
                         f"with coordinate shape {ref.shape}."
@@ -141,8 +150,9 @@ class Grid(MetadataModel):
         cls, project: ProjectTables, name: str | None = None, **values: Any
     ) -> Grid:
         """Create a Grid by merging grid-table metadata."""
-        data: dict[str, Any] = {k: v for k, v in {"name": name, **values}.items()
-                                 if v is not None}
+        data: dict[str, Any] = {
+            k: v for k, v in {"name": name, **values}.items() if v is not None
+        }
         data = cls._apply_table_defaults(data, project)
         return cls.model_validate(data)
 
@@ -151,7 +161,10 @@ class Grid(MetadataModel):
         cls, data: dict[str, Any], project: ProjectTables
     ) -> dict[str, Any]:
         requested = str(
-            data.get("table_entry") or data.get("mapping_entry") or data.get("name") or ""
+            data.get("table_entry")
+            or data.get("mapping_entry")
+            or data.get("name")
+            or ""
         )
         if not requested:
             return data
@@ -200,9 +213,7 @@ class Grid(MetadataModel):
         self, project: Any
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         """Resolve the grid mapping table entry for this Grid."""
-        requested = str(
-            self.table_entry or self.mapping_entry or self.name or ""
-        )
+        requested = str(self.table_entry or self.mapping_entry or self.name or "")
         if not requested:
             return None, None
         ge: dict[str, Mapping[str, Any]] = getattr(project, "grid_mapping_entries", {})
@@ -218,7 +229,7 @@ class Grid(MetadataModel):
         """
         if self.dimensions:
             grid_dims = tuple(str(n) for n in self.dimensions)
-            var_dims  = variable.get("dimensions")
+            var_dims = variable.get("dimensions")
             if var_dims:
                 time_dims = tuple(str(d) for d in var_dims if str(d).lower() == "time")
                 return time_dims + grid_dims
@@ -231,7 +242,9 @@ class Grid(MetadataModel):
     @property
     def has_mapping(self) -> bool:
         """True when this grid needs a CF grid-mapping variable."""
-        return bool(self.mapping_name or self.grid_mapping_name or self.params or self.attrs)
+        return bool(
+            self.mapping_name or self.grid_mapping_name or self.params or self.attrs
+        )
 
     def mapping_attributes(self) -> dict[str, Any]:
         """Return NetCDF attributes for the grid-mapping scalar variable."""
@@ -256,13 +269,25 @@ def _valid_param(name: str, value: Any) -> bool:
     if num is None:
         return True
     if name in _LATITUDE_PARAMS and not -90.0 <= num <= 90.0:
-        warnings.warn(f"{name} parameter must be between -90 and 90 degrees_north; it will not be set.", RuntimeWarning, stacklevel=3)
+        warnings.warn(
+            f"{name} parameter must be between -90 and 90 degrees_north; it will not be set.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
         return False
     if name in _LONGITUDE_PARAMS and not -180.0 <= num <= 180.0:
-        warnings.warn(f"{name} parameter must be between -180 and 180 degrees_east; it will not be set.", RuntimeWarning, stacklevel=3)
+        warnings.warn(
+            f"{name} parameter must be between -180 and 180 degrees_east; it will not be set.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
         return False
     if name in _NONNEG_PARAMS and num < 0.0:
-        warnings.warn(f"{name} parameter must be positive; it will not be set.", RuntimeWarning, stacklevel=3)
+        warnings.warn(
+            f"{name} parameter must be positive; it will not be set.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
         return False
     return True
 

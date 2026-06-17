@@ -437,7 +437,11 @@ class ProjectTables:
                 continue
             if dimension_name not in self.scalar_axis_entries:
                 continue
-            _adata = {"name": dimension_name, "table_entry": dimension_name, "scalar": True}
+            _adata = {
+                "name": dimension_name,
+                "table_entry": dimension_name,
+                "scalar": True,
+            }
             _adata = Axis._apply_table_defaults(_adata, self)
             axis = Axis.model_validate(_adata)
             axis._validate_values_early()

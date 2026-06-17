@@ -1,4 +1,5 @@
 """ZFactor metadata record for hybrid-coordinate formula terms."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
@@ -48,8 +49,8 @@ def _float_or_none(v: Any) -> float | None:
 
 
 StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
-StrSeq   = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
-CoercedF = Annotated[float | None,           BeforeValidator(_float_or_none)]
+StrSeq = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
+CoercedF = Annotated[float | None, BeforeValidator(_float_or_none)]
 
 
 class ZFactor(MetadataModel):
@@ -120,7 +121,9 @@ class ZFactor(MetadataModel):
         if entry is None:
             return data
         data.setdefault("table_entry", entry_name)
-        cls._validate_metadata(data, entry_name, entry, ("units", "standard_name", "long_name"))
+        cls._validate_metadata(
+            data, entry_name, entry, ("units", "standard_name", "long_name")
+        )
         for key in ("out_name", "units", "standard_name", "long_name"):
             val = entry.get(key)
             if is_table_value(val):
@@ -132,8 +135,10 @@ class ZFactor(MetadataModel):
         if "dimensions" not in data and is_table_value(entry.get("dimensions")):
             data["dimensions"] = table_dimensions(entry)
         if "bounds" in data:
-            bname = str(data.get("bounds_name") or
-                        f"{data.get('out_name', data.get('name', ''))}_bnds")
+            bname = str(
+                data.get("bounds_name")
+                or f"{data.get('out_name', data.get('name', ''))}_bnds"
+            )
             be = project.formula_entries.get(bname)
             if be:
                 data.setdefault("bounds_name", bname)
@@ -151,7 +156,10 @@ class ZFactor(MetadataModel):
         cls, data: dict[str, Any], project: ProjectTables
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         requested = str(
-            data.get("table_entry") or data.get("formula_entry") or data.get("name") or ""
+            data.get("table_entry")
+            or data.get("formula_entry")
+            or data.get("name")
+            or ""
         )
         fe: dict[str, Mapping[str, Any]] = project.formula_entries
         if requested in fe:

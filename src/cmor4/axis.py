@@ -1,4 +1,5 @@
 """Axis metadata record."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
@@ -57,10 +58,10 @@ def _upper_str(v: Any) -> Any:
 
 
 StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
-StrSeq   = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
-CoercedF = Annotated[float | None,           BeforeValidator(_float_or_none)]
+StrSeq = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
+CoercedF = Annotated[float | None, BeforeValidator(_float_or_none)]
 # axis: upper-case but no Literal — invalid values caught by validate_against_entry
-AxisStr  = Annotated[str | None, BeforeValidator(_upper_str)]
+AxisStr = Annotated[str | None, BeforeValidator(_upper_str)]
 
 
 class Axis(MetadataModel):
@@ -202,15 +203,31 @@ class Axis(MetadataModel):
 
         data.setdefault("table_entry", entry_name)
         cls._validate_metadata(
-            data, entry_name, entry,
+            data,
+            entry_name,
+            entry,
             ("units", "standard_name", "long_name", "axis", "positive", "formula"),
         )
         for key in (
-            "out_name", "units", "standard_name", "long_name", "axis", "positive",
-            "formula", "climatology", "generic_level_name", "z_factors",
-            "z_bounds_factors", "valid_min", "valid_max", "requested",
-            "requested_bounds", "bounds_values", "must_have_bounds",
-            "stored_direction", "tolerance",
+            "out_name",
+            "units",
+            "standard_name",
+            "long_name",
+            "axis",
+            "positive",
+            "formula",
+            "climatology",
+            "generic_level_name",
+            "z_factors",
+            "z_bounds_factors",
+            "valid_min",
+            "valid_max",
+            "requested",
+            "requested_bounds",
+            "bounds_values",
+            "must_have_bounds",
+            "stored_direction",
+            "tolerance",
         ):
             val = entry.get(key)
             if is_table_value(val):
@@ -235,8 +252,11 @@ class Axis(MetadataModel):
         cls, data: dict[str, Any], project: ProjectTables
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         requested = str(
-            data.get("table_entry") or data.get("axis_entry") or
-            data.get("coordinate")  or data.get("name") or ""
+            data.get("table_entry")
+            or data.get("axis_entry")
+            or data.get("coordinate")
+            or data.get("name")
+            or ""
         )
         coord: dict[str, Mapping[str, Any]] = project.coordinate_entries
         if requested in coord:
@@ -252,7 +272,9 @@ class Axis(MetadataModel):
                 f"specify table_entry or axis_entry.  Choices: {choices}."
             )
         # out_name match
-        by_out = [(n, e) for n, e in coord.items() if str(e.get("out_name", "")) == requested]
+        by_out = [
+            (n, e) for n, e in coord.items() if str(e.get("out_name", "")) == requested
+        ]
         if len(by_out) == 1:
             return by_out[0]
         # out_name + standard_name match
@@ -266,8 +288,11 @@ class Axis(MetadataModel):
         cls, data: dict[str, Any], project: ProjectTables
     ) -> tuple[str | None, Mapping[str, Any] | None]:
         requested = str(
-            data.get("grid_table_entry") or data.get("grid_coordinate") or
-            data.get("out_name") or data.get("name") or ""
+            data.get("grid_table_entry")
+            or data.get("grid_coordinate")
+            or data.get("out_name")
+            or data.get("name")
+            or ""
         )
         gc: dict[str, Mapping[str, Any]] = project.grid_coordinate_entries
         if requested in gc:
@@ -287,7 +312,14 @@ class Axis(MetadataModel):
     ) -> None:
         if entry_name:
             data.setdefault("grid_table_entry", entry_name)
-        for key in ("out_name", "units", "standard_name", "long_name", "valid_min", "valid_max"):
+        for key in (
+            "out_name",
+            "units",
+            "standard_name",
+            "long_name",
+            "valid_min",
+            "valid_max",
+        ):
             val = entry.get(key)
             if is_table_value(val):
                 data.setdefault(key, parse_table_value(val))
@@ -322,13 +354,21 @@ class Axis(MetadataModel):
         matches = list(generic.get(generic_name, {}).items())
         if not matches:
             return []
-        for key in ("standard_name", "formula", "z_factors", "z_bounds_factors",
-                    "positive", "units", "long_name"):
+        for key in (
+            "standard_name",
+            "formula",
+            "z_factors",
+            "z_bounds_factors",
+            "positive",
+            "units",
+            "long_name",
+        ):
             val = data.get(key)
             if val in (None, ""):
                 continue
             narrowed = [
-                (n, e) for n, e in matches
+                (n, e)
+                for n, e in matches
                 if is_table_value(e.get(key)) and metadata_value_matches(val, e[key])
             ]
             if narrowed:
@@ -402,6 +442,7 @@ class Axis(MetadataModel):
     def _validate_values_early(self) -> None:
         """Run lightweight value checks that don't need dataset context."""
         from ._axis_validation import validate_axis_values_early
+
         validate_axis_values_early(self)
 
     def _post_project_init(self) -> None:
@@ -409,6 +450,7 @@ class Axis(MetadataModel):
         self._validate_values_early()
 
         # ------------------------------------------------------------------
+
     # Public API (existing interface preserved)
     # ------------------------------------------------------------------
 
