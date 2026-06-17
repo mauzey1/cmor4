@@ -39,6 +39,21 @@ _RIPF_PREFIXES: dict[str, str] = {
 }
 _RIPF_MAX: int = 2**31 - 1  # INT32_MAX — matches CMOR3's upper bound
 
+# CV keys excluded from the generic two-level nested-attribute injection in
+# _add_nested_defaults.  Dedicated handlers already process the first group;
+# the second group contains keys whose nested dicts are internal validation
+# data rather than output attributes.
+_NESTED_INJECTION_SKIP_KEYS: frozenset[str] = frozenset({
+    # Handled by dedicated _add_*_defaults methods:
+    "institution_id",
+    "source_id",
+    "experiment_id",
+    "license_id",
+    "license",
+    # Internal validation data — must not leak into output files:
+    "frequency",   # approx_interval / approx_interval_error used by axis validator
+})
+
 
 class ControlledVocabulary(Mapping[str, Any]):
     """Project controlled vocabulary with defaulting and validation helpers.
@@ -218,6 +233,9 @@ class ControlledVocabulary(Mapping[str, Any]):
         self._add_experiment_defaults(normalized_dataset)
         self._add_license_text(normalized_dataset)
         self._add_runtime_global_defaults(normalized_dataset)
+        # Run after all dedicated handlers so their setdefault values win over
+        # anything this generic handler would inject.
+        self._add_nested_defaults(normalized_dataset)
 
         return normalized_dataset
 
@@ -232,6 +250,64 @@ class ControlledVocabulary(Mapping[str, Any]):
                 and isinstance(value, (str, int, float))
             ):
                 dataset[key] = value
+
+    def _add_nested_defaults(self, dataset: dict[str, Any]) -> None:
+        """Inject leaf attributes from two-level nested CV entries.
+
+        CMOR3 supports a pattern where a CV key maps user-selectable codes to
+        flat dicts of scalar attributes.  When the user picks a code, every
+        scalar in the corresponding dict is written as a global attribute.
+        This mirrors CMOR3's ``_CV_checkGblAttributes`` handling for such
+        entries and enables features like obs4MIPs ``site_id`` location
+        injection or custom project contact-info blocks.
+
+        Example — obs4MIPs ``site_id``::
+
+            CV:   {"site_id": {"AR-SLu": {"latitude": "-33.47",
+                                           "location":  "San Luis",
+                                           "longitude": "-66.46"}}}
+            User: {"site_id": "AR-SLu"}
+            Result: ``latitude``, ``location``, ``longitude`` added to dataset.
+
+        Only injects when the looked-up entry is a :class:`~collections.abc.Mapping`
+        whose values are **all** scalars (``str``, ``int``, or ``float``).
+        Entries containing nested Mappings or lists are CV validation tables
+        and are not injected.
+
+        Keys with dedicated handlers (``institution_id``, ``source_id``,
+        ``experiment_id``, ``license_id``, ``license``) are skipped to avoid
+        double-processing.  Additionally, ``frequency`` is skipped because its
+        nested dicts contain internal time-validation scalars
+        (``approx_interval``, ``approx_interval_error``, etc.) that are read
+        directly by the axis validator and must not appear as output global
+        attributes.
+
+        Because this method runs *after* all dedicated handlers, their
+        ``setdefault`` values always take precedence.
+        """
+
+        for cv_key, cv_value in self.items():
+            if cv_key in _NESTED_INJECTION_SKIP_KEYS:
+                continue
+            if not isinstance(cv_value, Mapping):
+                continue
+
+            user_value = dataset.get(cv_key)
+            if user_value in (None, ""):
+                continue
+
+            entry = cv_value.get(str(user_value))
+            if not isinstance(entry, Mapping):
+                continue
+
+            # Only inject when every value in the looked-up entry is a
+            # scalar.  Entries with nested Mappings/lists are structural
+            # CV tables, not attribute injection blocks.
+            if not all(isinstance(v, (str, int, float)) for v in entry.values()):
+                continue
+
+            for attr_key, attr_val in entry.items():
+                dataset.setdefault(attr_key, attr_val)
 
     def _add_source_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill attributes supplied by a source_id CV entry."""

@@ -1603,3 +1603,249 @@ class TestHistoryAttribute(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# ---------------------------------------------------------------------------
+# GAP-08 — hierarchical / nested CV attribute writing
+# ---------------------------------------------------------------------------
+
+# CV structures that mirror the CMOR3 test_python_CMIP6_CV_hierarchicalattr.py
+# scenario.  The CMOR3 test uses a two-level lookup:
+#
+#   CV:   {"hierarchical_attr_setting": {"information": {leaf_attrs}}}
+#   User: {"hierarchical_attr_setting": "information"}
+#   Out:  leaf_attrs written as global attributes
+#
+# This pattern is also used by obs4MIPs site_id to inject per-site location
+# metadata.
+
+_CV_WITH_NESTED_ATTRS: dict = {
+    "CV": {
+        **_MINIMAL_CV["CV"],
+        # Two-level lookup: user selects "information" → leaf attrs injected
+        "hierarchical_attr_setting": {
+            "information": {
+                "coder":   "Denis Nadeau",
+                "creator": "PCMDI",
+                "model":   "Ocean Model",
+                "country": "USA",
+            }
+        },
+        # obs4MIPs-style site location metadata
+        "site_id": {
+            "AR-SLu": {
+                "latitude":  "-33.4648",
+                "location":  "San Luis",
+                "longitude": "-66.4598",
+            }
+        },
+    }
+}
+
+
+class TestNestedCVAttributes(unittest.TestCase):
+    """GAP-08: two-level nested CV entries inject leaf attributes.
+
+    CMOR3 reference: ``Test/test_python_CMIP6_CV_hierarchicalattr.py``.
+    """
+
+    def _cv(self) -> ControlledVocabulary:
+        return ControlledVocabulary(_CV_WITH_NESTED_ATTRS)
+
+    # -----------------------------------------------------------------------
+    # _add_nested_defaults unit tests (via get_dataset_info)
+    # -----------------------------------------------------------------------
+
+    def test_leaf_attributes_injected_when_user_selects_code(self):
+        """Selecting a code injects all scalar leaf attributes from the CV entry."""
+        cv = self._cv()
+        dataset = cv.get_dataset_info({"hierarchical_attr_setting": "information"})
+        self.assertEqual(dataset["coder"],   "Denis Nadeau")
+        self.assertEqual(dataset["creator"], "PCMDI")
+        self.assertEqual(dataset["model"],   "Ocean Model")
+        self.assertEqual(dataset["country"], "USA")
+
+    def test_selector_attribute_itself_is_preserved(self):
+        """The user-set selector key is also present in the dataset."""
+        cv = self._cv()
+        dataset = cv.get_dataset_info({"hierarchical_attr_setting": "information"})
+        self.assertEqual(dataset["hierarchical_attr_setting"], "information")
+
+    def test_site_id_location_attrs_injected(self):
+        """obs4MIPs-style site_id lookup injects latitude/longitude/location."""
+        cv = self._cv()
+        dataset = cv.get_dataset_info({"site_id": "AR-SLu"})
+        self.assertEqual(dataset["latitude"],  "-33.4648")
+        self.assertEqual(dataset["location"],  "San Luis")
+        self.assertEqual(dataset["longitude"], "-66.4598")
+
+    def test_no_injection_when_user_does_not_set_key(self):
+        """Leaf attributes are NOT injected when the user omits the selector."""
+        cv = self._cv()
+        dataset = cv.get_dataset_info({})
+        self.assertNotIn("coder",   dataset)
+        self.assertNotIn("creator", dataset)
+
+    def test_no_injection_for_unknown_code(self):
+        """An unrecognised code injects nothing (no KeyError)."""
+        cv = self._cv()
+        dataset = cv.get_dataset_info({"hierarchical_attr_setting": "nonexistent"})
+        self.assertNotIn("coder", dataset)
+
+    def test_user_values_not_overwritten_by_injection(self):
+        """Leaf attributes already set by the user are not overwritten (setdefault)."""
+        cv = self._cv()
+        dataset = cv.get_dataset_info({
+            "hierarchical_attr_setting": "information",
+            "coder": "override",
+        })
+        self.assertEqual(dataset["coder"], "override")
+
+    def test_dedicated_handler_values_not_overwritten(self):
+        """Attributes set by dedicated handlers (e.g. experiment defaults) win."""
+        cv = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "experiment_id": {
+                    "amip": {
+                        "experiment_id": "amip",
+                        "activity_id":   ["CMIP"],
+                        # experiment entry also has 'description'
+                        "description":   "Experiment description from dedicated handler.",
+                    }
+                },
+                # A nested entry that would also inject 'description'
+                "profile": {
+                    "standard": {
+                        "description": "Should NOT win over experiment description.",
+                        "org":         "PCMDI",
+                    }
+                },
+            }
+        })
+        dataset = cv.get_dataset_info({
+            "experiment_id": "amip",
+            "profile":       "standard",
+        })
+        # _add_experiment_defaults runs before _add_nested_defaults, so its
+        # setdefault("description", ...) wins.
+        self.assertEqual(
+            dataset["description"],
+            "Experiment description from dedicated handler.",
+        )
+        # 'org' has no conflict, so it is injected normally.
+        self.assertEqual(dataset["org"], "PCMDI")
+
+    def test_entry_with_non_scalar_values_not_injected(self):
+        """Entries whose looked-up value contains a list or dict are not injected."""
+        cv = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "complex_key": {
+                    "code_a": {
+                        "allowed_values": ["v1", "v2"],  # list → skip injection
+                        "scalar_attr":    "ok",
+                    }
+                },
+            }
+        })
+        dataset = cv.get_dataset_info({"complex_key": "code_a"})
+        self.assertNotIn("allowed_values", dataset)
+        self.assertNotIn("scalar_attr",    dataset)
+
+    # -----------------------------------------------------------------------
+    # Exclusion of internal-validation-only CV keys
+    # -----------------------------------------------------------------------
+
+    def test_frequency_approx_interval_not_injected(self):
+        """CMIP7 frequency's approx_interval must not appear as a global attribute.
+
+        approx_interval is read directly by the axis validator and must not
+        leak into output files.
+        """
+        cv = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "frequency": {
+                    "mon": {
+                        "approx_interval":         30.0,
+                        "approx_interval_error":   0.2,
+                        "approx_interval_warning": 0.1,
+                        "description":             "Monthly samples.",
+                    },
+                },
+            }
+        })
+        dataset = cv.get_dataset_info({"frequency": "mon"})
+        self.assertNotIn("approx_interval",         dataset)
+        self.assertNotIn("approx_interval_error",   dataset)
+        self.assertNotIn("approx_interval_warning", dataset)
+        # 'frequency' itself is still set (user-supplied value)
+        self.assertEqual(dataset.get("frequency"), "mon")
+
+    # -----------------------------------------------------------------------
+    # Integration: global attrs written to output dataset
+    # -----------------------------------------------------------------------
+
+    def test_hierarchical_leaf_attrs_written_to_netcdf_global_attrs(self):
+        """Leaf attributes from nested CV entries appear in the output NetCDF attrs."""
+        import numpy as np
+        from cmor4.core import create_dataset
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            project = _make_project(
+                tmp, _CV_WITH_NESTED_ATTRS, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
+            dataset_info = project.dataset_info({
+                **_MINIMAL_DATASET,
+                "hierarchical_attr_setting": "information",
+            })
+            variable   = project.variable("tas")
+            time_axis  = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+            lat_axis   = project.axis("lat",  values=[-45.0, 45.0])
+            lon_axis   = project.axis("lon",  values=[0.0, 90.0])
+            ds = create_dataset(
+                dataset_info, variable,
+                [time_axis, lat_axis, lon_axis],
+                np.ones((2, 2, 2)),
+            )
+
+        self.assertEqual(ds.attrs["coder"],                     "Denis Nadeau")
+        self.assertEqual(ds.attrs["creator"],                   "PCMDI")
+        self.assertEqual(ds.attrs["model"],                     "Ocean Model")
+        self.assertEqual(ds.attrs["country"],                   "USA")
+        self.assertEqual(ds.attrs["hierarchical_attr_setting"], "information")
+
+    def test_cmip7_real_project_frequency_does_not_inject_approx_interval(self):
+        """With the real CMIP7 tables, approx_interval must not appear in output."""
+        import sys
+        import numpy as np
+        from cmor4.core import create_dataset
+
+        # table_helpers.py lives in the tests directory; add it to path if needed
+        tests_dir = str(Path(__file__).parent)
+        if tests_dir not in sys.path:
+            sys.path.insert(0, tests_dir)
+        from table_helpers import cmip7_project
+        # Import the CMIP7-specific helpers from test_cmor4 module
+        import test_cmor4 as _tc4
+
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp_path = Path(tmp_str)
+            project  = cmip7_project()
+            variable = project.variable("tas_tavg-h2m-hxy-u", table_id="atmos")
+            raw      = _tc4.dataset_info(tmp_path)
+            info     = project.dataset_info(raw)
+            ds = create_dataset(
+                info, variable,
+                [_tc4.time_axis(project), *_tc4.horizontal_axes(project)],
+                np.ones((2, 2, 2), dtype="f4"),
+            )
+
+        self.assertNotIn("approx_interval",         ds.attrs)
+        self.assertNotIn("approx_interval_error",   ds.attrs)
+        self.assertNotIn("approx_interval_warning", ds.attrs)
+
+
+if __name__ == "__main__":
+    unittest.main()
