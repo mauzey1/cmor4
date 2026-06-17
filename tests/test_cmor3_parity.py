@@ -1,9 +1,46 @@
-"""Tests for Phase 1 validation gaps.
+"""CMOR3 validation parity tests.
 
-Covers:
-  GAP-01 — frequency required when a time axis is present
-  GAP-02 — external_variables global attribute from cell_measures
-  GAP-03 — variant index (RIPF) format and overflow validation
+Verifies that CMOR4 replicates the validation behaviour present in CMOR3
+but absent from the initial CMOR4 implementation.  Each test class covers
+one functional area; the list below maps them to the corresponding CMOR3
+source references.
+
+Coverage
+--------
+1.  Frequency required when a time axis is present
+    CMOR3: ``Src/cmor_variables.c`` frequency check;
+           ``Test/test_cmor_frequency_required.py``
+
+2.  ``external_variables`` global attribute written from ``cell_measures``
+    CMOR3: ``Src/cmor.c``; ``Test/test_python_CMIP6_CV_externalvariables.py``
+
+3.  Variant index (RIPF) format and overflow validation
+    CMOR3: ``Src/cmor_CV.c::_CV_ValidateVariantLabel``;
+           ``Test/test_python_CMIP6_CV_longrealizationindex.py``
+
+4.  ``forcing`` attribute terms validated against the CV forcing list
+    CMOR3: ``Src/cmor.c::cmor_check_forcing_validity``
+
+5.  DRS path/filename templates read from the CV ``DRS`` section
+    CMOR3: ``Src/cmor.c`` DRS section handling; GitHub issue #834
+
+6.  CV JSON double-nesting detected and reported
+    CMOR3: ``Src/cmor_CV.c``; GitHub issue #829
+
+7.  ``history`` attribute uses actual ``Conventions`` and ``mip_era`` tokens
+    CMOR3: ``Test/test_cmor_CMIP7.py``
+
+8.  Hierarchical nested CV entries inject leaf attributes into the dataset
+    CMOR3: ``Src/cmor_CV.c::_CV_checkGblAttributes``;
+           ``Test/test_python_CMIP6_CV_hierarchicalattr.py``
+
+9.  ``grid_label`` regex fallback when the CV does not define an allowed set
+    CMOR3: ``cmor.c`` hard-coded grid_label check;
+           ``Test/test_python_CMIP6_CV_badgridgr.py``,
+           ``Test/test_python_CMIP6_CV_badgridlabel.py``
+
+10. ``create_subdirectories=False`` requires the output directory to exist
+    CMOR3: ``Test/test_python_CMIP6_CV_baddirectory.py``
 """
 
 from __future__ import annotations
@@ -22,7 +59,6 @@ from cmor4 import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variab
 from cmor4._axis_validation import _validate_time_interval, _is_time_axis
 from cmor4.core import _collect_external_variables, create_dataset
 from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -114,12 +150,13 @@ _MINIMAL_VARIABLES: dict = {
 
 
 # ---------------------------------------------------------------------------
-# GAP-01 — frequency required when a time axis is present
+# ---------------------------------------------------------------------------
+# 1. Frequency required when a time axis is present
 # ---------------------------------------------------------------------------
 
 
 class TestFrequencyRequired(unittest.TestCase):
-    """GAP-01: A time axis without a declared frequency must raise AxisValidationError."""
+    """A time axis without a declared frequency must raise AxisValidationError."""
 
     def _time_axis(self, n_steps: int = 3) -> Axis:
         return Axis(
@@ -290,12 +327,13 @@ class TestFrequencyRequired(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# GAP-02 — external_variables global attribute
+# ---------------------------------------------------------------------------
+# 2. external_variables global attribute from cell_measures
 # ---------------------------------------------------------------------------
 
 
 class TestExternalVariables(unittest.TestCase):
-    """GAP-02: cell_measures references to absent variables → external_variables attr."""
+    """cell_measures references to absent variables → external_variables attr."""
 
     def _variable_with_cell_measures(self, cell_measures: str) -> Variable:
         return Variable(name="tos", units="degC", cell_measures=cell_measures)
@@ -466,12 +504,13 @@ class TestExternalVariables(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# GAP-03 — variant index (RIPF) format and overflow validation
+# ---------------------------------------------------------------------------
+# 3. Variant index (RIPF) format and overflow validation
 # ---------------------------------------------------------------------------
 
 
 class TestVariantIndexValidation(unittest.TestCase):
-    """GAP-03: RIPF indices must be valid positive integers within INT32 range.
+    """RIPF indices must be valid positive integers within INT32 range.
 
     CMIP7 uses prefixed strings ("r1", "i1", "p1", "f1"); CMOR3 used bare
     integers ("1", "9", …).  Both formats are accepted; the numeric portion
@@ -558,7 +597,9 @@ class TestVariantIndexValidation(unittest.TestCase):
     # variant_label format — explicit value validated via CV constraint
     # -----------------------------------------------------------------------
 
-    def test_explicit_malformed_variant_label_caught_by_cv_validate_dataset_values(self):
+    def test_explicit_malformed_variant_label_caught_by_cv_validate_dataset_values(
+        self,
+    ):
         """Explicit variant_label format is validated by validate_dataset_values
         when the CV defines a regex constraint for it.  validate_variant_indices
         intentionally defers this to the CV layer so that non-CMIP projects
@@ -569,7 +610,9 @@ class TestVariantIndexValidation(unittest.TestCase):
                 "CV": {
                     **_MINIMAL_CV["CV"],
                     # CMIP7-style variant_label constraint as a regex list.
-                    "variant_label": [r"r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+"],
+                    "variant_label": [
+                        r"r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+"
+                    ],
                 }
             }
         )
@@ -590,7 +633,7 @@ class TestVariantIndexValidation(unittest.TestCase):
                     "realization_index": "r1",
                     "initialization_index": "i1",
                     "physics_index": "p1",
-                    "forcing_index": "r1",   # 'r' prefix is wrong for forcing_index
+                    "forcing_index": "r1",  # 'r' prefix is wrong for forcing_index
                 }
             )
         # Should be caught at the integer-parsing level for forcing_index,
@@ -743,7 +786,8 @@ class TestVariantIndexValidation(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# GAP-04 — forcing terms validation against CV forcing list
+# ---------------------------------------------------------------------------
+# 4. forcing attribute terms validated against the CV forcing list
 # ---------------------------------------------------------------------------
 
 # A minimal CV that defines a forcing enumeration, mirroring how CMIP6 CVs
@@ -757,7 +801,7 @@ _CV_WITH_FORCING: dict = {
 
 
 class TestForcingTermsValidation(unittest.TestCase):
-    """GAP-04: forcing attribute tokens must be in the CV forcing enumeration.
+    """forcing attribute tokens must be in the CV forcing enumeration.
 
     CMOR3 reference: ``cmor_check_forcing_validity`` in ``Src/cmor.c``.
     """
@@ -841,9 +885,7 @@ class TestForcingTermsValidation(unittest.TestCase):
         cv = self._cv()
         # 'Oz' appears after the closing paren; CMOR3 truncates at '(' so
         # only 'GHG' is validated — 'Oz' and 'BADTERM' are both dropped.
-        cv.validate_forcing_terms(
-            {"forcing": "GHG (note BADTERM here) Oz"}
-        )
+        cv.validate_forcing_terms({"forcing": "GHG (note BADTERM here) Oz"})
 
     def test_comma_replaced_with_space_before_truncation(self):
         """Commas become spaces before the '(' truncation step."""
@@ -957,11 +999,15 @@ if __name__ == "__main__":
 
 
 # ---------------------------------------------------------------------------
-# GAP-05 — DRS path/filename templates read from the CV
+# ---------------------------------------------------------------------------
+# 5. DRS path/filename templates read from the CV DRS section
 # ---------------------------------------------------------------------------
 
-from cmor4.core import build_output_path, DEFAULT_OUTPUT_PATH_TEMPLATE, DEFAULT_OUTPUT_FILE_TEMPLATE  # noqa: E402
-
+from cmor4.core import (
+    build_output_path,
+    DEFAULT_OUTPUT_PATH_TEMPLATE,
+    DEFAULT_OUTPUT_FILE_TEMPLATE,
+)  # noqa: E402
 
 _CV_WITH_DRS: dict = {
     "CV": {
@@ -979,7 +1025,7 @@ _CV_WITHOUT_DRS: dict = _MINIMAL_CV  # no DRS section
 
 
 class TestDrsTemplates(unittest.TestCase):
-    """GAP-05: CV DRS section templates override hard-coded defaults.
+    """CV DRS section templates override hard-coded defaults.
 
     CMOR3 reference: ``cmor.c`` DRS section handling; GitHub issue #834.
     Priority chain (highest → lowest):
@@ -1035,7 +1081,9 @@ class TestDrsTemplates(unittest.TestCase):
     # build_output_path priority-chain integration tests
     # -----------------------------------------------------------------------
 
-    def _make_dataset_and_variable(self, cv_dict: dict, tmp: Path, extra: dict | None = None):
+    def _make_dataset_and_variable(
+        self, cv_dict: dict, tmp: Path, extra: dict | None = None
+    ):
         """Helper: build a DatasetInfo + Variable from a given CV dict."""
         project = _make_project(tmp, cv_dict, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
         dataset_attrs = {**_MINIMAL_DATASET, **(extra or {})}
@@ -1047,9 +1095,7 @@ class TestDrsTemplates(unittest.TestCase):
         """When no user template is set, build_output_path uses the CV DRS template."""
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
-            dataset_info, variable = self._make_dataset_and_variable(
-                _CV_WITH_DRS, tmp
-            )
+            dataset_info, variable = self._make_dataset_and_variable(_CV_WITH_DRS, tmp)
             path = build_output_path(dataset_info, variable)
         # CV template: <mip_era><activity_id><institution_id><source_id>
         #              <experiment_id><variant_label>
@@ -1067,9 +1113,7 @@ class TestDrsTemplates(unittest.TestCase):
         """build_output_path uses the CV DRS filename template."""
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
-            dataset_info, variable = self._make_dataset_and_variable(
-                _CV_WITH_DRS, tmp
-            )
+            dataset_info, variable = self._make_dataset_and_variable(_CV_WITH_DRS, tmp)
             path = build_output_path(dataset_info, variable)
         # CV filename template: <variable_id><frequency><source_id>
         #                       <experiment_id><variant_label><grid_label>
@@ -1165,12 +1209,13 @@ if __name__ == "__main__":
     unittest.main()
 
 # ---------------------------------------------------------------------------
-# GAP-06 — CV JSON structure validation (double-nesting detection)
+# ---------------------------------------------------------------------------
+# 6. CV JSON double-nesting detected and reported
 # ---------------------------------------------------------------------------
 
 
 class TestCVStructureValidation(unittest.TestCase):
-    """GAP-06: Double-nested CV entries emit RuntimeWarning and are reported.
+    """Double-nested CV entries emit RuntimeWarning and are reported by validate_structure().
 
     CMOR3 reference: ``cmor_CV.c``; GitHub issue #829
     (obs4MIPs double-nested ``nominal_resolution`` silently skipped validation).
@@ -1236,7 +1281,9 @@ class TestCVStructureValidation(unittest.TestCase):
                 "CV": {
                     "nominal_resolution": {"nominal_resolution": ["10 km"]},
                     "activity_id": {"activity_id": ["CMIP", "ScenarioMIP"]},
-                    "institution_id": {"NCAR": "National Center …"},  # not double-nested
+                    "institution_id": {
+                        "NCAR": "National Center …"
+                    },  # not double-nested
                 }
             }
         )
@@ -1288,9 +1335,7 @@ class TestCVStructureValidation(unittest.TestCase):
             {"CV": {"nominal_resolution": {"nominal_resolution": ["10 km"]}}}
         )
         issues = cv.validate_structure()
-        self.assertTrue(
-            any("silently" in issue.lower() for issue in issues)
-        )
+        self.assertTrue(any("silently" in issue.lower() for issue in issues))
 
     # -----------------------------------------------------------------------
     # RuntimeWarning emission tests
@@ -1330,9 +1375,7 @@ class TestCVStructureValidation(unittest.TestCase):
     def test_well_formed_cv_emits_no_warning(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            ControlledVocabulary(
-                {"CV": {"nominal_resolution": ["100 km", "250 km"]}}
-            )
+            ControlledVocabulary({"CV": {"nominal_resolution": ["100 km", "250 km"]}})
         runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
         self.assertEqual(len(runtime_warnings), 0)
 
@@ -1379,7 +1422,9 @@ class TestCVStructureValidation(unittest.TestCase):
         # Correct CV: "100 km" passes, the key-name string does not.
         cv_correct.validate_dataset_values({"nominal_resolution": "100 km"})
         with self.assertRaises(ControlledVocabularyError):
-            cv_correct.validate_dataset_values({"nominal_resolution": "nominal_resolution"})
+            cv_correct.validate_dataset_values(
+                {"nominal_resolution": "nominal_resolution"}
+            )
 
         cv_broken = self._make_broken_cv(
             {"CV": {"nominal_resolution": {"nominal_resolution": ["100 km"]}}}
@@ -1423,14 +1468,15 @@ if __name__ == "__main__":
     unittest.main()
 
 # ---------------------------------------------------------------------------
-# GAP-07 — history attribute format alignment
+# ---------------------------------------------------------------------------
+# 7. history attribute uses actual Conventions and mip_era tokens
 # ---------------------------------------------------------------------------
 
 import re as _re  # noqa: E402 (appended)
 
 
 class TestHistoryAttribute(unittest.TestCase):
-    """GAP-07: history attribute uses actual Conventions and mip_era tokens.
+    """history attribute uses actual Conventions and mip_era tokens, not hard-coded strings.
 
     CMOR3 reference: ``Test/test_cmor_CMIP7.py``::
 
@@ -1457,14 +1503,20 @@ class TestHistoryAttribute(unittest.TestCase):
         import numpy as np
         from cmor4.core import create_dataset
 
-        project = _make_project(tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
+        project = _make_project(
+            tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+        )
         dataset_info = project.dataset_info({**_MINIMAL_DATASET, **(extra or {})})
         variable = project.variable("tas")
-        time_axis = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+        time_axis = project.axis(
+            "time", values=[15.0, 45.0], units="days since 2000-01-01"
+        )
         lat_axis = project.axis("lat", values=[-45.0, 45.0])
         lon_axis = project.axis("lon", values=[0.0, 90.0])
         data = np.ones((2, 2, 2))
-        return create_dataset(dataset_info, variable, [time_axis, lat_axis, lon_axis], data)
+        return create_dataset(
+            dataset_info, variable, [time_axis, lat_axis, lon_axis], data
+        )
 
     # -----------------------------------------------------------------------
     # Format correctness
@@ -1506,15 +1558,25 @@ class TestHistoryAttribute(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
-            project = _make_project(tmp, cv_custom_conventions, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
+            project = _make_project(
+                tmp, cv_custom_conventions, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
             dataset_info = project.dataset_info(_MINIMAL_DATASET)
             variable = project.variable("tas")
             import numpy as np
             from cmor4.core import create_dataset
-            time_axis = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+
+            time_axis = project.axis(
+                "time", values=[15.0, 45.0], units="days since 2000-01-01"
+            )
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
-            ds = create_dataset(dataset_info, variable, [time_axis, lat_axis, lon_axis], np.ones((2, 2, 2)))
+            ds = create_dataset(
+                dataset_info,
+                variable,
+                [time_axis, lat_axis, lon_axis],
+                np.ones((2, 2, 2)),
+            )
         self.assertIn("CF-1.9", ds.attrs["history"])
         self.assertNotIn("CF-1.12", ds.attrs["history"])
 
@@ -1528,15 +1590,27 @@ class TestHistoryAttribute(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
-            project = _make_project(tmp, cv_custom_mip, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
-            dataset_info = project.dataset_info({**_MINIMAL_DATASET, "mip_era": "obs4MIPs"})
+            project = _make_project(
+                tmp, cv_custom_mip, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
+            dataset_info = project.dataset_info(
+                {**_MINIMAL_DATASET, "mip_era": "obs4MIPs"}
+            )
             variable = project.variable("tas")
             import numpy as np
             from cmor4.core import create_dataset
-            time_axis = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+
+            time_axis = project.axis(
+                "time", values=[15.0, 45.0], units="days since 2000-01-01"
+            )
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
-            ds = create_dataset(dataset_info, variable, [time_axis, lat_axis, lon_axis], np.ones((2, 2, 2)))
+            ds = create_dataset(
+                dataset_info,
+                variable,
+                [time_axis, lat_axis, lon_axis],
+                np.ones((2, 2, 2)),
+            )
         self.assertIn("obs4MIPs", ds.attrs["history"])
         self.assertNotIn("CMIP7", ds.attrs["history"])
 
@@ -1566,10 +1640,15 @@ class TestHistoryAttribute(unittest.TestCase):
             tmp = Path(tmp_str)
             import numpy as np
             from cmor4.core import create_dataset
-            project = _make_project(tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES)
+
+            project = _make_project(
+                tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
+            )
             dataset_info = project.dataset_info(_MINIMAL_DATASET)
             variable = project.variable("tas")
-            time_axis = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
+            time_axis = project.axis(
+                "time", values=[15.0, 45.0], units="days since 2000-01-01"
+            )
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
             override = "Custom history override."
@@ -1605,7 +1684,8 @@ if __name__ == "__main__":
     unittest.main()
 
 # ---------------------------------------------------------------------------
-# GAP-08 — hierarchical / nested CV attribute writing
+# ---------------------------------------------------------------------------
+# 8. Hierarchical nested CV entries inject leaf attributes into the dataset
 # ---------------------------------------------------------------------------
 
 # CV structures that mirror the CMOR3 test_python_CMIP6_CV_hierarchicalattr.py
@@ -1624,17 +1704,17 @@ _CV_WITH_NESTED_ATTRS: dict = {
         # Two-level lookup: user selects "information" → leaf attrs injected
         "hierarchical_attr_setting": {
             "information": {
-                "coder":   "Denis Nadeau",
+                "coder": "Denis Nadeau",
                 "creator": "PCMDI",
-                "model":   "Ocean Model",
+                "model": "Ocean Model",
                 "country": "USA",
             }
         },
         # obs4MIPs-style site location metadata
         "site_id": {
             "AR-SLu": {
-                "latitude":  "-33.4648",
-                "location":  "San Luis",
+                "latitude": "-33.4648",
+                "location": "San Luis",
                 "longitude": "-66.4598",
             }
         },
@@ -1643,7 +1723,7 @@ _CV_WITH_NESTED_ATTRS: dict = {
 
 
 class TestNestedCVAttributes(unittest.TestCase):
-    """GAP-08: two-level nested CV entries inject leaf attributes.
+    """Two-level nested CV entries inject leaf attributes into the dataset.
 
     CMOR3 reference: ``Test/test_python_CMIP6_CV_hierarchicalattr.py``.
     """
@@ -1659,9 +1739,9 @@ class TestNestedCVAttributes(unittest.TestCase):
         """Selecting a code injects all scalar leaf attributes from the CV entry."""
         cv = self._cv()
         dataset = cv.get_dataset_info({"hierarchical_attr_setting": "information"})
-        self.assertEqual(dataset["coder"],   "Denis Nadeau")
+        self.assertEqual(dataset["coder"], "Denis Nadeau")
         self.assertEqual(dataset["creator"], "PCMDI")
-        self.assertEqual(dataset["model"],   "Ocean Model")
+        self.assertEqual(dataset["model"], "Ocean Model")
         self.assertEqual(dataset["country"], "USA")
 
     def test_selector_attribute_itself_is_preserved(self):
@@ -1674,15 +1754,15 @@ class TestNestedCVAttributes(unittest.TestCase):
         """obs4MIPs-style site_id lookup injects latitude/longitude/location."""
         cv = self._cv()
         dataset = cv.get_dataset_info({"site_id": "AR-SLu"})
-        self.assertEqual(dataset["latitude"],  "-33.4648")
-        self.assertEqual(dataset["location"],  "San Luis")
+        self.assertEqual(dataset["latitude"], "-33.4648")
+        self.assertEqual(dataset["location"], "San Luis")
         self.assertEqual(dataset["longitude"], "-66.4598")
 
     def test_no_injection_when_user_does_not_set_key(self):
         """Leaf attributes are NOT injected when the user omits the selector."""
         cv = self._cv()
         dataset = cv.get_dataset_info({})
-        self.assertNotIn("coder",   dataset)
+        self.assertNotIn("coder", dataset)
         self.assertNotIn("creator", dataset)
 
     def test_no_injection_for_unknown_code(self):
@@ -1694,38 +1774,44 @@ class TestNestedCVAttributes(unittest.TestCase):
     def test_user_values_not_overwritten_by_injection(self):
         """Leaf attributes already set by the user are not overwritten (setdefault)."""
         cv = self._cv()
-        dataset = cv.get_dataset_info({
-            "hierarchical_attr_setting": "information",
-            "coder": "override",
-        })
+        dataset = cv.get_dataset_info(
+            {
+                "hierarchical_attr_setting": "information",
+                "coder": "override",
+            }
+        )
         self.assertEqual(dataset["coder"], "override")
 
     def test_dedicated_handler_values_not_overwritten(self):
         """Attributes set by dedicated handlers (e.g. experiment defaults) win."""
-        cv = ControlledVocabulary({
-            "CV": {
-                **_MINIMAL_CV["CV"],
-                "experiment_id": {
-                    "amip": {
-                        "experiment_id": "amip",
-                        "activity_id":   ["CMIP"],
-                        # experiment entry also has 'description'
-                        "description":   "Experiment description from dedicated handler.",
-                    }
-                },
-                # A nested entry that would also inject 'description'
-                "profile": {
-                    "standard": {
-                        "description": "Should NOT win over experiment description.",
-                        "org":         "PCMDI",
-                    }
-                },
+        cv = ControlledVocabulary(
+            {
+                "CV": {
+                    **_MINIMAL_CV["CV"],
+                    "experiment_id": {
+                        "amip": {
+                            "experiment_id": "amip",
+                            "activity_id": ["CMIP"],
+                            # experiment entry also has 'description'
+                            "description": "Experiment description from dedicated handler.",
+                        }
+                    },
+                    # A nested entry that would also inject 'description'
+                    "profile": {
+                        "standard": {
+                            "description": "Should NOT win over experiment description.",
+                            "org": "PCMDI",
+                        }
+                    },
+                }
             }
-        })
-        dataset = cv.get_dataset_info({
-            "experiment_id": "amip",
-            "profile":       "standard",
-        })
+        )
+        dataset = cv.get_dataset_info(
+            {
+                "experiment_id": "amip",
+                "profile": "standard",
+            }
+        )
         # _add_experiment_defaults runs before _add_nested_defaults, so its
         # setdefault("description", ...) wins.
         self.assertEqual(
@@ -1737,20 +1823,22 @@ class TestNestedCVAttributes(unittest.TestCase):
 
     def test_entry_with_non_scalar_values_not_injected(self):
         """Entries whose looked-up value contains a list or dict are not injected."""
-        cv = ControlledVocabulary({
-            "CV": {
-                **_MINIMAL_CV["CV"],
-                "complex_key": {
-                    "code_a": {
-                        "allowed_values": ["v1", "v2"],  # list → skip injection
-                        "scalar_attr":    "ok",
-                    }
-                },
+        cv = ControlledVocabulary(
+            {
+                "CV": {
+                    **_MINIMAL_CV["CV"],
+                    "complex_key": {
+                        "code_a": {
+                            "allowed_values": ["v1", "v2"],  # list → skip injection
+                            "scalar_attr": "ok",
+                        }
+                    },
+                }
             }
-        })
+        )
         dataset = cv.get_dataset_info({"complex_key": "code_a"})
         self.assertNotIn("allowed_values", dataset)
-        self.assertNotIn("scalar_attr",    dataset)
+        self.assertNotIn("scalar_attr", dataset)
 
     # -----------------------------------------------------------------------
     # Exclusion of internal-validation-only CV keys
@@ -1762,22 +1850,24 @@ class TestNestedCVAttributes(unittest.TestCase):
         approx_interval is read directly by the axis validator and must not
         leak into output files.
         """
-        cv = ControlledVocabulary({
-            "CV": {
-                **_MINIMAL_CV["CV"],
-                "frequency": {
-                    "mon": {
-                        "approx_interval":         30.0,
-                        "approx_interval_error":   0.2,
-                        "approx_interval_warning": 0.1,
-                        "description":             "Monthly samples.",
+        cv = ControlledVocabulary(
+            {
+                "CV": {
+                    **_MINIMAL_CV["CV"],
+                    "frequency": {
+                        "mon": {
+                            "approx_interval": 30.0,
+                            "approx_interval_error": 0.2,
+                            "approx_interval_warning": 0.1,
+                            "description": "Monthly samples.",
+                        },
                     },
-                },
+                }
             }
-        })
+        )
         dataset = cv.get_dataset_info({"frequency": "mon"})
-        self.assertNotIn("approx_interval",         dataset)
-        self.assertNotIn("approx_interval_error",   dataset)
+        self.assertNotIn("approx_interval", dataset)
+        self.assertNotIn("approx_interval_error", dataset)
         self.assertNotIn("approx_interval_warning", dataset)
         # 'frequency' itself is still set (user-supplied value)
         self.assertEqual(dataset.get("frequency"), "mon")
@@ -1796,24 +1886,29 @@ class TestNestedCVAttributes(unittest.TestCase):
             project = _make_project(
                 tmp, _CV_WITH_NESTED_ATTRS, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
             )
-            dataset_info = project.dataset_info({
-                **_MINIMAL_DATASET,
-                "hierarchical_attr_setting": "information",
-            })
-            variable   = project.variable("tas")
-            time_axis  = project.axis("time", values=[15.0, 45.0], units="days since 2000-01-01")
-            lat_axis   = project.axis("lat",  values=[-45.0, 45.0])
-            lon_axis   = project.axis("lon",  values=[0.0, 90.0])
+            dataset_info = project.dataset_info(
+                {
+                    **_MINIMAL_DATASET,
+                    "hierarchical_attr_setting": "information",
+                }
+            )
+            variable = project.variable("tas")
+            time_axis = project.axis(
+                "time", values=[15.0, 45.0], units="days since 2000-01-01"
+            )
+            lat_axis = project.axis("lat", values=[-45.0, 45.0])
+            lon_axis = project.axis("lon", values=[0.0, 90.0])
             ds = create_dataset(
-                dataset_info, variable,
+                dataset_info,
+                variable,
                 [time_axis, lat_axis, lon_axis],
                 np.ones((2, 2, 2)),
             )
 
-        self.assertEqual(ds.attrs["coder"],                     "Denis Nadeau")
-        self.assertEqual(ds.attrs["creator"],                   "PCMDI")
-        self.assertEqual(ds.attrs["model"],                     "Ocean Model")
-        self.assertEqual(ds.attrs["country"],                   "USA")
+        self.assertEqual(ds.attrs["coder"], "Denis Nadeau")
+        self.assertEqual(ds.attrs["creator"], "PCMDI")
+        self.assertEqual(ds.attrs["model"], "Ocean Model")
+        self.assertEqual(ds.attrs["country"], "USA")
         self.assertEqual(ds.attrs["hierarchical_attr_setting"], "information")
 
     def test_cmip7_real_project_frequency_does_not_inject_approx_interval(self):
@@ -1827,23 +1922,25 @@ class TestNestedCVAttributes(unittest.TestCase):
         if tests_dir not in sys.path:
             sys.path.insert(0, tests_dir)
         from table_helpers import cmip7_project
+
         # Import the CMIP7-specific helpers from test_cmor4 module
         import test_cmor4 as _tc4
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp_path = Path(tmp_str)
-            project  = cmip7_project()
+            project = cmip7_project()
             variable = project.variable("tas_tavg-h2m-hxy-u", table_id="atmos")
-            raw      = _tc4.dataset_info(tmp_path)
-            info     = project.dataset_info(raw)
+            raw = _tc4.dataset_info(tmp_path)
+            info = project.dataset_info(raw)
             ds = create_dataset(
-                info, variable,
+                info,
+                variable,
                 [_tc4.time_axis(project), *_tc4.horizontal_axes(project)],
                 np.ones((2, 2, 2), dtype="f4"),
             )
 
-        self.assertNotIn("approx_interval",         ds.attrs)
-        self.assertNotIn("approx_interval_error",   ds.attrs)
+        self.assertNotIn("approx_interval", ds.attrs)
+        self.assertNotIn("approx_interval_error", ds.attrs)
         self.assertNotIn("approx_interval_warning", ds.attrs)
 
 
@@ -1851,12 +1948,13 @@ if __name__ == "__main__":
     unittest.main()
 
 # ---------------------------------------------------------------------------
-# GAP-09 — grid_label regex fallback when CV is absent
+# ---------------------------------------------------------------------------
+# 9. grid_label regex fallback when the CV does not define an allowed set
 # ---------------------------------------------------------------------------
 
 
 class TestGridLabelFallback(unittest.TestCase):
-    """GAP-09: when the CV does not define grid_label, a built-in regex guards it.
+    """When the CV does not define grid_label, a built-in regex guards the format.
 
     CMOR3 reference: ``cmor.c`` hard-coded grid_label check;
     ``Test/test_python_CMIP6_CV_badgridgr.py`` (gr-0 rejected),
@@ -1994,6 +2092,7 @@ class TestGridLabelFallback(unittest.TestCase):
     def test_cmip7_real_project_grid_label_validated_by_cv(self):
         """With real CMIP7 tables, grid_label is validated against the CV dict."""
         from table_helpers import cmip7_project
+
         project = cmip7_project()
 
         # A CMIP7 CV-defined label passes
@@ -2010,6 +2109,7 @@ class TestGridLabelFallback(unittest.TestCase):
         double-checked by the fallback after passing the CV enumeration.
         """
         from table_helpers import cmip7_project
+
         project = cmip7_project()
         # 'g100' is in the CMIP7 CV — should pass cleanly, no fallback noise
         project.cv.validate_dataset_values({"grid_label": "g100"})
@@ -2021,14 +2121,15 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# GAP-10 — outpath / output directory existence check
+# ---------------------------------------------------------------------------
+# 10. create_subdirectories=False requires the output directory to exist
 # ---------------------------------------------------------------------------
 
 import numpy as _np  # noqa: E402
 
 
 class TestCreateSubdirectories(unittest.TestCase):
-    """GAP-10: create_subdirectories=False requires the output dir to exist.
+    """create_subdirectories=False requires the output dir to already exist.
 
     CMOR3 reference: ``Test/test_python_CMIP6_CV_baddirectory.py``.
     When ``create_subdirectories=0`` and the outpath cannot be created, CMOR3
@@ -2056,7 +2157,9 @@ class TestCreateSubdirectories(unittest.TestCase):
         lat_axis = project.axis("lat", values=[-45.0, 45.0])
         lon_axis = project.axis("lon", values=[0.0, 90.0])
         ds = create_dataset(
-            dataset_info, variable, [time_axis, lat_axis, lon_axis],
+            dataset_info,
+            variable,
+            [time_axis, lat_axis, lon_axis],
             _np.ones((2, 2, 2)),
         )
         return ds, dataset_info, variable
@@ -2064,6 +2167,7 @@ class TestCreateSubdirectories(unittest.TestCase):
     def _patch_dataset(self, dataset_info, extra: dict):
         """Return a new DatasetInfo with extra keys merged in."""
         from cmor4.dataset import DatasetInfo
+
         return DatasetInfo(
             {**dict(dataset_info), **extra},
             project=dataset_info.project,
@@ -2192,7 +2296,9 @@ class TestCreateSubdirectories(unittest.TestCase):
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
             ds = create_dataset(
-                dataset_info, variable, [time_axis, lat_axis, lon_axis],
+                dataset_info,
+                variable,
+                [time_axis, lat_axis, lon_axis],
                 _np.ones((2, 2, 2)),
             )
 
@@ -2215,7 +2321,9 @@ class TestCreateSubdirectories(unittest.TestCase):
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
             ds = create_dataset(
-                dataset_info, variable, [time_axis, lat_axis, lon_axis],
+                dataset_info,
+                variable,
+                [time_axis, lat_axis, lon_axis],
                 _np.ones((2, 2, 2)),
             )
 

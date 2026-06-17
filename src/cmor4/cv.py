@@ -43,16 +43,18 @@ _RIPF_MAX: int = 2**31 - 1  # INT32_MAX — matches CMOR3's upper bound
 # _add_nested_defaults.  Dedicated handlers already process the first group;
 # the second group contains keys whose nested dicts are internal validation
 # data rather than output attributes.
-_NESTED_INJECTION_SKIP_KEYS: frozenset[str] = frozenset({
-    # Handled by dedicated _add_*_defaults methods:
-    "institution_id",
-    "source_id",
-    "experiment_id",
-    "license_id",
-    "license",
-    # Internal validation data — must not leak into output files:
-    "frequency",   # approx_interval / approx_interval_error used by axis validator
-})
+_NESTED_INJECTION_SKIP_KEYS: frozenset[str] = frozenset(
+    {
+        # Handled by dedicated _add_*_defaults methods:
+        "institution_id",
+        "source_id",
+        "experiment_id",
+        "license_id",
+        "license",
+        # Internal validation data — must not leak into output files:
+        "frequency",  # approx_interval / approx_interval_error used by axis validator
+    }
+)
 
 # Fallback regex for grid_label when the CV does not define an allowed set.
 # Mirrors CMOR3's built-in check: labels must start with 'g', 'c', or 'r'
@@ -142,11 +144,7 @@ class ControlledVocabulary(Mapping[str, Any]):
 
         issues: list[str] = []
         for key, value in self._data.items():
-            if (
-                isinstance(value, Mapping)
-                and len(value) == 1
-                and key in value
-            ):
+            if isinstance(value, Mapping) and len(value) == 1 and key in value:
                 issues.append(
                     f"CV entry {key!r} in {self.filename} appears to be "
                     f"double-nested: its value is a mapping containing only "
@@ -516,9 +514,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             return
 
         valid: set[str] = (
-            set(forcing_cv)
-            if isinstance(forcing_cv, (list, Mapping))
-            else set()
+            set(forcing_cv) if isinstance(forcing_cv, (list, Mapping)) else set()
         )
         for token in tokens:
             if token not in valid:
