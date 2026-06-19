@@ -157,9 +157,7 @@ def create_dataset(
         if variable.dimensions is not None:
             dim_names = tuple(str(name) for name in variable.dimensions)
         else:
-            dim_names = tuple(
-                axis.name for axis in axes if not bool(axis.auxiliary)
-            )
+            dim_names = tuple(axis.name for axis in axes if not bool(axis.auxiliary))
     dims = tuple(dim for name in dim_names for dim in axis_dims.get(name, ()))
 
     if data_array.ndim != len(dims):

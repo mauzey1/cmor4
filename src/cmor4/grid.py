@@ -131,8 +131,7 @@ class Grid(MetadataModel):
             # Mark every dimensional axis as belonging to a grid.
             # Axis is frozen, so build updated copies if not already flagged.
             updated: list[_Axis] = [
-                a if a.isgridaxis else a.updated(isgridaxis=True)
-                for a in self.axes
+                a if a.isgridaxis else a.updated(isgridaxis=True) for a in self.axes
             ]
             object.__setattr__(self, "axes", updated)
 
@@ -200,9 +199,7 @@ class Grid(MetadataModel):
 
         var_dims = variable.dimensions
         if var_dims:
-            time_dims = tuple(
-                str(d) for d in var_dims if str(d).lower() == "time"
-            )
+            time_dims = tuple(str(d) for d in var_dims if str(d).lower() == "time")
             return time_dims + grid_dims
         return grid_dims
 

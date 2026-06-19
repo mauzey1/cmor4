@@ -28,7 +28,6 @@ from cmor4 import Axis, Grid, Variable
 from cmor4.core import _grid_axes
 from cmor4.exceptions import TableValidationError
 
-
 # ---------------------------------------------------------------------------
 # Minimal helpers
 # ---------------------------------------------------------------------------
@@ -290,7 +289,6 @@ class TestMustCallCmorGrid(unittest.TestCase):
         # it fires before any variable-table lookup.
         # Build the simplest possible project (no variable table) so no other
         # validation noise interferes.
-        from cmor4 import ProjectTables
 
         project = self._make_project()
         time_axis = Axis(
@@ -445,7 +443,9 @@ class TestValidateGridDimensions(unittest.TestCase):
         j = Axis(name="j", values=np.arange(4, dtype="f4"))
         i = Axis(name="i", values=np.arange(8, dtype="f4"))
         wrong_lat = np.zeros((3, 8))  # j should be 4
-        grid = Grid(dimensions=("j", "i"), latitude=wrong_lat, longitude=np.zeros((3, 8)))
+        grid = Grid(
+            dimensions=("j", "i"), latitude=wrong_lat, longitude=np.zeros((3, 8))
+        )
         with self.assertRaises(TableValidationError):
             _validate_grid_dimensions(grid, [j, i])
 

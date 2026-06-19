@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .metadata import MetadataModel
 

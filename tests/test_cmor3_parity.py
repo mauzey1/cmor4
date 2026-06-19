@@ -55,8 +55,7 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from cmor4 import Axis, ControlledVocabulary, ProjectTables, Variable
-from cmor4 import DatasetInfo, Variable
+from cmor4 import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
 from cmor4._axis_validation import _validate_time_interval, _is_time_axis
 from cmor4.core import _collect_external_variables, create_dataset, build_output_path
 from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
@@ -181,7 +180,9 @@ class TestFrequencyRequired(unittest.TestCase):
         """
         axis = self._time_axis(n_steps=3)
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array())
+            _validate_time_interval(
+                DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array()
+            )
         self.assertIn("frequency", str(ctx.exception).lower())
 
     def test_missing_frequency_raises_for_single_step_time_axis(self):
@@ -199,14 +200,18 @@ class TestFrequencyRequired(unittest.TestCase):
             values=[15],
         )
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array())
+            _validate_time_interval(
+                DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array()
+            )
         self.assertIn("frequency", str(ctx.exception).lower())
 
     def test_empty_string_frequency_raises(self):
         """Explicit empty string treated same as absent."""
         axis = self._time_axis()
         with self.assertRaises(AxisValidationError):
-            _validate_time_interval(DatasetInfo(frequency=""), None, axis, axis.values_array())
+            _validate_time_interval(
+                DatasetInfo(frequency=""), None, axis, axis.values_array()
+            )
 
     def test_error_message_contains_guidance(self):
         """Error message should guide the user toward setting frequency.
@@ -216,7 +221,9 @@ class TestFrequencyRequired(unittest.TestCase):
         """
         axis = self._time_axis()
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array())
+            _validate_time_interval(
+                DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array()
+            )
         msg = str(ctx.exception)
         self.assertIn("frequency", msg.lower())
         self.assertIn("required", msg.lower())

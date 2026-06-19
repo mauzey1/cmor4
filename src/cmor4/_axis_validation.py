@@ -335,8 +335,12 @@ def _validate_time_interval(
     axis: Axis,
     values: np.ndarray,
 ) -> None:
-    var_freq = str(getattr(variable, "frequency", "") or "") if variable is not None else ""
-    frequency = str(dataset.get("frequency", var_freq)) if dataset is not None else var_freq
+    var_freq = (
+        str(getattr(variable, "frequency", "") or "") if variable is not None else ""
+    )
+    frequency = (
+        str(dataset.get("frequency", var_freq)) if dataset is not None else var_freq
+    )
     if not frequency:
         if dataset is not None:
             raise AxisValidationError(
@@ -390,8 +394,12 @@ def _time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.nda
 def _interval_spec(
     dataset: DatasetInfo | None, variable: Variable | None
 ) -> _IntervalSpec | None:
-    var_freq = str(getattr(variable, "frequency", "") or "") if variable is not None else ""
-    frequency = str(dataset.get("frequency", var_freq)) if dataset is not None else var_freq
+    var_freq = (
+        str(getattr(variable, "frequency", "") or "") if variable is not None else ""
+    )
+    frequency = (
+        str(dataset.get("frequency", var_freq)) if dataset is not None else var_freq
+    )
     if not frequency:
         return None
     project = getattr(dataset, "project", None)
