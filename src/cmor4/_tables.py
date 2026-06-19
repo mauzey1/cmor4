@@ -21,6 +21,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from pydantic import BaseModel, ConfigDict, field_validator
+
 from ._table_utils import (
     entry_bounds,
     entry_values,
@@ -40,13 +42,13 @@ from .variable import Variable
 # ---------------------------------------------------------------------------
 
 
-class AxisEntry:
+class AxisEntry(BaseModel):
     """One resolved entry from a coordinate or grid-coordinate table.
 
     Parameters
     ----------
     name:
-        Entry name in the table.
+        Entry name in the table.  Must be a non-empty string.
     entry:
         Raw entry metadata dict from the JSON table.
     is_grid_coord:
@@ -55,65 +57,93 @@ class AxisEntry:
         authoritative and how bounds attributes are looked up.
     """
 
-    __slots__ = ("name", "entry", "is_grid_coord")
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    def __init__(
-        self,
-        name: str,
-        entry: Mapping[str, Any],
-        *,
-        is_grid_coord: bool = False,
-    ) -> None:
-        self.name = name
-        self.entry = entry
-        self.is_grid_coord = is_grid_coord
+    name: str
+    entry: dict[str, Any]
+    is_grid_coord: bool = False
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_empty(cls, v: str) -> str:
+        if not v:
+            raise ValueError("AxisEntry name must not be empty")
+        return v
+
+    @field_validator("entry", mode="before")
+    @classmethod
+    def _coerce_entry(cls, v: Any) -> dict[str, Any]:
+        return dict(v) if not isinstance(v, dict) else v
 
 
-class ZFactorEntry:
+class ZFactorEntry(BaseModel):
     """One resolved entry from a formula-terms table.
 
     Parameters
     ----------
     name:
-        Entry name in the table.
+        Entry name in the table.  Must be a non-empty string.
     entry:
         Raw entry metadata dict from the JSON table.
     """
 
-    __slots__ = ("name", "entry")
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    def __init__(self, name: str, entry: Mapping[str, Any]) -> None:
-        self.name = name
-        self.entry = entry
+    name: str
+    entry: dict[str, Any]
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_empty(cls, v: str) -> str:
+        if not v:
+            raise ValueError("ZFactorEntry name must not be empty")
+        return v
+
+    @field_validator("entry", mode="before")
+    @classmethod
+    def _coerce_entry(cls, v: Any) -> dict[str, Any]:
+        return dict(v) if not isinstance(v, dict) else v
 
 
-class GridMappingEntry:
+class GridMappingEntry(BaseModel):
     """One resolved entry from a grid-mapping table.
 
     Parameters
     ----------
     name:
         Entry name in the table (e.g. ``"lambert_azimuthal_equal_area"``).
+        Must be a non-empty string.
     entry:
         Raw entry metadata dict from the JSON table.
     """
 
-    __slots__ = ("name", "entry")
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    def __init__(self, name: str, entry: Mapping[str, Any]) -> None:
-        self.name = name
-        self.entry = entry
+    name: str
+    entry: dict[str, Any]
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_empty(cls, v: str) -> str:
+        if not v:
+            raise ValueError("GridMappingEntry name must not be empty")
+        return v
+
+    @field_validator("entry", mode="before")
+    @classmethod
+    def _coerce_entry(cls, v: Any) -> dict[str, Any]:
+        return dict(v) if not isinstance(v, dict) else v
 
 
-class VariableEntry:
+class VariableEntry(BaseModel):
     """One resolved entry from a variable table.
 
     Parameters
     ----------
     name:
-        Variable entry name in the table.
+        Variable entry name in the table.  Must be a non-empty string.
     table_id:
-        Identifier of the table supplying the entry.
+        Identifier of the table supplying the entry.  Must be non-empty.
     entry:
         Raw variable-entry metadata dict from the JSON table.
     table_file:
@@ -122,21 +152,32 @@ class VariableEntry:
         Header metadata from the table file, if available.
     """
 
-    __slots__ = ("name", "table_id", "entry", "table_file", "table_header")
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    def __init__(
-        self,
-        name: str,
-        table_id: str,
-        entry: Mapping[str, Any],
-        table_file: Path | None = None,
-        table_header: Mapping[str, Any] | None = None,
-    ) -> None:
-        self.name = name
-        self.table_id = table_id
-        self.entry = entry
-        self.table_file = table_file
-        self.table_header = table_header
+    name: str
+    table_id: str
+    entry: dict[str, Any]
+    table_file: Path | None = None
+    table_header: dict[str, Any] | None = None
+
+    @field_validator("name", "table_id")
+    @classmethod
+    def _not_empty(cls, v: str) -> str:
+        if not v:
+            raise ValueError("VariableEntry name and table_id must not be empty")
+        return v
+
+    @field_validator("entry", mode="before")
+    @classmethod
+    def _coerce_entry(cls, v: Any) -> dict[str, Any]:
+        return dict(v) if not isinstance(v, dict) else v
+
+    @field_validator("table_header", mode="before")
+    @classmethod
+    def _coerce_header(cls, v: Any) -> dict[str, Any] | None:
+        if v is None:
+            return None
+        return dict(v) if not isinstance(v, dict) else v
 
 
 # ---------------------------------------------------------------------------
@@ -199,12 +240,12 @@ class CoordinateTable:
         )
         entry = self._all_coord.get(requested)
         if entry is not None:
-            return AxisEntry(requested, entry)
+            return AxisEntry(name=requested, entry=entry)
 
         generic = self._generic_level_matches(data, requested)
         if len(generic) == 1:
             name, entry = generic[0]
-            return AxisEntry(name, entry)
+            return AxisEntry(name=name, entry=entry)
         if len(generic) > 1:
             choices = ", ".join(n for n, _ in generic)
             raise TableValidationError(
@@ -219,12 +260,12 @@ class CoordinateTable:
         ]
         if len(by_out) == 1:
             name, entry = by_out[0]
-            return AxisEntry(name, entry)
+            return AxisEntry(name=name, entry=entry)
 
         matches = self._match_by_attrs(data)
         if len(matches) == 1:
             name, entry = matches[0]
-            return AxisEntry(name, entry)
+            return AxisEntry(name=name, entry=entry)
 
         return None
 
@@ -239,7 +280,7 @@ class CoordinateTable:
         )
         entry = self._grid_coord.get(requested)
         if entry is not None:
-            return AxisEntry(requested, entry, is_grid_coord=True)
+            return AxisEntry(name=requested, entry=entry, is_grid_coord=True)
 
         m = [
             (n, e)
@@ -248,7 +289,7 @@ class CoordinateTable:
         ]
         if len(m) == 1:
             name, entry = m[0]
-            return AxisEntry(name, entry, is_grid_coord=True)
+            return AxisEntry(name=name, entry=entry, is_grid_coord=True)
 
         return None
 
@@ -441,7 +482,7 @@ class FormulaTable:
         )
         entry = self._entries.get(requested)
         if entry is not None:
-            return ZFactorEntry(requested, entry)
+            return ZFactorEntry(name=requested, entry=entry)
 
         m = [
             (n, e)
@@ -450,7 +491,7 @@ class FormulaTable:
         ]
         if len(m) == 1:
             name, entry = m[0]
-            return ZFactorEntry(name, entry)
+            return ZFactorEntry(name=name, entry=entry)
 
         return None
 
@@ -554,7 +595,7 @@ class GridTable:
         """Return the :class:`GridMappingEntry` for *name*, or ``None``."""
         entry = self._raw_mapping.get(name)
         if entry is not None:
-            return GridMappingEntry(name, entry)
+            return GridMappingEntry(name=name, entry=entry)
         return None
 
     # ------------------------------------------------------------------
@@ -802,20 +843,15 @@ class VariableTable:
         required = set(str(e.get("required", "")).split())
         table_pos = e.get("positive")
         user_pos = variable.positive
-        if user_pos not in (None, ""):
-            if str(user_pos).lower() not in {"up", "down"}:
-                raise TableValidationError(
-                    f"positive={user_pos!r} is not valid; "
-                    "allowed values are 'up' and 'down'."
-                )
-            if (
-                is_table_value(table_pos)
-                and str(user_pos).lower() != str(table_pos).lower()
-            ):
-                raise TableValidationError(
-                    f"positive={user_pos!r} does not match "
-                    f"{entry.table_id}:{entry.name} value {table_pos!r}."
-                )
+        if (
+            user_pos not in (None, "")
+            and is_table_value(table_pos)
+            and str(user_pos).lower() != str(table_pos).lower()
+        ):
+            raise TableValidationError(
+                f"positive={user_pos!r} does not match "
+                f"{entry.table_id}:{entry.name} value {table_pos!r}."
+            )
         if (
             "positive" in required
             and is_table_value(table_pos)

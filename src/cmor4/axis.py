@@ -7,7 +7,7 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import Field
 
-from .metadata import AxisStr, CoercedF, MetadataModel, StrSeq
+from .metadata import AxisStr, BoolCoerced, CoercedF, MetadataModel, StrSeq
 
 
 class Axis(MetadataModel):
@@ -99,14 +99,14 @@ class Axis(MetadataModel):
     auxiliary: bool | None = None
     auxiliary_name: str | None = None
     auxiliary_attrs: dict[str, Any] = Field(default_factory=dict)
-    climatology: str | bool | None = None
+    climatology: BoolCoerced = None
     generic_level_name: str | None = None
     z_factors: str | None = None
     z_bounds_factors: str | None = None
     requested: Any = None
     requested_bounds: Any = None
     bounds_values: Any = None
-    must_have_bounds: Any = None
+    must_have_bounds: BoolCoerced = None
     stored_direction: str | None = None
     tolerance: CoercedF = None
     bounds_name: str | None = None

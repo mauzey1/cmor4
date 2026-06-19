@@ -803,7 +803,7 @@ class ProjectTables:
         # Run unconditionally so that must_have_bounds and the variable's
         # table-declared frequency are enforced even when no dataset is
         # provided.
-        _validate_axes(dataset if dataset is not None else {}, variable, axes)
+        _validate_axes(dataset, variable, axes)
 
         # Calendar validation: warn if the dataset specifies a calendar that
         # is technically valid per CF but inappropriate for MIP data.

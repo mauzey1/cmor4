@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Annotated, Any, Literal, Mapping
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 from .metadata import CoercedF, IntTuple, MetadataModel, StrOrTuple, StrSeq
+
+
+def _lower_str(v: Any) -> Any:
+    """Normalise a string to lowercase, pass everything else through."""
+    return v.lower() if isinstance(v, str) else v
+
+
+# Literal type for the CF positive attribute, accepting any case.
+PositiveLiteral = Annotated[
+    Literal["up", "down"] | None,
+    BeforeValidator(_lower_str),
+]
 
 # ---------------------------------------------------------------------------
 # Variable
@@ -78,7 +90,7 @@ class Variable(MetadataModel):
     chunks: IntTuple = None
     coordinates: StrOrTuple = None
     formula_terms: str | None = None
-    positive: str | None = None
+    positive: PositiveLiteral = None
     frequency: str | None = None
     realm: str | None = None
     table_info: str | None = None

@@ -19,6 +19,7 @@ from cmor4 import (
     Variable,
     ZFactor,
 )
+from pydantic import ValidationError
 from cmor4.exceptions import (
     ControlledVocabularyError,
     TableValidationError,
@@ -1769,19 +1770,17 @@ class PositiveValidationTest(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_invalid_positive_value_raises(self):
-        with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_components(
-                None, Variable(name="wap", positive="sideways"), []
-            )
+        # Invalid value is caught at Variable construction by Pydantic's
+        # Literal validator, not inside validate_components.
+        with self.assertRaises(ValidationError) as ctx:
+            Variable(name="wap", positive="sideways")
         self.assertIn("positive", str(ctx.exception))
-        self.assertIn("sideways", str(ctx.exception))
 
     def test_invalid_positive_empty_string_raises(self):
-        # Empty string is invalid; None means not provided
-        with self.assertRaises(TableValidationError):
-            self.project.validate_components(
-                None, Variable(name="wap", positive=""), []
-            )
+        # Empty string is invalid; None means not provided.
+        # Pydantic's Literal validator catches this at construction time.
+        with self.assertRaises(ValidationError):
+            Variable(name="wap", positive="")
 
     def test_positive_wrong_direction_raises(self):
         with self.assertRaises(TableValidationError) as ctx:

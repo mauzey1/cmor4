@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 import re
 import warnings
 
 import cftime
 import numpy as np
+from pydantic import BaseModel, ConfigDict, Field
 
 from ._time_utils import cftime_interval_days
 from .axis import Axis
@@ -30,11 +30,24 @@ DEFAULT_FREQUENCY_INTERVALS = {
 }
 
 
-@dataclass(frozen=True)
-class _IntervalSpec:
-    days: float
-    warning: float = DEFAULT_INTERVAL_WARNING
-    error: float = DEFAULT_INTERVAL_ERROR
+class _IntervalSpec(BaseModel):
+    """Expected time interval for one frequency code.
+
+    Pydantic enforces the invariants that ``days`` is non-negative and that
+    the fractional thresholds are in (0, 1] with ``warning ≤ error``.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    days: float = Field(ge=0.0)
+    warning: float = Field(default=DEFAULT_INTERVAL_WARNING, gt=0.0, le=1.0)
+    error: float = Field(default=DEFAULT_INTERVAL_ERROR, gt=0.0, le=1.0)
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.warning > self.error:
+            raise ValueError(
+                f"_IntervalSpec warning={self.warning} must be ≤ error={self.error}"
+            )
 
 
 def validate_and_normalize_axes(
@@ -47,7 +60,7 @@ def validate_and_normalize_axes(
 
 
 def validate_axes(
-    dataset: DatasetInfo, variable: Variable, axes: Sequence[Axis]
+    dataset: DatasetInfo | None, variable: Variable, axes: Sequence[Axis]
 ) -> None:
     """Validate axis values with dataset and frequency-dependent checks."""
     for axis in axes:
@@ -64,8 +77,8 @@ def validate_axes(
 def validate_axis_values_early(axis: Axis) -> None:
     """Validate axis values without dataset- or frequency-dependent checks."""
     _validate_and_normalize_axis(
-        {},
-        {},
+        None,
+        None,
         axis,
         include_time_checks=False,
         enforce_required_bounds=False,
@@ -74,8 +87,8 @@ def validate_axis_values_early(axis: Axis) -> None:
 
 
 def _validate_and_normalize_axis(
-    dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
+    dataset: DatasetInfo | None,
+    variable: Variable | None,
     axis: Axis,
     *,
     include_time_checks: bool = True,
@@ -85,7 +98,7 @@ def _validate_and_normalize_axis(
     values = axis.values_array()
     bounds = axis.bounds_array() if axis.bounds is not None else None
     name = str(axis.table_entry or axis.name)
-    climatology = _is_truthy(axis.climatology)
+    climatology = bool(axis.climatology)
 
     values, bounds = _normalize_bounds_shape(axis, values, bounds)
     if enforce_required_bounds and _requires_bounds(axis) and bounds is None:
@@ -141,7 +154,7 @@ def _normalize_bounds_shape(
     if bounds is None:
         return values, bounds
     values_shape = values.shape
-    if (axis.scalar or False) and values.size == 1:
+    if bool(axis.scalar) and values.size == 1:
         if bounds.size == 2:
             return values, bounds.reshape(2)
         raise AxisValidationError("Scalar coordinate bounds must have 2 values.")
@@ -233,7 +246,7 @@ def _validate_monotonic(
 ) -> None:
     if values.ndim != 1 and not is_bounds:
         return
-    climatology = _is_truthy(axis.climatology)
+    climatology = bool(axis.climatology)
     if is_bounds:
         if values.shape[-1] < 2:
             return
@@ -317,19 +330,15 @@ def _time_values_from_bounds(
 
 
 def _validate_time_interval(
-    dataset: Mapping[str, Any],
-    variable: Mapping[str, Any],
+    dataset: DatasetInfo | None,
+    variable: Variable | None,
     axis: Axis,
     values: np.ndarray,
 ) -> None:
-    var_freq = (
-        variable.get("frequency", "")
-        if isinstance(variable, dict)
-        else str(getattr(variable, "frequency", "") or "")
-    )
-    frequency = str(dataset.get("frequency", var_freq))
+    var_freq = str(getattr(variable, "frequency", "") or "") if variable is not None else ""
+    frequency = str(dataset.get("frequency", var_freq)) if dataset is not None else var_freq
     if not frequency:
-        if dataset:
+        if dataset is not None:
             raise AxisValidationError(
                 "No frequency attribute provided in the dataset configuration. "
                 "A 'frequency' value is required when a time axis is present. "
@@ -345,7 +354,10 @@ def _validate_time_interval(
         return
     # calendar may be stored in axis.attrs (user-supplied) or in dataset
     units = str(axis.units or "days since ?")
-    calendar = str(axis.attrs.get("calendar") or dataset.get("calendar", "standard"))
+    calendar = str(
+        axis.attrs.get("calendar")
+        or (dataset.get("calendar", "standard") if dataset is not None else "standard")
+    )
     interval_days = _time_interval_days(flat, units, calendar)
     if interval_days.size == 0:
         return
@@ -355,12 +367,6 @@ def _validate_time_interval(
     if not np.any(bad_errors | bad_warnings):
         return
     index = int(np.nonzero(bad_errors | bad_warnings)[0][0])
-    var_freq = (
-        variable.get("frequency", "")
-        if isinstance(variable, dict)
-        else str(getattr(variable, "frequency", "") or "")
-    )
-    frequency = str(dataset.get("frequency", var_freq))
     message = (
         f"Time interval mismatch detected for frequency: {frequency!r}. "
         f"Expected interval between time axis values: {spec.days:g} days. "
@@ -382,14 +388,10 @@ def _time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.nda
 
 
 def _interval_spec(
-    dataset: Mapping[str, Any], variable: Mapping[str, Any]
+    dataset: DatasetInfo | None, variable: Variable | None
 ) -> _IntervalSpec | None:
-    var_freq = (
-        variable.get("frequency", "")
-        if isinstance(variable, dict)
-        else str(getattr(variable, "frequency", "") or "")
-    )
-    frequency = str(dataset.get("frequency", var_freq))
+    var_freq = str(getattr(variable, "frequency", "") or "") if variable is not None else ""
+    frequency = str(dataset.get("frequency", var_freq)) if dataset is not None else var_freq
     if not frequency:
         return None
     project = getattr(dataset, "project", None)
@@ -400,14 +402,14 @@ def _interval_spec(
             value = _numeric_or_none(entry.get("approx_interval"))
             if value is not None:
                 return _IntervalSpec(
-                    value,
-                    _numeric_or_none(entry.get("approx_interval_warning"))
+                    days=value,
+                    warning=_numeric_or_none(entry.get("approx_interval_warning"))
                     or DEFAULT_INTERVAL_WARNING,
-                    _numeric_or_none(entry.get("approx_interval_error"))
+                    error=_numeric_or_none(entry.get("approx_interval_error"))
                     or DEFAULT_INTERVAL_ERROR,
                 )
     value = DEFAULT_FREQUENCY_INTERVALS.get(frequency.lower())
-    return _IntervalSpec(value) if value is not None else None
+    return _IntervalSpec(days=value) if value is not None else None
 
 
 def _normalize_longitude(
@@ -512,7 +514,7 @@ def _validate_calendar(dataset: DatasetInfo) -> None:
 
 
 def _requires_bounds(axis: Axis) -> bool:
-    return _is_truthy(axis.must_have_bounds)
+    return bool(axis.must_have_bounds)
 
 
 def _is_time_axis(axis: Axis) -> bool:
@@ -541,10 +543,6 @@ def _direction(values: np.ndarray) -> float:
 
 def _is_numeric(values: np.ndarray) -> bool:
     return values.dtype.kind in {"i", "u", "f"}
-
-
-def _is_truthy(value: Any) -> bool:
-    return str(value).lower() in {"1", "true", "yes"}
 
 
 def _tolerance(axis: Axis) -> float:

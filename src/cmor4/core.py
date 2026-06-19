@@ -158,7 +158,7 @@ def create_dataset(
             dim_names = tuple(str(name) for name in variable.dimensions)
         else:
             dim_names = tuple(
-                axis.name for axis in axes if not (axis.auxiliary or False)
+                axis.name for axis in axes if not bool(axis.auxiliary)
             )
     dims = tuple(dim for name in dim_names for dim in axis_dims.get(name, ()))
 
@@ -605,7 +605,7 @@ def _add_axis(
     values = axis.values_array()
     coord_attrs = axis.attributes()
 
-    if axis.scalar or False:
+    if bool(axis.scalar):
         if values.shape == ():
             scalar_value = values.item()
         elif values.size == 1:
@@ -641,18 +641,14 @@ def _add_axis(
         if len(dims) == 1:
             axis_dims[name] = dims
             _add_axis_dim_aliases(axis, axis_dims, dims)
-        auxiliary = bool(axis.auxiliary or False) or len(dims) > 1
+        auxiliary = bool(axis.auxiliary) or len(dims) > 1
         if auxiliary:
             auxiliary_coord_names.append(out_name)
         else:
             axis_dims.setdefault(out_name, dims)
 
     if axis.bounds is not None:
-        climatology_axis = str(axis.climatology or "").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
+        climatology_axis = bool(axis.climatology)
         bounds_name = str(
             axis.bounds_name
             or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
@@ -800,11 +796,7 @@ def _validate_final_axis(ds: xr.Dataset, axis: Axis) -> None:
         raise ValueError(f"Axis {axis.name!r} was not created.")
     if axis.bounds is None:
         return
-    climatology_axis = str(axis.climatology or "").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    climatology_axis = bool(axis.climatology)
     bounds_name = str(
         axis.bounds_name
         or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")

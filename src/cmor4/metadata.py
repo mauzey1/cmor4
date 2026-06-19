@@ -64,12 +64,28 @@ def _upper_str(v: Any) -> Any:
     return v
 
 
+def _to_bool(v: Any) -> bool | None:
+    """Coerce truthy table strings (``"1"``, ``"true"``, ``"yes"``) to ``bool``.
+
+    Table JSON files store boolean flags as strings.  Accepting ``str | bool``
+    at the field level and delegating the conversion to this validator means
+    every consumer receives a genuine ``bool | None`` and no longer needs the
+    ``_is_truthy()`` guard function.
+    """
+    if v is None or v == "":
+        return None
+    if isinstance(v, bool):
+        return v
+    return str(v).lower() in {"1", "true", "yes"}
+
+
 StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
 StrSeq = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
 IntTuple = Annotated[tuple[int, ...] | None, BeforeValidator(_int_tuple)]
 StrOrTuple = Annotated[str | tuple[str, ...] | None, BeforeValidator(_str_or_tuple)]
 CoercedF = Annotated[float | None, BeforeValidator(_float_or_none)]
 AxisStr = Annotated[str | None, BeforeValidator(_upper_str)]
+BoolCoerced = Annotated[bool | None, BeforeValidator(_to_bool)]
 
 
 # ---------------------------------------------------------------------------

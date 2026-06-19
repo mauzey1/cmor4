@@ -56,6 +56,7 @@ import numpy as np
 import xarray as xr
 
 from cmor4 import Axis, ControlledVocabulary, ProjectTables, Variable
+from cmor4 import DatasetInfo, Variable
 from cmor4._axis_validation import _validate_time_interval, _is_time_axis
 from cmor4.core import _collect_external_variables, create_dataset, build_output_path
 from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
@@ -179,9 +180,8 @@ class TestFrequencyRequired(unittest.TestCase):
         for structure-only validation.
         """
         axis = self._time_axis(n_steps=3)
-        dataset_with_content = {"institution_id": "NCAR"}  # non-empty, no frequency
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(dataset_with_content, {}, axis, axis.values_array())
+            _validate_time_interval(DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array())
         self.assertIn("frequency", str(ctx.exception).lower())
 
     def test_missing_frequency_raises_for_single_step_time_axis(self):
@@ -198,16 +198,15 @@ class TestFrequencyRequired(unittest.TestCase):
             units="days since 2000-01-01",
             values=[15],
         )
-        dataset_with_content = {"institution_id": "NCAR"}
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(dataset_with_content, {}, axis, axis.values_array())
+            _validate_time_interval(DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array())
         self.assertIn("frequency", str(ctx.exception).lower())
 
     def test_empty_string_frequency_raises(self):
         """Explicit empty string treated same as absent."""
         axis = self._time_axis()
         with self.assertRaises(AxisValidationError):
-            _validate_time_interval({"frequency": ""}, {}, axis, axis.values_array())
+            _validate_time_interval(DatasetInfo(frequency=""), None, axis, axis.values_array())
 
     def test_error_message_contains_guidance(self):
         """Error message should guide the user toward setting frequency.
@@ -216,9 +215,8 @@ class TestFrequencyRequired(unittest.TestCase):
         is the structure-only sentinel used by validate_components.
         """
         axis = self._time_axis()
-        dataset_with_content = {"institution_id": "NCAR"}
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(dataset_with_content, {}, axis, axis.values_array())
+            _validate_time_interval(DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array())
         msg = str(ctx.exception)
         self.assertIn("frequency", msg.lower())
         self.assertIn("required", msg.lower())
@@ -231,8 +229,8 @@ class TestFrequencyRequired(unittest.TestCase):
         """frequency in dataset metadata → no error."""
         axis = self._time_axis()
         _validate_time_interval(
-            {"frequency": "mon", "calendar": "360_day"},
-            {},
+            DatasetInfo(frequency="mon", calendar="360_day"),
+            None,
             axis,
             axis.values_array(),
         )
@@ -241,8 +239,8 @@ class TestFrequencyRequired(unittest.TestCase):
         """frequency carried on the variable → no error."""
         axis = self._time_axis()
         _validate_time_interval(
-            {},
-            {"frequency": "mon"},
+            None,
+            Variable(name="time", frequency="mon"),
             axis,
             axis.values_array(),
         )
@@ -272,9 +270,8 @@ class TestFrequencyRequired(unittest.TestCase):
             units="days since 2000-01-01",
             values=[15, 45, 75],
         )
-        dataset_with_content = {"institution_id": "NCAR"}  # no frequency key
         with self.assertRaises(AxisValidationError):
-            validate_axes(dataset_with_content, {}, [time_axis])
+            validate_axes(DatasetInfo(institution_id="NCAR"), None, [time_axis])
 
     def test_validate_axes_passes_for_lat_without_frequency(self):
         """Non-time axes are not affected by the frequency requirement."""
@@ -286,7 +283,7 @@ class TestFrequencyRequired(unittest.TestCase):
             units="degrees_north",
             values=[-45.0, 45.0],
         )
-        validate_axes({}, {}, [lat_axis])  # no error expected
+        validate_axes(None, None, [lat_axis])  # no error expected
 
     def test_project_tables_create_dataset_raises_without_frequency(self):
         """create_dataset raises AxisValidationError when frequency is absent from
