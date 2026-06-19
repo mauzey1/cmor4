@@ -551,65 +551,107 @@ class ProjectTables:
 
         return self._axes(axes, variable)
 
-    def grid(self, name: str | None = None, **values: Any) -> Grid:
+    def grid(
+        self,
+        name: str | None = None,
+        *,
+        axes: Sequence[Axis] = (),
+        **values: Any,
+    ) -> Grid:
         """Create a grid with metadata from the loaded grid table.
 
         This factory method creates a ``Grid`` metadata record for variables
-        on non-rectilinear grids or with coordinate reference systems. It
+        on non-rectilinear grids or with coordinate reference systems.  It
         resolves grid mapping entries from the project's grid table and merges
         projection parameters with user-provided values.
+
+        When *axes* are supplied the grid owns those :class:`Axis` objects as
+        its indexing dimensions.  Each axis is validated against the grid
+        table's ``axis_entry`` section and flagged ``isgridaxis=True``.  The
+        ``dimensions`` tuple is derived automatically from the axis
+        ``out_name`` values so it need not be supplied separately.
 
         Parameters
         ----------
         name
-            Optional grid mapping entry name (e.g., "lambert_conformal_conic",
-            "rotated_latitude_longitude"). If None, the grid must specify
-            mapping metadata via other parameters.
+            Optional grid mapping entry name (e.g.,
+            ``"lambert_conformal_conic"``, ``"rotated_latitude_longitude"``).
+            If ``None``, the grid must specify mapping metadata via other
+            parameters.
+        axes
+            :class:`Axis` objects that form the grid's indexing dimensions
+            (e.g. ``i_index``, ``j_index``).  Each must correspond to an
+            entry in the grid table's ``axis_entry`` section.  Pass an empty
+            sequence (the default) for grids that use only ``dimensions``
+            names or have no spatial index axes.
         **values
-            User-supplied grid metadata. Common keywords include dimensions
-            (for grid dimension override), mapping_name or grid_mapping_name,
-            params (projection parameters dict), coordinates (auxiliary
-            coordinate names), mapping_var (grid mapping variable name), and
-            attrs for additional attributes.
+            User-supplied grid metadata.  Common keywords include
+            ``dimensions`` (string names, when not derived from *axes*),
+            ``mapping_name`` / ``grid_mapping_name``, ``params`` (projection
+            parameters dict), ``coordinates`` (auxiliary coordinate names),
+            ``mapping_var`` (grid mapping variable name), ``latitude``,
+            ``longitude``, ``latitude_vertices``, ``longitude_vertices``, and
+            ``attrs`` for additional attributes.
 
         Returns
         -------
         Grid
             Grid metadata record with table values and projection parameters
-            merged.
+            merged.  When *axes* is non-empty the returned ``Grid.axes``
+            contains updated copies of the supplied axes with
+            ``isgridaxis=True``.
+
+        Raises
+        ------
+        TableValidationError
+            If any supplied axis name is not present in the grid table's
+            ``axis_entry`` section.
 
         Examples
         --------
-        Create grid for Lambert Conformal Conic projection::
+        Axis-based curvilinear ocean grid::
 
             project = ProjectTables.from_directory(...)
-            grid = project.grid(
-                "lambert_conformal_conic",
-                params={
-                    "standard_parallel": ([30.0, 60.0], "degrees_north"),
-                    "longitude_of_central_meridian": (-100.0, "degrees_east")
-                }
-            )
-
-        Create grid with dimension override for curvilinear ocean::
+            i_axis = project.axis("i_index", values=np.arange(192))
+            j_axis = project.axis("j_index", values=np.arange(144))
 
             grid = project.grid(
-                dimensions=("j", "i"),
-                coordinates=["nav_lat", "nav_lon"]
+                axes=[j_axis, i_axis],
+                latitude=lat_2d,
+                longitude=lon_2d,
+                latitude_vertices=blat_3d,
+                longitude_vertices=blon_3d,
             )
 
-        Create rotated pole grid::
+        Name-based rotated pole grid::
 
             grid = project.grid(
                 "rotated_latitude_longitude",
                 params={
                     "grid_north_pole_latitude": (37.5, "degrees_north"),
-                    "grid_north_pole_longitude": (-177.5, "degrees_east")
-                }
+                    "grid_north_pole_longitude": (-177.5, "degrees_east"),
+                },
             )
         """
+        # Validate that each axis corresponds to an entry in the grids table.
+        grid_axis_names = set(self.grid_table.axis_entries)
+        for axis in axes:
+            candidate = str(
+                axis.table_entry
+                or axis.axis_entry
+                or axis.coordinate
+                or axis.name
+                or axis.out_name
+            )
+            if grid_axis_names and candidate not in grid_axis_names:
+                raise TableValidationError(
+                    f"Axis {candidate!r} is not in the grid table axis_entry. "
+                    f"Valid grid axes are: {sorted(grid_axis_names)}."
+                )
 
         data = {k: v for k, v in {"name": name, **values}.items() if v is not None}
+        if axes:
+            data["axes"] = list(axes)
         return Grid.model_validate(self.grid_table.build(data))
 
     def zfactor(self, name: str, **values: Any) -> ZFactor:
@@ -754,6 +796,20 @@ class ProjectTables:
             ds = create_dataset(dataset, variable, axes, data)
         """
 
+        # must_call_cmor_grid fast-fail: if any axis in the user-provided axes
+        # list carries isgridaxis=True but no Grid was supplied, raise
+        # immediately before any further validation.  Grid dimensional axes
+        # belong in Grid.axes, not in the regular axes sequence; this guard
+        # catches the mistake early with a clear error.
+        for axis in axes:
+            if axis.isgridaxis and grid is None:
+                dim = str(axis.out_name or axis.name)
+                raise TableValidationError(
+                    f"Axis {dim!r} is a grid axis (isgridaxis=True) but no "
+                    "Grid was provided.  Pass the Grid via the grid= "
+                    "parameter of create_dataset() / cmorize()."
+                )
+
         # Variable validation: ensure stored attributes match table entry
         # Note: This may be redundant with validation in _dataset_for_variable,
         # but we validate again here to ensure consistency when called directly
@@ -811,7 +867,7 @@ class ProjectTables:
             _validate_calendar(dataset)
 
         # Check that required scalar axes are present (if not auto-added)
-        present_names = {
+        present = {
             str(value)
             for axis in axes
             for value in (
@@ -824,10 +880,19 @@ class ProjectTables:
             )
             if value
         }
+        # Also register dimension names covered by the grid's own axes so the
+        # scalar-axis check below does not fire for grid dimensions.
+        if grid is not None:
+            for axis in getattr(grid, "axes", []):
+                for value in (axis.name, axis.out_name, axis.table_entry):
+                    if value:
+                        present.add(str(value))
+            if grid.dimensions:
+                present.update(str(d) for d in grid.dimensions)
 
         for dimension in variable.dimensions or ():
             dimension_name = str(dimension)
-            if dimension_name not in present_names:
+            if dimension_name not in present:
                 if dimension_name in self.scalar_axis_entries:
                     raise TableValidationError(
                         f"Variable requires scalar axis {dimension_name!r} "
@@ -861,9 +926,11 @@ class ProjectTables:
                             f"{expected!r}."
                         )
 
-            # Validate that grid dimensions correspond to spatial axes and
-            # that the lat/lon array shape matches the axis lengths in order.
-            if grid.dimensions:
+            # Validate dimensional axes and lat/lon shape consistency.
+            grid_axes = getattr(grid, "axes", [])
+            if grid_axes:
+                _validate_grid_dimensions(grid, axes)
+            elif grid.dimensions:
                 _validate_grid_dimensions(grid, axes)
 
         # ZFactor validation: ensure stored attributes match tables
@@ -1179,20 +1246,23 @@ def _validate_grid_dimensions(
     grid: Grid,
     axes: Sequence[Axis],
 ) -> None:
-    """Validate that grid dimensions correspond to spatial axes in the right
-    order.
+    """Validate that grid dimensions correspond to spatial axes in the right order.
 
-    For each name in ``grid.dimensions`` (in order) there must be a matching
-    axis among *axes*.  When ``grid.latitude`` or ``grid.longitude`` is also
-    provided, the size of the array along dimension *i* must equal the number
-    of coordinate values on the corresponding axis.
+    When ``grid.axes`` is non-empty the dimensional axes are already owned by
+    the grid; validation checks that each axis carries coordinate values and
+    that the lat/lon array shapes match the axis lengths in declared order.
+
+    When ``grid.axes`` is empty (name-based path) every name in
+    ``grid.dimensions`` must resolve to one of the supplied *axes* by any
+    recognised name variant, and the same shape checks apply.
 
     Parameters
     ----------
     grid
-        Grid whose ``dimensions`` list is to be validated.
+        Grid whose dimensional axes are to be validated.
     axes
-        The axis objects supplied alongside the grid.
+        The axis objects supplied alongside the grid (non-grid axes such as
+        time).  Only consulted on the name-based path.
 
     Raises
     ------
@@ -1203,8 +1273,35 @@ def _validate_grid_dimensions(
     """
     import numpy as np
 
+    if getattr(grid, "axes", None):
+        # --- Axis-based path: grid owns its dimensional Axis objects -------
+        grid_axes = list(grid.axes)
+
+        lat = grid.latitude
+        lon = grid.longitude
+        for array, label in ((lat, "latitude"), (lon, "longitude")):
+            if array is None:
+                continue
+            arr = np.asarray(array)
+            for i, axis in enumerate(grid_axes):
+                axis_len = len(axis.values_array())
+                if arr.shape[i] != axis_len:
+                    dim_name = str(axis.out_name or axis.name)
+                    raise TableValidationError(
+                        f"Grid {label} array shape {arr.shape} does not match "
+                        f"the axis lengths implied by grid.axes. "
+                        f"Axis {dim_name!r} (index {i}) has {axis_len} "
+                        f"coordinate values but {label} has size "
+                        f"{arr.shape[i]} along that axis."
+                    )
+        return
+
+    # --- Name-based path: match dimension strings to supplied axes ----------
+    if not grid.dimensions:
+        return
+
     # Build a lookup from every recognised name variant to the axis object.
-    name_to_axis: dict[str, "Axis"] = {}
+    name_to_axis: dict[str, Axis] = {}
     for axis in axes:
         for value in (
             axis.name,
@@ -1219,19 +1316,16 @@ def _validate_grid_dimensions(
 
     grid_dims = [str(d) for d in grid.dimensions]
 
-    # --- 1. Every dimension name must resolve to an axis -------------------
     for dim_name in grid_dims:
         if dim_name not in name_to_axis:
             raise TableValidationError(
                 f"Grid dimension {dim_name!r} does not correspond to any "
-                "of the supplied axes. Each grid spatial dimension must "
+                "of the supplied axes.  Each grid spatial dimension must "
                 "match an axis by name, out_name, or table_entry."
             )
 
-    # --- 2. Array shapes must match axis lengths in declared order ---------
     lat = grid.latitude
     lon = grid.longitude
-
     for array, label in ((lat, "latitude"), (lon, "longitude")):
         if array is None:
             continue

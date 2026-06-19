@@ -515,35 +515,46 @@ def _grid_axes(
     variable_dimensions: tuple[str, ...],
     project: Any | None,
 ) -> list[Axis]:
-    """Create Axis objects for Grid latitude/longitude coordinates.
+    """Return all Axis objects that a Grid contributes to the dataset.
 
-    The latitude and longitude arrays from the grid are used to create
-    auxiliary coordinate axes with only the spatial dimensions (time is
-    filtered out).
+    Produces two groups, in order:
+
+    1. **Dimensional axes** (``grid.axes``) — the indexing dimensions of the
+       grid (e.g. ``i_index``, ``j_index``).  These are already fully-formed
+       :class:`~cmor4.Axis` instances owned by the grid; they are passed
+       through unchanged.
+
+    2. **Auxiliary coordinate axes** — ``latitude`` and ``longitude`` 2-D
+       arrays written as auxiliary coordinate variables.  Created here from
+       the grid's data arrays; marked ``auxiliary=True``.
 
     Parameters
     ----------
     grid
-        Grid object potentially containing latitude/longitude arrays.
+        Grid object to inspect.
     variable_dimensions
-        Variable dimensions to use for inferring grid spatial dimensions when
-        grid.dimensions is not specified. Time dimension will be filtered out.
+        Fallback dimension names (from the variable table) used to infer the
+        spatial dimension list when ``grid.dimensions`` is not set.  Time is
+        filtered out.
     project
-        Project tables used to merge coordinate metadata from tables.
+        Project tables used to merge grid-coordinate metadata from tables.
 
     Returns
     -------
     list[Axis]
-        List of Axis objects for latitude and longitude grid coordinates with
-        spatial dimensions only. Empty if grid has no latitude/longitude
-        defined.
+        Dimensional axes followed by auxiliary coordinate axes.  Empty when
+        *grid* is ``None`` or has neither ``axes`` nor lat/lon arrays.
     """
     if grid is None:
         return []
 
-    axes: list[Axis] = []
+    result: list[Axis] = []
 
-    # Determine spatial dimensions (x and y only, exclude time)
+    # --- 1. Dimensional axes (already Axis objects, owned by the grid) -----
+    result.extend(grid.axes)
+
+    # --- 2. Auxiliary lat/lon coordinate axes --------------------------------
+    # Determine spatial dimension names for the auxiliary arrays.
     if grid.dimensions:
         spatial_dims = [
             str(d) for d in grid.dimensions if str(d).lower() not in ("time",)
@@ -555,7 +566,6 @@ def _grid_axes(
     else:
         spatial_dims = []
 
-    # Create latitude axis if provided
     if grid.latitude is not None:
         lat_data: dict[str, Any] = {
             "name": "latitude",
@@ -569,10 +579,8 @@ def _grid_axes(
         }
         if project is not None:
             lat_data = project.coordinate_table.build(lat_data)
-        lat_axis = Axis.model_validate(lat_data)
-        axes.append(lat_axis)
+        result.append(Axis.model_validate(lat_data))
 
-    # Create longitude axis if provided
     if grid.longitude is not None:
         lon_data: dict[str, Any] = {
             "name": "longitude",
@@ -586,10 +594,9 @@ def _grid_axes(
         }
         if project is not None:
             lon_data = project.coordinate_table.build(lon_data)
-        lon_axis = Axis.model_validate(lon_data)
-        axes.append(lon_axis)
+        result.append(Axis.model_validate(lon_data))
 
-    return axes
+    return result
 
 
 def _add_axis(

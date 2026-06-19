@@ -113,6 +113,7 @@ class Axis(MetadataModel):
     bounds_dim: str | None = None
     bounds_attrs: dict[str, Any] = Field(default_factory=dict)
     attrs: dict[str, Any] = Field(default_factory=dict)
+    isgridaxis: bool = False
 
     # ------------------------------------------------------------------
     # NetCDF output helpers

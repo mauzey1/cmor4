@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 from pydantic import Field, model_validator
 
+from .axis import Axis
 from .metadata import MetadataModel, StrSeq, StrTuple
 
 _LATITUDE_PARAMS: frozenset[str] = frozenset(
@@ -39,20 +40,46 @@ _NONNEG_PARAMS: frozenset[str] = frozenset(
 class Grid(MetadataModel):
     """Runtime grid dimensions and optional CF grid-mapping metadata.
 
-    Construct via :meth:`ProjectTables.grid` to merge grid-table metadata::
+    Grid objects may be constructed in two ways:
+
+    **Axis-based** — supply ``axes`` with already-created :class:`~cmor4.Axis`
+    instances.  The grid owns those axes as its indexing dimensions; it
+    derives ``dimensions`` from them automatically and marks each axis with
+    ``isgridaxis=True``.  This is the recommended path for curvilinear and
+    unstructured grids::
+
+        i_axis = project.axis("i_index", values=np.arange(192))
+        j_axis = project.axis("j_index", values=np.arange(144))
 
         grid = project.grid(
-            dimensions=["x", "y"],
-            mapping_name="lambert_azimuthal_equal_area",
-            params={...},
+            axes=[j_axis, i_axis],
             latitude=lat_2d,
             longitude=lon_2d,
+            latitude_vertices=blat_3d,
+            longitude_vertices=blon_3d,
+        )
+
+    **Name-based** — supply ``dimensions`` as a tuple of string names.  The
+    grid references axes that the caller keeps separately, matched by name at
+    validation time.  Useful for grid-mapping-only grids with no curvilinear
+    lat/lon::
+
+        grid = project.grid(
+            dimensions=("x", "y"),
+            mapping_name="lambert_azimuthal_equal_area",
+            params={...},
         )
 
     Parameters
     ----------
+    axes:
+        Ordered :class:`~cmor4.Axis` objects that form the grid's indexing
+        dimensions.  When supplied, ``dimensions`` is derived from them and
+        each axis is flagged ``isgridaxis=True``.
     dimensions:
-        Spatial (non-time) dimensions for the data variable.
+        Spatial (non-time) dimension names.  Derived automatically from
+        ``axes`` when ``axes`` is provided; supply explicitly when using the
+        name-based path.
     name, table_entry, mapping_entry:
         Grid table entry name selectors.
     mapping_var:
@@ -74,6 +101,7 @@ class Grid(MetadataModel):
         Name for the vertices dimension (default ``"vertices"``).
     """
 
+    axes: list[Axis] = Field(default_factory=list)
     dimensions: StrTuple = None
     name: str | None = None
     table_entry: str | None = None
@@ -90,6 +118,31 @@ class Grid(MetadataModel):
     longitude_vertices: Any = None
     vertices_dim: str = "vertices"
 
+    # ------------------------------------------------------------------
+    # Validators
+    # ------------------------------------------------------------------
+
+    @model_validator(mode="after")
+    def _sync_axes_and_dimensions(self) -> Grid:
+        """Derive dimensions from axes, mark axes as isgridaxis."""
+        from .axis import Axis as _Axis  # local import avoids circular
+
+        if self.axes:
+            # Mark every dimensional axis as belonging to a grid.
+            # Axis is frozen, so build updated copies if not already flagged.
+            updated: list[_Axis] = [
+                a if a.isgridaxis else a.updated(isgridaxis=True)
+                for a in self.axes
+            ]
+            object.__setattr__(self, "axes", updated)
+
+            # Derive dimensions tuple from axes when the caller did not supply it.
+            if not self.dimensions:
+                dims = tuple(str(a.out_name or a.name) for a in updated)
+                object.__setattr__(self, "dimensions", dims)
+
+        return self
+
     @model_validator(mode="after")
     def _check_spatial_arrays(self) -> Grid:
         """Validate that latitude / longitude shapes are consistent."""
@@ -101,10 +154,11 @@ class Grid(MetadataModel):
             raise ValueError(
                 f"latitude shape {la.shape} does not match longitude shape {lo.shape}."
             )
-        if self.dimensions is not None and la.ndim != len(self.dimensions):
+        ndims = len(self.dimensions) if self.dimensions is not None else None
+        if ndims is not None and la.ndim != ndims:
             raise ValueError(
                 f"lat/lon arrays have {la.ndim} dimension(s) but "
-                f"{len(self.dimensions)} grid dimension(s) were specified."
+                f"{ndims} grid dimension(s) were specified."
             )
         for name, arr, ref in (
             ("latitude_vertices", self.latitude_vertices, la),
@@ -132,18 +186,25 @@ class Grid(MetadataModel):
         """Return the full dimension tuple for the data variable.
 
         Combines time from *variable* with the grid's spatial dimensions.
+        When ``axes`` is set the spatial dimension names are derived from the
+        axis ``out_name`` (or ``name``) values; otherwise ``dimensions`` is
+        used directly.
         """
-        if self.dimensions:
+        if self.axes:
+            grid_dims = tuple(str(a.out_name or a.name) for a in self.axes)
+        elif self.dimensions:
             grid_dims = tuple(str(n) for n in self.dimensions)
-            var_dims = variable.dimensions
-            if var_dims:
-                time_dims = tuple(str(d) for d in var_dims if str(d).lower() == "time")
-                return time_dims + grid_dims
-            return grid_dims
-        dims = variable.dimensions
-        if dims:
-            return tuple(str(n) for n in dims)
-        return None
+        else:
+            dims = variable.dimensions
+            return tuple(str(n) for n in dims) if dims else None
+
+        var_dims = variable.dimensions
+        if var_dims:
+            time_dims = tuple(
+                str(d) for d in var_dims if str(d).lower() == "time"
+            )
+            return time_dims + grid_dims
+        return grid_dims
 
     @property
     def has_mapping(self) -> bool:
