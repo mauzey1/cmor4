@@ -1,0 +1,20 @@
+preview = true
+line-length = 88
+
+exclude = [
+    ".git",
+    "__pycache__",
+    "env",
+    "venv",
+    "build",
+    "dist",
+    ".mypy_cache",
+]
+
+# Replicate flake8 checks
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
+]

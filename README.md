@@ -40,14 +40,15 @@ python -m unittest discover -s tests
 Run code style checks:
 
 ```bash
-black --check src tests
-flake8 src tests
+ruff check src tests
+ruff format src tests --check
 ```
 
 Run code formatting:
 
 ```bash
-black src tests
+ruff check src tests --fix
+ruff format src tests
 ```
 
 ## Workflow

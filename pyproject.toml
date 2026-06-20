@@ -28,11 +28,10 @@ notebook = [
   "basemap>=2",
   "pyproj>=3.7",
   "nbstripout>=0.9",
-  "black[jupyter]>=26.5",
+  "nbqa>=1.9",
 ]
 dev = [
-  "black>=26.5",
-  "flake8>=7.3",
+  "ruff>=0.15",
   "mypy>=2.1",
   "sphinx>=7.0",
   "sphinx-autobuild>=2024.0",
