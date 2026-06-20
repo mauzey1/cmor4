@@ -445,14 +445,17 @@ class ProjectTablesTest(unittest.TestCase):
     def test_controlled_vocabulary_loads_project_cv_wrapper(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             cv_file = Path(tmp_dir) / "CV.json"
-            cv_file.write_text("""
+            cv_file.write_text(
+                """
 {
   "CV": {
     "activity_id": ["CMIP"],
     "required_global_attributes": ["activity_id"]
   }
 }
-""".strip() + "\n")
+""".strip()
+                + "\n"
+            )
 
             cv = cmor4.ControlledVocabulary.from_file(cv_file)
 
@@ -513,7 +516,8 @@ class ProjectTablesTest(unittest.TestCase):
             variable_table = root / "test_table.json"
             coordinate_table = root / "coordinate.json"
             cv_file.write_text('{"CV": {}}\n')
-            variable_table.write_text("""
+            variable_table.write_text(
+                """
 {
   "Header": {"table_id": "test"},
   "variable_entry": {
@@ -524,8 +528,11 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip() + "\n")
-            coordinate_table.write_text("""
+""".strip()
+                + "\n"
+            )
+            coordinate_table.write_text(
+                """
 {
   "axis_entry": {
     "runtime_axis": {
@@ -537,7 +544,9 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip() + "\n")
+""".strip()
+                + "\n"
+            )
             project = cmor4.ProjectTables(
                 cv_file,
                 [variable_table],
@@ -689,7 +698,8 @@ class ProjectTablesTest(unittest.TestCase):
             variable_table = root / "test_table.json"
             coordinate_table = root / "coordinate.json"
             cv_file.write_text('{"CV": {}}\n')
-            variable_table.write_text("""
+            variable_table.write_text(
+                """
 {
   "Header": {"table_id": "test"},
   "variable_entry": {
@@ -700,8 +710,11 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip() + "\n")
-            coordinate_table.write_text("""
+""".strip()
+                + "\n"
+            )
+            coordinate_table.write_text(
+                """
 {
   "axis_entry": {
     "longitude": {
@@ -713,7 +726,9 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip() + "\n")
+""".strip()
+                + "\n"
+            )
             project = cmor4.ProjectTables(
                 cv_file,
                 [variable_table],
@@ -877,7 +892,8 @@ class ProjectTablesTest(unittest.TestCase):
             root = Path(tmp_dir)
             cv_file = root / "CV.json"
             variable_table = root / "test_table.json"
-            cv_file.write_text("""
+            cv_file.write_text(
+                """
 {
   "CV": {
     "activity_id": ["CMIP"],
@@ -896,8 +912,11 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip() + "\n")
-            variable_table.write_text("""
+""".strip()
+                + "\n"
+            )
+            variable_table.write_text(
+                """
 {
   "Header": {"table_id": "test"},
   "variable_entry": {
@@ -908,7 +927,9 @@ class ProjectTablesTest(unittest.TestCase):
     }
   }
 }
-""".strip() + "\n")
+""".strip()
+                + "\n"
+            )
             project = cmor4.ProjectTables(cv_file, [variable_table])
             dataset = {
                 "activity_id": "CMIP",
@@ -1477,45 +1498,44 @@ class DatasetInfoMethodTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_returns_dataset_info_instance(self):
-        info = self.project.dataset_info(
-            {"activity_id": "CMIP", "institution_id": "NCAR"}
-        )
+        info = self.project.dataset_info({
+            "activity_id": "CMIP",
+            "institution_id": "NCAR",
+        })
         self.assertIsInstance(info, DatasetInfo)
 
     def test_applies_scalar_cv_default(self):
         # _RICH_CV has "mip_era": "CMIP7" — a scalar default
-        info = self.project.dataset_info(
-            {"activity_id": "CMIP", "institution_id": "NCAR"}
-        )
+        info = self.project.dataset_info({
+            "activity_id": "CMIP",
+            "institution_id": "NCAR",
+        })
         self.assertEqual(info["mip_era"], "CMIP7")
 
     def test_user_values_are_preserved(self):
-        info = self.project.dataset_info(
-            {
-                "activity_id": "CMIP",
-                "institution_id": "NCAR",
-                "grid_label": "gn",
-            }
-        )
+        info = self.project.dataset_info({
+            "activity_id": "CMIP",
+            "institution_id": "NCAR",
+            "grid_label": "gn",
+        })
         self.assertEqual(info["activity_id"], "CMIP")
         self.assertEqual(info["grid_label"], "gn")
 
     def test_institution_text_filled_from_institution_id(self):
-        info = self.project.dataset_info(
-            {"activity_id": "CMIP", "institution_id": "NCAR"}
-        )
+        info = self.project.dataset_info({
+            "activity_id": "CMIP",
+            "institution_id": "NCAR",
+        })
         self.assertIn("institution", info)
         self.assertIn("National Center", info["institution"])
 
     def test_rejects_invalid_activity_id_at_validation(self):
         """dataset_info validates controlled values and rejects unknown ones."""
         with self.assertRaises(ControlledVocabularyError):
-            self.project.dataset_info(
-                {
-                    "activity_id": "NOT_REAL",
-                    "institution_id": "NCAR",
-                }
-            )
+            self.project.dataset_info({
+                "activity_id": "NOT_REAL",
+                "institution_id": "NCAR",
+            })
 
     def test_validate_dataset_enforces_required_attributes(self):
         """
@@ -2843,12 +2863,10 @@ class ValidateDatasetTest(unittest.TestCase):
 
     def test_invalid_controlled_value_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_dataset(
-                {
-                    "activity_id": "INVALID",
-                    "institution_id": "NCAR",
-                }
-            )
+            self.project.validate_dataset({
+                "activity_id": "INVALID",
+                "institution_id": "NCAR",
+            })
 
     def test_missing_required_attribute_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
@@ -2856,12 +2874,10 @@ class ValidateDatasetTest(unittest.TestCase):
         self.assertIn("institution_id", str(ctx.exception))
 
     def test_returns_none_on_success(self):
-        result = self.project.validate_dataset(
-            {
-                "activity_id": "CMIP",
-                "institution_id": "NCAR",
-            }
-        )
+        result = self.project.validate_dataset({
+            "activity_id": "CMIP",
+            "institution_id": "NCAR",
+        })
         self.assertIsNone(result)
 
     def test_empty_cv_accepts_any_values(self):
@@ -2876,13 +2892,11 @@ class ValidateDatasetTest(unittest.TestCase):
     def test_invalid_source_type_raises(self):
         """source_type is a multi-token field validated against the CV."""
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_dataset(
-                {
-                    "activity_id": "CMIP",
-                    "institution_id": "NCAR",
-                    "source_type": "NOT_A_REAL_TYPE",
-                }
-            )
+            self.project.validate_dataset({
+                "activity_id": "CMIP",
+                "institution_id": "NCAR",
+                "source_type": "NOT_A_REAL_TYPE",
+            })
 
 
 # ---------------------------------------------------------------------------
@@ -2900,20 +2914,16 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_all_required_present_passes(self):
-        self.project.validate_required_global_attributes(
-            {
-                "activity_id": "CMIP",
-                "institution_id": "NCAR",
-            }
-        )
+        self.project.validate_required_global_attributes({
+            "activity_id": "CMIP",
+            "institution_id": "NCAR",
+        })
 
     def test_missing_required_attribute_raises_with_name(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_required_global_attributes(
-                {
-                    "activity_id": "CMIP",
-                }
-            )
+            self.project.validate_required_global_attributes({
+                "activity_id": "CMIP",
+            })
         self.assertIn("institution_id", str(ctx.exception))
 
     def test_both_missing_raises(self):
@@ -2922,20 +2932,16 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
 
     def test_empty_string_counts_as_missing(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_required_global_attributes(
-                {
-                    "activity_id": "CMIP",
-                    "institution_id": "",
-                }
-            )
+            self.project.validate_required_global_attributes({
+                "activity_id": "CMIP",
+                "institution_id": "",
+            })
 
     def test_returns_none_on_success(self):
-        result = self.project.validate_required_global_attributes(
-            {
-                "activity_id": "CMIP",
-                "institution_id": "NCAR",
-            }
-        )
+        result = self.project.validate_required_global_attributes({
+            "activity_id": "CMIP",
+            "institution_id": "NCAR",
+        })
         self.assertIsNone(result)
 
     def test_no_required_attributes_always_passes(self):
@@ -3047,30 +3053,24 @@ class ValidateExperimentTest(unittest.TestCase):
         _write(vtable, {"Header": {"table_id": "t"}, "variable_entry": {}})
         project = ProjectTables(cv_file, [vtable])
         with self.assertRaises(ControlledVocabularyError):
-            project.validate_experiment(
-                {
-                    "experiment_id": "historical",
-                    "source_type": "AOGCM BGC",
-                }
-            )
+            project.validate_experiment({
+                "experiment_id": "historical",
+                "source_type": "AOGCM BGC",
+            })
 
     def test_valid_additional_allowed_source_type_passes(self):
-        self.project.validate_experiment(
-            {
-                "experiment_id": "historical",
-                "source_type": "AOGCM AER",
-            }
-        )
+        self.project.validate_experiment({
+            "experiment_id": "historical",
+            "source_type": "AOGCM AER",
+        })
 
     def test_wrong_activity_id_for_experiment_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_experiment(
-                {
-                    "experiment_id": "historical",
-                    "source_type": "AOGCM",
-                    "activity_id": "ScenarioMIP",  # historical requires CMIP
-                }
-            )
+            self.project.validate_experiment({
+                "experiment_id": "historical",
+                "source_type": "AOGCM",
+                "activity_id": "ScenarioMIP",  # historical requires CMIP
+            })
 
     def test_parent_attribute_on_no_parent_experiment_raises(self):
         """amip has no parent_experiment_id CV entry.  validate_parent_attributes
@@ -3078,12 +3078,10 @@ class ValidateExperimentTest(unittest.TestCase):
         validate_experiment itself does not perform this check."""
         # verify the correct method rejects it
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_parent_attributes(
-                {
-                    "experiment_id": "amip",
-                    "parent_experiment_id": "piControl",
-                }
-            )
+            self.project.validate_parent_attributes({
+                "experiment_id": "amip",
+                "parent_experiment_id": "piControl",
+            })
         self.assertIn("parent_experiment_id", str(ctx.exception))
 
     def test_returns_none_on_success(self):
@@ -3174,22 +3172,18 @@ class ValidateSourceAttributesTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_valid_source_attributes_pass(self):
-        self.project.validate_source_attributes(
-            {
-                "source_id": "CESM2",
-                "institution_id": "NCAR",
-                "source_type": "AOGCM",
-            }
-        )
+        self.project.validate_source_attributes({
+            "source_id": "CESM2",
+            "institution_id": "NCAR",
+            "source_type": "AOGCM",
+        })
 
     def test_wrong_institution_for_source_id_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_source_attributes(
-                {
-                    "source_id": "CESM2",
-                    "institution_id": "ECMWF",
-                }
-            )
+            self.project.validate_source_attributes({
+                "source_id": "CESM2",
+                "institution_id": "ECMWF",
+            })
         self.assertIn("institution_id", str(ctx.exception))
 
     def test_no_source_id_is_no_op(self):
@@ -3198,39 +3192,31 @@ class ValidateSourceAttributesTest(unittest.TestCase):
 
     def test_unknown_source_id_is_no_op(self):
         """source_id not in CV: nothing to cross-check."""
-        self.project.validate_source_attributes(
-            {
-                "source_id": "TOTALLY_UNKNOWN",
-                "institution_id": "ANY",
-            }
-        )
+        self.project.validate_source_attributes({
+            "source_id": "TOTALLY_UNKNOWN",
+            "institution_id": "ANY",
+        })
 
     def test_source_id_with_correct_source_type_passes(self):
-        self.project.validate_source_attributes(
-            {
-                "source_id": "CESM2",
-                "institution_id": "NCAR",
-                "source_type": "AOGCM",
-            }
-        )
+        self.project.validate_source_attributes({
+            "source_id": "CESM2",
+            "institution_id": "NCAR",
+            "source_type": "AOGCM",
+        })
 
     def test_source_id_with_wrong_source_type_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_source_attributes(
-                {
-                    "source_id": "CESM2",
-                    "institution_id": "NCAR",
-                    "source_type": "AER",  # CESM2 must be AOGCM
-                }
-            )
+            self.project.validate_source_attributes({
+                "source_id": "CESM2",
+                "institution_id": "NCAR",
+                "source_type": "AER",  # CESM2 must be AOGCM
+            })
 
     def test_returns_none_on_success(self):
-        result = self.project.validate_source_attributes(
-            {
-                "source_id": "DUMMY",
-                "institution_id": "NCAR",
-            }
-        )
+        result = self.project.validate_source_attributes({
+            "source_id": "DUMMY",
+            "institution_id": "NCAR",
+        })
         self.assertIsNone(result)
 
 
@@ -3280,12 +3266,10 @@ class ValidateParentAttributesTest(unittest.TestCase):
 
     def test_supplying_parent_to_no_parent_experiment_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.validate_parent_attributes(
-                {
-                    "experiment_id": "amip",
-                    "parent_experiment_id": "piControl",
-                }
-            )
+            self.project.validate_parent_attributes({
+                "experiment_id": "amip",
+                "parent_experiment_id": "piControl",
+            })
         self.assertIn("parent_experiment_id", str(ctx.exception))
 
     def test_missing_parent_experiment_id_raises(self):
@@ -3336,12 +3320,10 @@ class ValidateParentAttributesTest(unittest.TestCase):
         """Supplying any parent-related attribute when experiment has no parent
         must raise."""
         with self.assertRaises(ControlledVocabularyError):
-            self.project.validate_parent_attributes(
-                {
-                    "experiment_id": "amip",
-                    "parent_activity_id": "CMIP",
-                }
-            )
+            self.project.validate_parent_attributes({
+                "experiment_id": "amip",
+                "parent_activity_id": "CMIP",
+            })
 
 
 # ---------------------------------------------------------------------------
@@ -4484,18 +4466,16 @@ class ValidateComponentsMinimalProjectTest(unittest.TestCase):
         vtable_file = tmp / "vars.json"
         cv_file.write_text('{"CV": {}}\n')
         vtable_file.write_text(
-            json.dumps(
-                {
-                    "Header": {"table_id": "test"},
-                    "variable_entry": {
-                        "sample": {
-                            "dimensions": ["time"],
-                            "out_name": "sample",
-                            "units": "1",
-                        }
-                    },
-                }
-            )
+            json.dumps({
+                "Header": {"table_id": "test"},
+                "variable_entry": {
+                    "sample": {
+                        "dimensions": ["time"],
+                        "out_name": "sample",
+                        "units": "1",
+                    }
+                },
+            })
             + "\n"
         )
         self.project = ProjectTables(cv_file, [vtable_file])

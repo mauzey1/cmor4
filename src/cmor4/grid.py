@@ -11,30 +11,24 @@ from pydantic import Field, model_validator
 from .axis import Axis
 from .metadata import MetadataModel, StrSeq, StrTuple
 
-_LATITUDE_PARAMS: frozenset[str] = frozenset(
-    {
-        "grid_north_pole_latitude",
-        "latitude_of_projection_origin",
-        "standard_parallel",
-        "standard_parallel1",
-        "standard_parallel2",
-    }
-)
-_LONGITUDE_PARAMS: frozenset[str] = frozenset(
-    {
-        "grid_north_pole_longitude",
-        "longitude_of_prime_meridian",
-        "longitude_of_central_meridian",
-        "longitude_of_projection_origin",
-        "north_pole_grid_longitude",
-    }
-)
-_NONNEG_PARAMS: frozenset[str] = frozenset(
-    {
-        "scale_factor_at_central_meridian",
-        "scale_factor_at_projection_origin",
-    }
-)
+_LATITUDE_PARAMS: frozenset[str] = frozenset({
+    "grid_north_pole_latitude",
+    "latitude_of_projection_origin",
+    "standard_parallel",
+    "standard_parallel1",
+    "standard_parallel2",
+})
+_LONGITUDE_PARAMS: frozenset[str] = frozenset({
+    "grid_north_pole_longitude",
+    "longitude_of_prime_meridian",
+    "longitude_of_central_meridian",
+    "longitude_of_projection_origin",
+    "north_pole_grid_longitude",
+})
+_NONNEG_PARAMS: frozenset[str] = frozenset({
+    "scale_factor_at_central_meridian",
+    "scale_factor_at_projection_origin",
+})
 
 
 class Grid(MetadataModel):

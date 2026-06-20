@@ -199,7 +199,9 @@ def _validate_requested_bounds(axis: Axis, bounds: np.ndarray, name: str) -> Non
         neighbor = (
             requested[index + 1]
             if index % 2 == 0 and index + 1 < len(requested)
-            else requested[index - 1] if index > 0 else expected
+            else requested[index - 1]
+            if index > 0
+            else expected
         )
         eps = min(
             abs(1.0e-3 * tolerance * expected),
@@ -208,8 +210,7 @@ def _validate_requested_bounds(axis: Axis, bounds: np.ndarray, name: str) -> Non
         candidates = first_bounds if index % 2 == 0 else second_bounds
         if not np.any(np.abs(candidates - expected) <= eps):
             raise AxisValidationError(
-                f"requested bounds value {expected:g} for axis {name!r} "
-                "was not found."
+                f"requested bounds value {expected:g} for axis {name!r} was not found."
             )
 
 

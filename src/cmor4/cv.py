@@ -43,18 +43,16 @@ _RIPF_MAX: int = 2**31 - 1  # INT32_MAX — matches CMOR3's upper bound
 # _add_nested_defaults.  Dedicated handlers already process the first group;
 # the second group contains keys whose nested dicts are internal validation
 # data rather than output attributes.
-_NESTED_INJECTION_SKIP_KEYS: frozenset[str] = frozenset(
-    {
-        # Handled by dedicated _add_*_defaults methods:
-        "institution_id",
-        "source_id",
-        "experiment_id",
-        "license_id",
-        "license",
-        # Internal validation data — must not leak into output files:
-        "frequency",  # approx_interval / approx_interval_error used by axis validator
-    }
-)
+_NESTED_INJECTION_SKIP_KEYS: frozenset[str] = frozenset({
+    # Handled by dedicated _add_*_defaults methods:
+    "institution_id",
+    "source_id",
+    "experiment_id",
+    "license_id",
+    "license",
+    # Internal validation data — must not leak into output files:
+    "frequency",  # approx_interval / approx_interval_error used by axis validator
+})
 
 # Fallback regex for grid_label when the CV does not define an allowed set.
 # Mirrors CMOR3's built-in check: labels must start with 'g', 'c', or 'r'
@@ -428,9 +426,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             # own validation check.  Use the same detector as validate_dataset_values.
             if _is_posix_bre_list(value):
                 default = None
-            elif isinstance(default, str) and re.search(
-                r"[\\^$\[\]{,}()|]", default
-            ):
+            elif isinstance(default, str) and re.search(r"[\\^$\[\]{,}()|]", default):
                 default = None
             if default is not None:
                 dataset[key] = default
@@ -989,8 +985,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             )
         if not re.fullmatch(r"r\d+i\d+p\d+f\d+", str(dataset["parent_variant_label"])):
             raise ControlledVocabularyError(
-                f"parent_variant_label={dataset['parent_variant_label']!r} "
-                "is invalid."
+                f"parent_variant_label={dataset['parent_variant_label']!r} is invalid."
             )
         for key in ("branch_time_in_child", "branch_time_in_parent"):
             if key not in dataset:
@@ -1150,11 +1145,10 @@ class ControlledVocabulary(Mapping[str, Any]):
             )
 
 
-
 # POSIX regex metacharacter patterns that identify CMIP6-style validation regex arrays.
 # CMIP6 CVs use both BRE (realization_index, Conventions) and ERE (license) patterns.
 _BRE_INDICATORS: tuple[str, ...] = (
-    "\\{",         # POSIX BRE quantifier: \{n,m\}
+    "\\{",  # POSIX BRE quantifier: \{n,m\}
     "[[:digit:]]",
     "[[:space:]]",
     "[[:alpha:]]",
@@ -1310,7 +1304,8 @@ def _posix_regex_to_python(pattern: str) -> str:
     to Python ``re`` without modification.
     """
     return (
-        pattern.replace("[[:digit:]]", r"\d")
+        pattern
+        .replace("[[:digit:]]", r"\d")
         .replace("[[:space:]]", r"\s")
         .replace("\\{", "{")
         .replace("\\}", "}")

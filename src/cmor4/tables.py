@@ -489,9 +489,11 @@ class ProjectTables:
                 continue
             if dimension_name not in self.coordinate_table.scalar_entries:
                 continue
-            data = self.coordinate_table.build(
-                {"name": dimension_name, "table_entry": dimension_name, "scalar": True}
-            )
+            data = self.coordinate_table.build({
+                "name": dimension_name,
+                "table_entry": dimension_name,
+                "scalar": True,
+            })
             axis = Axis.model_validate(data)
             _validate_axis_values_early(axis)
             missing_axes.append(axis)
@@ -1370,10 +1372,6 @@ def _build_table_info(table_file: Path) -> str:
         md5 = hashlib.md5(raw).hexdigest()
         mtime = datetime.fromtimestamp(table_file.stat().st_mtime, timezone.utc)
         creation_date_str = mtime.strftime("%Y-%m-%d %H:%M:%S")
-        return (
-            f"Name: {table_file.name};"
-            f" Creation Date:({creation_date_str})"
-            f" MD5:{md5}"
-        )
+        return f"Name: {table_file.name}; Creation Date:({creation_date_str}) MD5:{md5}"
     except OSError:
         return f"Name: {table_file.name};"

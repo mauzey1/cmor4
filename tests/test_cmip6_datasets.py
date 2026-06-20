@@ -288,9 +288,7 @@ class TestInstitutionValidation(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
-                self.project.dataset_info(
-                    _amip_attrs(tmp, institution_id="ddPCMDI")
-                )
+                self.project.dataset_info(_amip_attrs(tmp, institution_id="ddPCMDI"))
             self.assertIn("ddPCMDI", str(ctx.exception))
 
     def test_bad_institution_replaced_value_is_rejected(self) -> None:
@@ -301,9 +299,7 @@ class TestInstitutionValidation(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
-                self.project.dataset_info(
-                    _amip_attrs(tmp, institution_id="NCC2")
-                )
+                self.project.dataset_info(_amip_attrs(tmp, institution_id="NCC2"))
             self.assertIn("NCC2", str(ctx.exception))
 
     def test_valid_institution_id_passes(self) -> None:
@@ -352,9 +348,7 @@ class TestSourceValidation(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
-                self.project.dataset_info(
-                    _amip_attrs(tmp, source_id="bad_sourceid")
-                )
+                self.project.dataset_info(_amip_attrs(tmp, source_id="bad_sourceid"))
             self.assertIn("bad_sourceid", str(ctx.exception))
 
     def test_source_id_inconsistent_with_institution_is_rejected(self) -> None:
@@ -501,9 +495,7 @@ class TestVariantLabelValidation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
                 # Activity ID 'BADACT' is not in the CMIP6 CV
-                self.project.dataset_info(
-                    _amip_attrs(tmp, activity_id="BADACT")
-                )
+                self.project.dataset_info(_amip_attrs(tmp, activity_id="BADACT"))
             self.assertIn("BADACT", str(ctx.exception))
 
     def test_overflow_realization_index_is_rejected(self) -> None:
@@ -518,14 +510,12 @@ class TestVariantLabelValidation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             attrs = _amip_attrs(tmp)
             del attrs["variant_label"]
-            attrs.update(
-                {
-                    "realization_index": overflow_value,
-                    "initialization_index": "1",
-                    "physics_index": "1",
-                    "forcing_index": "1",
-                }
-            )
+            attrs.update({
+                "realization_index": overflow_value,
+                "initialization_index": "1",
+                "physics_index": "1",
+                "forcing_index": "1",
+            })
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(attrs)
             self.assertIn(overflow_value, str(ctx.exception))
@@ -536,14 +526,12 @@ class TestVariantLabelValidation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             attrs = _amip_attrs(tmp)
             del attrs["variant_label"]
-            attrs.update(
-                {
-                    "realization_index": "1",
-                    "initialization_index": huge,
-                    "physics_index": "1",
-                    "forcing_index": "1",
-                }
-            )
+            attrs.update({
+                "realization_index": "1",
+                "initialization_index": huge,
+                "physics_index": "1",
+                "forcing_index": "1",
+            })
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(attrs)
             self.assertIn(huge, str(ctx.exception))
@@ -551,9 +539,7 @@ class TestVariantLabelValidation(unittest.TestCase):
     def test_valid_variant_label_r3i1p1f1_passes(self) -> None:
         """The variant_label used in the CMOR3 CMIP6 test suite is accepted."""
         with tempfile.TemporaryDirectory() as tmp:
-            info = self.project.dataset_info(
-                _amip_attrs(tmp, variant_label="r3i1p1f1")
-            )
+            info = self.project.dataset_info(_amip_attrs(tmp, variant_label="r3i1p1f1"))
             self.assertEqual(dict(info)["variant_label"], "r3i1p1f1")
 
     def test_valid_ripf_integers_produce_variant_label(self) -> None:
@@ -567,9 +553,7 @@ class TestVariantLabelValidation(unittest.TestCase):
         CMIP6 usage.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            info = self.project.dataset_info(
-                _amip_attrs(tmp, variant_label="r9i1p1f3")
-            )
+            info = self.project.dataset_info(_amip_attrs(tmp, variant_label="r9i1p1f3"))
             variant_label = dict(info).get("variant_label", "")
             self.assertEqual(variant_label, "r9i1p1f3")
             self.assertRegex(variant_label, r"r\d+i\d+p\d+f\d+")
@@ -632,9 +616,7 @@ class TestParentExperimentValidation(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
-                self.project.dataset_info(
-                    _ssp434_attrs(tmp, parent_source_id="child")
-                )
+                self.project.dataset_info(_ssp434_attrs(tmp, parent_source_id="child"))
             self.assertIn("child", str(ctx.exception))
 
     def test_ssp434_wrong_parent_activity_id_is_rejected(self) -> None:
@@ -652,30 +634,28 @@ class TestParentExperimentValidation(unittest.TestCase):
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
                 # dcppC-forecast-addAgung only allows 'dcppA-assim' or 'no parent'
                 # as parent; 'historical' should be rejected
-                self.project.dataset_info(
-                    {
-                        "mip_era": "CMIP6",
-                        "activity_id": "DCPP",
-                        "institution_id": "PCMDI",
-                        "source_id": "PCMDI-test-1-0",
-                        "experiment_id": "dcppC-forecast-addAgung",
-                        "source_type": "AOGCM AER",
-                        "variant_label": "r3i1p1f1",
-                        "grid_label": "gn",
-                        "frequency": "mon",
-                        "sub_experiment_id": "s2014",
-                        "sub_experiment": "initialized near end of year 2014",
-                        "parent_experiment_id": "historical",  # wrong
-                        "parent_activity_id": "CMIP",
-                        "parent_source_id": "PCMDI-test-1-0",
-                        "parent_mip_era": "CMIP6",
-                        "parent_time_units": "days since 1850-01-01",
-                        "parent_variant_label": "r3i1p1f1",
-                        "branch_time_in_child": 0.0,
-                        "branch_time_in_parent": 0.0,
-                        "outpath": tmp,
-                    }
-                )
+                self.project.dataset_info({
+                    "mip_era": "CMIP6",
+                    "activity_id": "DCPP",
+                    "institution_id": "PCMDI",
+                    "source_id": "PCMDI-test-1-0",
+                    "experiment_id": "dcppC-forecast-addAgung",
+                    "source_type": "AOGCM AER",
+                    "variant_label": "r3i1p1f1",
+                    "grid_label": "gn",
+                    "frequency": "mon",
+                    "sub_experiment_id": "s2014",
+                    "sub_experiment": "initialized near end of year 2014",
+                    "parent_experiment_id": "historical",  # wrong
+                    "parent_activity_id": "CMIP",
+                    "parent_source_id": "PCMDI-test-1-0",
+                    "parent_mip_era": "CMIP6",
+                    "parent_time_units": "days since 1850-01-01",
+                    "parent_variant_label": "r3i1p1f1",
+                    "branch_time_in_child": 0.0,
+                    "branch_time_in_parent": 0.0,
+                    "outpath": tmp,
+                })
             # The error should mention the rejected parent experiment value
             error_msg = str(ctx.exception)
             self.assertTrue(
@@ -705,9 +685,7 @@ class TestParentExperimentValidation(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
-                self.project.dataset_info(
-                    _ssp434_attrs(tmp, parent_mip_era="CMIP-6")
-                )
+                self.project.dataset_info(_ssp434_attrs(tmp, parent_mip_era="CMIP-6"))
             self.assertIn("CMIP-6", str(ctx.exception))
 
     def test_valid_ssp434_with_historical_parent_passes(self) -> None:
@@ -761,18 +739,14 @@ class TestSubExperimentValidation(unittest.TestCase):
     def test_amip_experiment_accepts_none_sub_experiment(self) -> None:
         """The amip experiment (no sub-experiments) accepts sub_experiment_id='none'."""
         with tempfile.TemporaryDirectory() as tmp:
-            info = self.project.dataset_info(
-                _amip_attrs(tmp, sub_experiment_id="none")
-            )
+            info = self.project.dataset_info(_amip_attrs(tmp, sub_experiment_id="none"))
             self.assertIsNotNone(info)
 
     def test_unknown_sub_experiment_id_is_rejected(self) -> None:
         """A sub_experiment_id not in the CV is rejected."""
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError):
-                self.project.dataset_info(
-                    _amip_attrs(tmp, sub_experiment_id="sXXXX")
-                )
+                self.project.dataset_info(_amip_attrs(tmp, sub_experiment_id="sXXXX"))
 
 
 # ---------------------------------------------------------------------------
@@ -798,9 +772,7 @@ class TestActivityValidation(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError):
-                self.project.dataset_info(
-                    _amip_attrs(tmp, activity_id="ScenarioMIP")
-                )
+                self.project.dataset_info(_amip_attrs(tmp, activity_id="ScenarioMIP"))
 
     def test_correct_activity_id_for_amip_passes(self) -> None:
         """The CMIP activity_id is correct for the amip experiment."""
@@ -861,9 +833,7 @@ class TestExperimentValidation(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(cmor4.ControlledVocabularyError):
-                self.project.dataset_info(
-                    _amip_attrs(tmp, mip_era="CMIP5")
-                )
+                self.project.dataset_info(_amip_attrs(tmp, mip_era="CMIP5"))
 
 
 # ---------------------------------------------------------------------------
@@ -1085,9 +1055,7 @@ class TestDrsTemplates(unittest.TestCase):
     def test_cmip6_cv_defines_drs_filename_template(self) -> None:
         """The CMIP6 CV includes a filename_template in its DRS section."""
         _, file_tmpl = self.project.cv.drs_templates()
-        self.assertIsNotNone(
-            file_tmpl, "CMIP6 CV should define a filename_template"
-        )
+        self.assertIsNotNone(file_tmpl, "CMIP6 CV should define a filename_template")
         self.assertIn("variable_id", file_tmpl)
         self.assertIn("source_id", file_tmpl)
 
@@ -1143,15 +1111,13 @@ class TestFxTable(unittest.TestCase):
         dlat = 180.0 / nlat
         dlon = 360.0 / nlon
 
-        lats = np.arange(-90 + dlat / 2.0, 90, dlat)   # increasing south→north
+        lats = np.arange(-90 + dlat / 2.0, 90, dlat)  # increasing south→north
         blats = np.arange(-90, 90 + dlat, dlat)
         lons = np.arange(0 + dlon / 2.0, 360.0, dlon)
         blons = np.arange(0, 360.0 + dlon, dlon)
 
         with tempfile.TemporaryDirectory() as tmp:
-            info = self.project.dataset_info(
-                _amip_attrs(tmp, frequency="fx")
-            )
+            info = self.project.dataset_info(_amip_attrs(tmp, frequency="fx"))
             variable = self.project.variable("areacella")
             lat_axis = self.project.axis(
                 "latitude",
@@ -1234,21 +1200,25 @@ class TestCmip6DatasetRoundtrip(unittest.TestCase):
             result = cmor4.cmorize(info, variable, [time_axis], data)
             ds = result.dataset
 
-            for attr in ("mip_era", "institution_id", "source_id",
-                         "experiment_id", "tracking_id", "Conventions"):
+            for attr in (
+                "mip_era",
+                "institution_id",
+                "source_id",
+                "experiment_id",
+                "tracking_id",
+                "Conventions",
+            ):
                 self.assertIn(attr, ds.attrs, f"Missing required attr: {attr}")
 
             self.assertEqual(ds.attrs.get("mip_era"), "CMIP6")
-            self.assertTrue(
-                ds.attrs.get("tracking_id", "").startswith("hdl:21.14100/")
-            )
+            self.assertTrue(ds.attrs.get("tracking_id", "").startswith("hdl:21.14100/"))
 
     def test_tas_cmorize_produces_correct_units_and_dims(self) -> None:
         """Cmorizing Amon tas with lat/lon/time produces a correct dataset."""
         nlat, nlon = 4, 8
         dlat = 180.0 / nlat
         dlon = 360.0 / nlon
-        lats = np.linspace(-90 + dlat / 2, 90 - dlat / 2, nlat)   # increasing
+        lats = np.linspace(-90 + dlat / 2, 90 - dlat / 2, nlat)  # increasing
         lat_bounds = np.column_stack([lats - dlat / 2, lats + dlat / 2])
         lons = np.linspace(dlon / 2, 360 - dlon / 2, nlon)
         lon_bounds = np.column_stack([lons - dlon / 2, lons + dlon / 2])
@@ -1294,14 +1264,17 @@ class TestCmip6DatasetRoundtrip(unittest.TestCase):
 
     def test_two_sequential_datasets_get_unique_tracking_ids(self) -> None:
         """Each dataset_info call generates a unique tracking_id."""
-        with tempfile.TemporaryDirectory() as tmp1, \
-             tempfile.TemporaryDirectory() as tmp2:
+        with (
+            tempfile.TemporaryDirectory() as tmp1,
+            tempfile.TemporaryDirectory() as tmp2,
+        ):
             info1 = self.project.dataset_info(_amip_attrs(tmp1))
             info2 = self.project.dataset_info(_amip_attrs(tmp2))
             tid1 = dict(info1).get("tracking_id", "")
             tid2 = dict(info2).get("tracking_id", "")
             self.assertNotEqual(
-                tid1, tid2,
+                tid1,
+                tid2,
                 "Each dataset should get a unique tracking_id",
             )
 

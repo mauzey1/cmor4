@@ -808,8 +808,7 @@ def _validate_final_axis(ds: xr.Dataset, axis: Axis) -> None:
     )
     if bounds_name not in ds.data_vars:
         raise ValueError(
-            f"Bounds variable {bounds_name!r} for axis {axis.name!r} "
-            "was not created."
+            f"Bounds variable {bounds_name!r} for axis {axis.name!r} was not created."
         )
 
 
@@ -895,30 +894,26 @@ def _template_tokens(
         for key, value in (ds.attrs.items() if ds is not None else ())
         if not str(key).startswith("_")
     }
-    tokens.update(
-        {
-            str(key): value
-            for key, value in dataset.items()
-            if (key not in INTERNAL_DATASET_KEYS and not str(key).startswith("_"))
-        }
-    )
-    tokens.update(
-        {
-            "branded_name": labels["branded_name"],
-            "branded_variable": labels["branded_name"],
-            "branded_variable_name": labels["branded_name"],
-            "branding_suffix": labels.get("branding_suffix", ""),
-            "frequency": frequency,
-            "grid_label": dataset.get("grid_label", tokens.get("grid_label", "gn")),
-            "member_id": dataset.get("member_id", variant_label),
-            "region": dataset.get("region", tokens.get("region", "glb")),
-            "time-range": time_range or "",
-            "time_range": time_range or "",
-            "variable_id": var_name,
-            "variant_label": variant_label,
-            "version": version,
-        }
-    )
+    tokens.update({
+        str(key): value
+        for key, value in dataset.items()
+        if (key not in INTERNAL_DATASET_KEYS and not str(key).startswith("_"))
+    })
+    tokens.update({
+        "branded_name": labels["branded_name"],
+        "branded_variable": labels["branded_name"],
+        "branded_variable_name": labels["branded_name"],
+        "branding_suffix": labels.get("branding_suffix", ""),
+        "frequency": frequency,
+        "grid_label": dataset.get("grid_label", tokens.get("grid_label", "gn")),
+        "member_id": dataset.get("member_id", variant_label),
+        "region": dataset.get("region", tokens.get("region", "glb")),
+        "time-range": time_range or "",
+        "time_range": time_range or "",
+        "variable_id": var_name,
+        "variant_label": variant_label,
+        "version": version,
+    })
     for key in (
         "temporal_label",
         "vertical_label",

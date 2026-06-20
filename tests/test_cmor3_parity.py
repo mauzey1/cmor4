@@ -537,9 +537,9 @@ class TestVariantIndexValidation(unittest.TestCase):
         """A 31-digit realization_index mirrors the CMOR3 longrealizationindex test."""
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv.validate_variant_indices(
-                {"realization_index": "1209374928349823498274987234987"}
-            )
+            cv.validate_variant_indices({
+                "realization_index": "1209374928349823498274987234987"
+            })
         self.assertIn("realization_index", str(ctx.exception))
 
     def test_initialization_index_overflow_raises(self):
@@ -565,9 +565,9 @@ class TestVariantIndexValidation(unittest.TestCase):
         """Overflow is caught even when the 'r' prefix is included."""
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError):
-            cv.validate_variant_indices(
-                {"realization_index": "r1209374928349823498274987234987"}
-            )
+            cv.validate_variant_indices({
+                "realization_index": "r1209374928349823498274987234987"
+            })
 
     def test_prefixed_forcing_index_overflow_raises(self):
         cv = self._cv()
@@ -622,16 +622,14 @@ class TestVariantIndexValidation(unittest.TestCase):
         present.
         """
         # Build a CV that explicitly constrains variant_label (CMIP6/7 style).
-        cv_with_constraint = ControlledVocabulary(
-            {
-                "CV": {
-                    **_MINIMAL_CV["CV"],
-                    "variant_label": [
-                        r"r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+"
-                    ],
-                }
+        cv_with_constraint = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "variant_label": [
+                    r"r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+"
+                ],
             }
-        )
+        })
         # Malformed label (missing 'f' component) is rejected.
         with self.assertRaises(ControlledVocabularyError) as ctx:
             cv_with_constraint.validate_variant_indices({"variant_label": "r1i1p1"})
@@ -649,14 +647,12 @@ class TestVariantIndexValidation(unittest.TestCase):
         """
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv.validate_variant_indices(
-                {
-                    "realization_index": "r1",
-                    "initialization_index": "i1",
-                    "physics_index": "p1",
-                    "forcing_index": "r1",  # 'r' prefix is wrong for forcing_index
-                }
-            )
+            cv.validate_variant_indices({
+                "realization_index": "r1",
+                "initialization_index": "i1",
+                "physics_index": "p1",
+                "forcing_index": "r1",  # 'r' prefix is wrong for forcing_index
+            })
         # Should be caught at the integer-parsing level for forcing_index,
         # since stripping 'f' from 'r1' leaves 'r1' which is not an integer.
         self.assertIn("forcing_index", str(ctx.exception))
@@ -667,14 +663,12 @@ class TestVariantIndexValidation(unittest.TestCase):
 
     def test_valid_bare_integer_ripf_indices_pass(self):
         cv = self._cv()
-        cv.validate_variant_indices(
-            {
-                "realization_index": "1",
-                "initialization_index": "1",
-                "physics_index": "1",
-                "forcing_index": "1",
-            }
-        )
+        cv.validate_variant_indices({
+            "realization_index": "1",
+            "initialization_index": "1",
+            "physics_index": "1",
+            "forcing_index": "1",
+        })
 
     def test_max_int32_value_passes(self):
         cv = self._cv()
@@ -690,25 +684,21 @@ class TestVariantIndexValidation(unittest.TestCase):
 
     def test_valid_prefixed_ripf_indices_pass(self):
         cv = self._cv()
-        cv.validate_variant_indices(
-            {
-                "realization_index": "r1",
-                "initialization_index": "i1",
-                "physics_index": "p1",
-                "forcing_index": "f1",
-            }
-        )
+        cv.validate_variant_indices({
+            "realization_index": "r1",
+            "initialization_index": "i1",
+            "physics_index": "p1",
+            "forcing_index": "f1",
+        })
 
     def test_valid_prefixed_large_indices_pass(self):
         cv = self._cv()
-        cv.validate_variant_indices(
-            {
-                "realization_index": "r9",
-                "initialization_index": "i3",
-                "physics_index": "p2",
-                "forcing_index": "f4",
-            }
-        )
+        cv.validate_variant_indices({
+            "realization_index": "r9",
+            "initialization_index": "i3",
+            "physics_index": "p2",
+            "forcing_index": "f4",
+        })
 
     def test_max_int32_prefixed_passes(self):
         cv = self._cv()
@@ -775,14 +765,12 @@ class TestVariantIndexValidation(unittest.TestCase):
                 tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
             )
             good_dataset = dict(_MINIMAL_DATASET)
-            good_dataset.update(
-                {
-                    "realization_index": "r9",
-                    "initialization_index": "i1",
-                    "physics_index": "p1",
-                    "forcing_index": "f3",
-                }
-            )
+            good_dataset.update({
+                "realization_index": "r9",
+                "initialization_index": "i1",
+                "physics_index": "p1",
+                "forcing_index": "f3",
+            })
             info = project.dataset_info(good_dataset)
             self.assertIsNotNone(info)
 
@@ -794,14 +782,12 @@ class TestVariantIndexValidation(unittest.TestCase):
                 tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
             )
             good_dataset = dict(_MINIMAL_DATASET)
-            good_dataset.update(
-                {
-                    "realization_index": "9",
-                    "initialization_index": "1",
-                    "physics_index": "1",
-                    "forcing_index": "3",
-                }
-            )
+            good_dataset.update({
+                "realization_index": "9",
+                "initialization_index": "1",
+                "physics_index": "1",
+                "forcing_index": "3",
+            })
             info = project.dataset_info(good_dataset)
             self.assertIsNotNone(info)
 
@@ -892,9 +878,9 @@ class TestForcingTermsValidation(unittest.TestCase):
         is ignored.
         """
         cv = self._cv()
-        cv.validate_forcing_terms(
-            {"forcing": "GHG Oz (GHG = CO2, N2O, CH4, UNKNOWNGAS)"}
-        )
+        cv.validate_forcing_terms({
+            "forcing": "GHG Oz (GHG = CO2, N2O, CH4, UNKNOWNGAS)"
+        })
 
     def test_annotation_truncation_not_just_removal(self):
         """Everything from the first '(' is dropped, not just the parenthetical.
@@ -946,18 +932,16 @@ class TestForcingTermsValidation(unittest.TestCase):
 
     def test_forcing_dict_cv_also_works(self):
         """CV forcing defined as a mapping (CMIP6 style)."""
-        cv_dict = ControlledVocabulary(
-            {
-                "CV": {
-                    **_MINIMAL_CV["CV"],
-                    "forcing": {
-                        "GHG": "Greenhouse gases",
-                        "Oz": "Ozone",
-                        "Nat": "Natural forcings",
-                    },
-                }
+        cv_dict = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "forcing": {
+                    "GHG": "Greenhouse gases",
+                    "Oz": "Ozone",
+                    "Nat": "Natural forcings",
+                },
             }
-        )
+        })
         cv_dict.validate_forcing_terms({"forcing": "GHG Oz"})
         with self.assertRaises(ControlledVocabularyError):
             cv_dict.validate_forcing_terms({"forcing": "GHG UNKNOWN"})
@@ -969,13 +953,11 @@ class TestForcingTermsValidation(unittest.TestCase):
     def test_validate_dataset_includes_forcing_check(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv.validate_dataset(
-                {
-                    "activity_id": "CMIP",
-                    "institution_id": "NCAR",
-                    "forcing": "GHG BADTOKEN",
-                }
-            )
+            cv.validate_dataset({
+                "activity_id": "CMIP",
+                "institution_id": "NCAR",
+                "forcing": "GHG BADTOKEN",
+            })
         self.assertIn("BADTOKEN", str(ctx.exception))
 
     def test_project_tables_dataset_info_raises_on_bad_forcing(self):
@@ -1078,22 +1060,20 @@ class TestDrsTemplates(unittest.TestCase):
         self.assertIsNone(file_tmpl)
 
     def test_drs_templates_returns_none_for_missing_individual_keys(self):
-        cv_partial = ControlledVocabulary(
-            {
-                "CV": {
-                    **_MINIMAL_CV["CV"],
-                    "DRS": {"directory_path_example": "example/only/no/templates"},
-                }
+        cv_partial = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "DRS": {"directory_path_example": "example/only/no/templates"},
             }
-        )
+        })
         path_tmpl, file_tmpl = cv_partial.drs_templates()
         self.assertIsNone(path_tmpl)
         self.assertIsNone(file_tmpl)
 
     def test_drs_templates_ignores_non_mapping_drs_value(self):
-        cv_bad = ControlledVocabulary(
-            {"CV": {**_MINIMAL_CV["CV"], "DRS": "not-a-dict"}}
-        )
+        cv_bad = ControlledVocabulary({
+            "CV": {**_MINIMAL_CV["CV"], "DRS": "not-a-dict"}
+        })
         path_tmpl, file_tmpl = cv_bad.drs_templates()
         self.assertIsNone(path_tmpl)
         self.assertIsNone(file_tmpl)
@@ -1273,44 +1253,36 @@ class TestCVStructureValidation(unittest.TestCase):
             return ControlledVocabulary(data)
 
     def test_well_formed_cv_has_no_issues(self):
-        cv = ControlledVocabulary(
-            {
-                "CV": {
-                    "nominal_resolution": ["100 km", "250 km"],
-                    "institution_id": {"NCAR": "National Center …"},
-                    "mip_era": "CMIP7",
-                }
+        cv = ControlledVocabulary({
+            "CV": {
+                "nominal_resolution": ["100 km", "250 km"],
+                "institution_id": {"NCAR": "National Center …"},
+                "mip_era": "CMIP7",
             }
-        )
+        })
         self.assertEqual(cv.validate_structure(), [])
 
     def test_double_nested_entry_is_detected(self):
-        cv = self._make_broken_cv(
-            {
-                "CV": {
-                    "nominal_resolution": {
-                        "nominal_resolution": ["0.5 km", "1 km", "10 km"]
-                    }
+        cv = self._make_broken_cv({
+            "CV": {
+                "nominal_resolution": {
+                    "nominal_resolution": ["0.5 km", "1 km", "10 km"]
                 }
             }
-        )
+        })
         issues = cv.validate_structure()
         self.assertEqual(len(issues), 1)
         self.assertIn("nominal_resolution", issues[0])
         self.assertIn("double-nested", issues[0])
 
     def test_multiple_double_nested_entries_all_detected(self):
-        cv = self._make_broken_cv(
-            {
-                "CV": {
-                    "nominal_resolution": {"nominal_resolution": ["10 km"]},
-                    "activity_id": {"activity_id": ["CMIP", "ScenarioMIP"]},
-                    "institution_id": {
-                        "NCAR": "National Center …"
-                    },  # not double-nested
-                }
+        cv = self._make_broken_cv({
+            "CV": {
+                "nominal_resolution": {"nominal_resolution": ["10 km"]},
+                "activity_id": {"activity_id": ["CMIP", "ScenarioMIP"]},
+                "institution_id": {"NCAR": "National Center …"},  # not double-nested
             }
-        )
+        })
         issues = cv.validate_structure()
         self.assertEqual(len(issues), 2)
         keys_mentioned = {line.split("'")[1] for line in issues}
@@ -1318,25 +1290,23 @@ class TestCVStructureValidation(unittest.TestCase):
 
     def test_mapping_with_multiple_keys_is_not_double_nested(self):
         """A mapping value with more than one key is a lookup table, not a bug."""
-        cv = ControlledVocabulary(
-            {
-                "CV": {
-                    "experiment_id": {
-                        "historical": {"description": "historical"},
-                        "amip": {"description": "amip"},
-                    }
+        cv = ControlledVocabulary({
+            "CV": {
+                "experiment_id": {
+                    "historical": {"description": "historical"},
+                    "amip": {"description": "amip"},
                 }
             }
-        )
+        })
         self.assertEqual(cv.validate_structure(), [])
 
     def test_mapping_with_different_key_is_not_double_nested(self):
         """
         A mapping value whose single key differs from the parent is a lookup table.
         """
-        cv = ControlledVocabulary(
-            {"CV": {"institution_id": {"NCAR": "National Center …"}}}
-        )
+        cv = ControlledVocabulary({
+            "CV": {"institution_id": {"NCAR": "National Center …"}}
+        })
         self.assertEqual(cv.validate_structure(), [])
 
     def test_list_value_is_not_double_nested(self):
@@ -1349,17 +1319,17 @@ class TestCVStructureValidation(unittest.TestCase):
 
     def test_issue_message_mentions_github_reference(self):
         """Issue description links to the bug report for user guidance."""
-        cv = self._make_broken_cv(
-            {"CV": {"nominal_resolution": {"nominal_resolution": ["10 km"]}}}
-        )
+        cv = self._make_broken_cv({
+            "CV": {"nominal_resolution": {"nominal_resolution": ["10 km"]}}
+        })
         issues = cv.validate_structure()
         self.assertTrue(any("829" in issue for issue in issues))
 
     def test_issue_message_explains_validation_consequence(self):
         """Users are told that validation may silently pass any value."""
-        cv = self._make_broken_cv(
-            {"CV": {"nominal_resolution": {"nominal_resolution": ["10 km"]}}}
-        )
+        cv = self._make_broken_cv({
+            "CV": {"nominal_resolution": {"nominal_resolution": ["10 km"]}}
+        })
         issues = cv.validate_structure()
         self.assertTrue(any("silently" in issue.lower() for issue in issues))
 
@@ -1371,15 +1341,11 @@ class TestCVStructureValidation(unittest.TestCase):
         """ControlledVocabulary.__init__ emits RuntimeWarning for double-nesting."""
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            ControlledVocabulary(
-                {
-                    "CV": {
-                        "nominal_resolution": {
-                            "nominal_resolution": ["0.5 km", "10 km"]
-                        }
-                    }
+            ControlledVocabulary({
+                "CV": {
+                    "nominal_resolution": {"nominal_resolution": ["0.5 km", "10 km"]}
                 }
-            )
+            })
         runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
         self.assertEqual(len(runtime_warnings), 1)
         self.assertIn("nominal_resolution", str(runtime_warnings[0].message))
@@ -1387,14 +1353,12 @@ class TestCVStructureValidation(unittest.TestCase):
     def test_multiple_double_nested_entries_emit_one_warning_each(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            ControlledVocabulary(
-                {
-                    "CV": {
-                        "nominal_resolution": {"nominal_resolution": ["10 km"]},
-                        "activity_id": {"activity_id": ["CMIP"]},
-                    }
+            ControlledVocabulary({
+                "CV": {
+                    "nominal_resolution": {"nominal_resolution": ["10 km"]},
+                    "activity_id": {"activity_id": ["CMIP"]},
                 }
-            )
+            })
         runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
         self.assertEqual(len(runtime_warnings), 2)
 
@@ -1410,16 +1374,14 @@ class TestCVStructureValidation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_str:
             cv_path = Path(tmp_str) / "bad_cv.json"
             cv_path.write_text(
-                json.dumps(
-                    {
-                        "CV": {
-                            "nominal_resolution": {
-                                "nominal_resolution": ["10 km", "50 km"]
-                            },
-                            "institution_id": {"NCAR": "National Center …"},
-                        }
+                json.dumps({
+                    "CV": {
+                        "nominal_resolution": {
+                            "nominal_resolution": ["10 km", "50 km"]
+                        },
+                        "institution_id": {"NCAR": "National Center …"},
                     }
-                )
+                })
             )
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
@@ -1442,19 +1404,19 @@ class TestCVStructureValidation(unittest.TestCase):
         is mistakenly accepted, and the true allowed values (like ``"100 km"``)
         are rejected, which is the opposite of the intended behaviour.
         """
-        cv_correct = ControlledVocabulary(
-            {"CV": {"nominal_resolution": ["100 km", "250 km"]}}
-        )
+        cv_correct = ControlledVocabulary({
+            "CV": {"nominal_resolution": ["100 km", "250 km"]}
+        })
         # Correct CV: "100 km" passes, the key-name string does not.
         cv_correct.validate_dataset_values({"nominal_resolution": "100 km"})
         with self.assertRaises(ControlledVocabularyError):
-            cv_correct.validate_dataset_values(
-                {"nominal_resolution": "nominal_resolution"}
-            )
+            cv_correct.validate_dataset_values({
+                "nominal_resolution": "nominal_resolution"
+            })
 
-        cv_broken = self._make_broken_cv(
-            {"CV": {"nominal_resolution": {"nominal_resolution": ["100 km"]}}}
-        )
+        cv_broken = self._make_broken_cv({
+            "CV": {"nominal_resolution": {"nominal_resolution": ["100 km"]}}
+        })
         # Broken CV: "100 km" is wrongly REJECTED (it is not a key of the
         # inner dict), while "nominal_resolution" is wrongly ACCEPTED (it IS
         # a key of the inner dict).
@@ -1621,9 +1583,10 @@ class TestHistoryAttribute(unittest.TestCase):
             project = _make_project(
                 tmp, cv_custom_mip, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
             )
-            dataset_info = project.dataset_info(
-                {**_MINIMAL_DATASET, "mip_era": "obs4MIPs"}
-            )
+            dataset_info = project.dataset_info({
+                **_MINIMAL_DATASET,
+                "mip_era": "obs4MIPs",
+            })
             variable = project.variable("tas")
             import numpy as np
             from cmor4.core import create_dataset
@@ -1802,46 +1765,38 @@ class TestNestedCVAttributes(unittest.TestCase):
     def test_user_values_not_overwritten_by_injection(self):
         """Leaf attributes already set by the user are not overwritten (setdefault)."""
         cv = self._cv()
-        dataset = cv.get_dataset_info(
-            {
-                "hierarchical_attr_setting": "information",
-                "coder": "override",
-            }
-        )
+        dataset = cv.get_dataset_info({
+            "hierarchical_attr_setting": "information",
+            "coder": "override",
+        })
         self.assertEqual(dataset["coder"], "override")
 
     def test_dedicated_handler_values_not_overwritten(self):
         """Attributes set by dedicated handlers (e.g. experiment defaults) win."""
-        cv = ControlledVocabulary(
-            {
-                "CV": {
-                    **_MINIMAL_CV["CV"],
-                    "experiment_id": {
-                        "amip": {
-                            "experiment_id": "amip",
-                            "activity_id": ["CMIP"],
-                            # experiment entry also has 'description'
-                            "description": "Experiment description from dedicated "
-                            "handler.",
-                        }
-                    },
-                    # A nested entry that would also inject 'description'
-                    "profile": {
-                        "standard": {
-                            "description": "Should NOT win over experiment "
-                            "description.",
-                            "org": "PCMDI",
-                        }
-                    },
-                }
+        cv = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "experiment_id": {
+                    "amip": {
+                        "experiment_id": "amip",
+                        "activity_id": ["CMIP"],
+                        # experiment entry also has 'description'
+                        "description": "Experiment description from dedicated handler.",
+                    }
+                },
+                # A nested entry that would also inject 'description'
+                "profile": {
+                    "standard": {
+                        "description": "Should NOT win over experiment description.",
+                        "org": "PCMDI",
+                    }
+                },
             }
-        )
-        dataset = cv.get_dataset_info(
-            {
-                "experiment_id": "amip",
-                "profile": "standard",
-            }
-        )
+        })
+        dataset = cv.get_dataset_info({
+            "experiment_id": "amip",
+            "profile": "standard",
+        })
         # _add_experiment_defaults runs before _add_nested_defaults, so its
         # setdefault("description", ...) wins.
         self.assertEqual(
@@ -1853,19 +1808,17 @@ class TestNestedCVAttributes(unittest.TestCase):
 
     def test_entry_with_non_scalar_values_not_injected(self):
         """Entries whose looked-up value contains a list or dict are not injected."""
-        cv = ControlledVocabulary(
-            {
-                "CV": {
-                    **_MINIMAL_CV["CV"],
-                    "complex_key": {
-                        "code_a": {
-                            "allowed_values": ["v1", "v2"],  # list → skip injection
-                            "scalar_attr": "ok",
-                        }
-                    },
-                }
+        cv = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "complex_key": {
+                    "code_a": {
+                        "allowed_values": ["v1", "v2"],  # list → skip injection
+                        "scalar_attr": "ok",
+                    }
+                },
             }
-        )
+        })
         dataset = cv.get_dataset_info({"complex_key": "code_a"})
         self.assertNotIn("allowed_values", dataset)
         self.assertNotIn("scalar_attr", dataset)
@@ -1880,21 +1833,19 @@ class TestNestedCVAttributes(unittest.TestCase):
         approx_interval is read directly by the axis validator and must not
         leak into output files.
         """
-        cv = ControlledVocabulary(
-            {
-                "CV": {
-                    **_MINIMAL_CV["CV"],
-                    "frequency": {
-                        "mon": {
-                            "approx_interval": 30.0,
-                            "approx_interval_error": 0.2,
-                            "approx_interval_warning": 0.1,
-                            "description": "Monthly samples.",
-                        },
+        cv = ControlledVocabulary({
+            "CV": {
+                **_MINIMAL_CV["CV"],
+                "frequency": {
+                    "mon": {
+                        "approx_interval": 30.0,
+                        "approx_interval_error": 0.2,
+                        "approx_interval_warning": 0.1,
+                        "description": "Monthly samples.",
                     },
-                }
+                },
             }
-        )
+        })
         dataset = cv.get_dataset_info({"frequency": "mon"})
         self.assertNotIn("approx_interval", dataset)
         self.assertNotIn("approx_interval_error", dataset)
@@ -1916,12 +1867,10 @@ class TestNestedCVAttributes(unittest.TestCase):
             project = _make_project(
                 tmp, _CV_WITH_NESTED_ATTRS, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
             )
-            dataset_info = project.dataset_info(
-                {
-                    **_MINIMAL_DATASET,
-                    "hierarchical_attr_setting": "information",
-                }
-            )
+            dataset_info = project.dataset_info({
+                **_MINIMAL_DATASET,
+                "hierarchical_attr_setting": "information",
+            })
             variable = project.variable("tas")
             time_axis = project.axis(
                 "time", values=[15.0, 45.0], units="days since 2000-01-01"
@@ -2002,26 +1951,22 @@ class TestGridLabelFallback(unittest.TestCase):
 
     def _cv_without_grid_label(self) -> ControlledVocabulary:
         """A CV that deliberately omits the grid_label key."""
-        return ControlledVocabulary(
-            {
-                "CV": {
-                    "activity_id": ["CMIP"],
-                    "institution_id": {"NCAR": "National Center …"},
-                    # no grid_label entry
-                }
+        return ControlledVocabulary({
+            "CV": {
+                "activity_id": ["CMIP"],
+                "institution_id": {"NCAR": "National Center …"},
+                # no grid_label entry
             }
-        )
+        })
 
     def _cv_with_grid_label(self) -> ControlledVocabulary:
         """A CV that provides an explicit grid_label enumeration."""
-        return ControlledVocabulary(
-            {
-                "CV": {
-                    "activity_id": ["CMIP"],
-                    "grid_label": {"gn": "native grid", "gr1": "regridded"},
-                }
+        return ControlledVocabulary({
+            "CV": {
+                "activity_id": ["CMIP"],
+                "grid_label": {"gn": "native grid", "gr1": "regridded"},
             }
-        )
+        })
 
     # -----------------------------------------------------------------------
     # Fallback fires when CV lacks grid_label
@@ -2106,16 +2051,14 @@ class TestGridLabelFallback(unittest.TestCase):
         even a label that the fallback would reject (e.g. one with a hyphen)
         is fine when it's an explicit CV entry.
         """
-        cv = ControlledVocabulary(
-            {
-                "CV": {
-                    "grid_label": {
-                        "gn": "native",
-                        "custom-label": "custom grid with hyphen in CV",
-                    }
+        cv = ControlledVocabulary({
+            "CV": {
+                "grid_label": {
+                    "gn": "native",
+                    "custom-label": "custom grid with hyphen in CV",
                 }
             }
-        )
+        })
         # 'custom-label' is explicitly in the CV → accepted
         cv.validate_dataset_values({"grid_label": "custom-label"})
 

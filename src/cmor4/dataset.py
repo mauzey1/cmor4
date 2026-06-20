@@ -11,16 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .metadata import MetadataModel
 
 # Keys that must not appear in NetCDF global attributes
-INTERNAL_DATASET_KEYS: frozenset[str] = frozenset(
-    {
-        "_history_template",
-        "create_subdirectories",
-        "outpath",
-        "output_file_template",
-        "output_path_template",
-        "tracking_prefix",
-    }
-)
+INTERNAL_DATASET_KEYS: frozenset[str] = frozenset({
+    "_history_template",
+    "create_subdirectories",
+    "outpath",
+    "output_file_template",
+    "output_path_template",
+    "tracking_prefix",
+})
 
 RIPF_KEYS: tuple[str, ...] = (
     "realization_index",

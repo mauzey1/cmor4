@@ -389,15 +389,13 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 "DOE-ARM",
                 project.cv["license"],
             )
-            raw_info.update(
-                {
-                    "grid": "site",
-                    "nominal_resolution": "site",
-                    "product": "site-observations",
-                    "site_id": "AR-SLu",
-                    "site_location": "San Luis",
-                }
-            )
+            raw_info.update({
+                "grid": "site",
+                "nominal_resolution": "site",
+                "product": "site-observations",
+                "site_id": "AR-SLu",
+                "site_location": "San Luis",
+            })
             variable = project.variable("pr")
             info = project.dataset_info(raw_info)
             axes = [
@@ -435,12 +433,10 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 project.cv["license"],
                 grid_label="gnz",
             )
-            raw_info.update(
-                {
-                    "grid": "5 degree latitude height zonal mean",
-                    "nominal_resolution": "500 km",
-                }
-            )
+            raw_info.update({
+                "grid": "5 degree latitude height zonal mean",
+                "nominal_resolution": "500 km",
+            })
             variable = project.variable(
                 "o3zm",
                 missing_value=np.float32(1.0e20),

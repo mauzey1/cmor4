@@ -939,15 +939,13 @@ class Cmor4Test(unittest.TestCase):
     def test_filename_time_ranges_follow_cmor_frequency_formats(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_info = dataset_info(Path(tmp_dir))
-            base_info.update(
-                {
-                    "output_file_template": (
-                        "<variable_id>_<frequency>_<source_id>_<variant_label>"
-                    ),
-                    "output_path_template": "<activity_id>",
-                    "version": "v20200101",
-                }
-            )
+            base_info.update({
+                "output_file_template": (
+                    "<variable_id>_<frequency>_<source_id>_<variant_label>"
+                ),
+                "output_path_template": "<activity_id>",
+                "version": "v20200101",
+            })
             variable = cmor4.Variable(name="sample", dimensions=["time"])
 
             cases = [
@@ -1000,14 +998,12 @@ class Cmor4Test(unittest.TestCase):
     def test_climatology_time_axis_uses_cmor_bounds_and_name(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             raw_info = dataset_info(Path(tmp_dir))
-            raw_info.update(
-                {
-                    "calendar": "360_day",
-                    "frequency": "mon",
-                    "output_file_template": "<variable_id>_<frequency>",
-                    "output_path_template": "<activity_id>",
-                }
-            )
+            raw_info.update({
+                "calendar": "360_day",
+                "frequency": "mon",
+                "output_file_template": "<variable_id>_<frequency>",
+                "output_path_template": "<activity_id>",
+            })
             axes = [
                 cmor4.Axis(
                     name="time2",
