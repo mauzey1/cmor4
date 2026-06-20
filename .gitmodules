@@ -8,3 +8,6 @@
 	path = project_tables/obs4MIPs-cmor-tables
 	url = https://github.com/PCMDI/obs4MIPs-cmor-tables
 	branch = master
+[submodule "project_tables/cmip6-cmor-tables"]
+	path = project_tables/cmip6-cmor-tables
+	url = https://github.com/PCMDI/cmip6-cmor-tables
