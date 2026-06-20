@@ -548,14 +548,13 @@ class ControlledVocabulary(Mapping[str, Any]):
 
         Each of ``realization_index``, ``initialization_index``,
         ``physics_index``, and ``forcing_index`` must be a positive integer
-        no greater than INT32_MAX (2 147 483 647) when present.  Accepting
-        arbitrarily large values would silently produce a variant_label that
-        is technically valid text but cannot be round-tripped through CMOR3
-        and is likely to confuse downstream tools.
+        no greater than INT32_MAX (2 147 483 647) when present.
 
-        If all four indices are present (or a ``variant_label`` is already
-        set), the resulting ``variant_label`` is also validated against the
-        canonical pattern ``r<N>i<N>p<N>f<N>``.
+        The ``variant_label`` format (``r<N>i<N>p<N>f<N>``) is only validated
+        when the CV defines a list of allowed values or patterns for
+        ``variant_label``.  When the CV merely *requires* the attribute without
+        constraining its values (e.g. obs4MIPs), any user-supplied string is
+        accepted — matching CMOR3's behaviour.
 
         Parameters
         ----------
@@ -567,7 +566,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         None
             Raises ``ControlledVocabularyError`` if any index value is not a
             positive integer, exceeds INT32_MAX, or if the derived
-            variant_label does not match the expected pattern.
+            variant_label does not match the CV-defined pattern.
         """
 
         for key in _RIPF_KEYS:
@@ -575,19 +574,14 @@ class ControlledVocabulary(Mapping[str, Any]):
             if value in (None, ""):
                 continue
             value_str = str(value)
-            # CMIP6 CVs store POSIX-regex patterns (e.g.
-            # "^\\[\\{0,\\}[[:digit:]]\\{1,\\}\\]\\{0,\\}$") as the allowed-
-            # value definition for RIPF keys and CMOR4's
-            # _add_runtime_global_defaults injects them as defaults when they
-            # are the only entry in the list.  These regex strings are not
-            # user-supplied index values; skip them silently.  When a
-            # variant_label is already present the individual index values are
-            # not needed for assembly anyway.
+            # Skip POSIX-regex strings that were injected from the CV rather
+            # than supplied by the user (e.g. CMIP6's realization_index regex).
             if re.search(r"[\\^$\[\]{,}]", value_str):
                 continue
-            # CMIP7 style: "r9", "i1", "p1", "f3" — strip the leading letter.
-            # CMOR3 style: "9", "1" — use as-is.
-            # Each key has a canonical prefix: r/i/p/f.
+            # Determine the numeric part.  CMOR3 checks whether the value
+            # consists solely of digits (bare integer style, e.g. "3") and
+            # if so prepends the letter prefix when assembling variant_label.
+            # Prefixed-string style (e.g. "r3") strips the leading letter.
             prefix = _RIPF_PREFIXES[key]
             if value_str.startswith(prefix) and len(value_str) > 1:
                 numeric_part = value_str[1:]
@@ -606,12 +600,15 @@ class ControlledVocabulary(Mapping[str, Any]):
                     f"valid range [1, {_RIPF_MAX}]."
                 )
 
+        # Only validate the variant_label format when the CV actually defines
+        # a constraint (a list of allowed values or regex patterns).  When the
+        # CV merely lists variant_label as a required attribute with no values
+        # (e.g. obs4MIPs), accept any user-supplied string.
+        cv_vl_def = self.definition_for("variant_label")
+        cv_constrains_vl = isinstance(cv_vl_def, list) and len(cv_vl_def) > 0
+
         variant_label = dataset.get("variant_label")
-        if variant_label:
-            # Explicit variant_label: validate its format directly using the
-            # canonical Python pattern.  validate_dataset_values skips BRE
-            # list constraints (e.g. CMIP6 CV), so we enforce the basic
-            # rNiNpNfN structure here as a universal fallback.
+        if variant_label and cv_constrains_vl:
             vl_str = str(variant_label)
             if not re.fullmatch(r"r\d+i\d+p\d+f\d+", vl_str):
                 raise ControlledVocabularyError(
@@ -619,14 +616,13 @@ class ControlledVocabulary(Mapping[str, Any]):
                     "pattern 'r<N>i<N>p<N>f<N>'."
                 )
             return
+        if variant_label:
+            return
 
-        # When all four RIPF indices are in the CMIP7 prefixed format ("r9",
-        # "i1", "p1", "f3"), _variant_label assembles them and we can check
-        # that the result satisfies the canonical pattern.  Bare-integer
-        # indices (CMOR3 style "9", "1") are concatenated without prefixes by
-        # _variant_label so we skip the format check for them.
+        # Assemble variant_label from individual RIPF indices when all four
+        # are present.  Validate the result only when the CV constrains it.
         assembled = _variant_label(dataset)
-        if assembled and assembled.startswith("r"):
+        if assembled and cv_constrains_vl:
             if not re.fullmatch(r"r\d+i\d+p\d+f\d+", assembled):
                 raise ControlledVocabularyError(
                     f"variant_label={assembled!r} assembled from RIPF indices "
@@ -1218,17 +1214,34 @@ def _cv_values(value: Any) -> tuple[Any, ...]:
 
 
 def _variant_label(dataset: Mapping[str, Any]) -> str | None:
+    """Assemble a variant_label from RIPF index attributes, or return existing one.
+
+    Mirrors CMOR3's ``cmor_addRIPF`` logic:
+
+    * If ``variant_label`` is already in the dataset, return it directly.
+    * Otherwise collect the four RIPF index values.  For each one, if the
+      value consists solely of digits (bare-integer style, e.g. ``"3"``),
+      prepend the canonical letter prefix (``r``, ``i``, ``p``, ``f``) before
+      concatenating.  If the value already carries its prefix letter (e.g.
+      ``"r3"``), use it as-is.  This exactly replicates the C code path in
+      ``cmor_addRIPF`` that checks ``^[[:digit:]]{1,}$`` to decide whether to
+      prepend the prefix.
+    """
     if _is_table_value(dataset.get("variant_label")):
         return str(dataset["variant_label"])
-    pieces = [
-        dataset.get("realization_index"),
-        dataset.get("initialization_index"),
-        dataset.get("physics_index"),
-        dataset.get("forcing_index"),
-    ]
-    if not all(_is_table_value(piece) for piece in pieces):
-        return None
-    return "".join(str(piece) for piece in pieces)
+    pieces = []
+    for key, prefix in zip(_RIPF_KEYS, ("r", "i", "p", "f")):
+        value = dataset.get(key)
+        if not _is_table_value(value):
+            return None
+        value_str = str(value)
+        # Bare integer (digits only) → prepend the letter prefix.
+        # Prefixed string (e.g. "r3") → use as-is.
+        if re.fullmatch(r"\d+", value_str):
+            pieces.append(f"{prefix}{value_str}")
+        else:
+            pieces.append(value_str)
+    return "".join(pieces)
 
 
 def _new_tracking_id(dataset: Mapping[str, Any], cv: Mapping[str, Any]) -> str:

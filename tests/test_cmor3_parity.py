@@ -606,29 +606,41 @@ class TestVariantIndexValidation(unittest.TestCase):
     # variant_label format — explicit value validated via CV constraint
     # -----------------------------------------------------------------------
 
-    def test_explicit_malformed_variant_label_caught_by_cv_validate_dataset_values(
+    def test_explicit_malformed_variant_label_caught_by_validate_variant_indices(
         self,
     ):
-        """Explicit variant_label format is validated by validate_dataset_values
-        when the CV defines a regex constraint for it.  validate_variant_indices
-        intentionally defers this to the CV layer so that non-CMIP projects
-        (e.g., obs4MIPs) can use custom labels like 'CMORGuide' without error.
+        """variant_label format is validated only when the CV defines a constraint.
+
+        When the CV lists a ``variant_label`` definition (an array of allowed
+        values or POSIX regex patterns, as CMIP6 and CMIP7 do), a supplied
+        ``variant_label`` that does not match the canonical ``rNiNpNfN`` pattern
+        is rejected by ``validate_variant_indices``.
+
+        When the CV merely *requires* the attribute without constraining its
+        values (e.g. obs4MIPs), any user-supplied string is accepted — matching
+        CMOR3's behaviour which only validates against a CV regex when one is
+        present.
         """
+        # Build a CV that explicitly constrains variant_label (CMIP6/7 style).
         cv_with_constraint = ControlledVocabulary(
             {
                 "CV": {
                     **_MINIMAL_CV["CV"],
-                    # CMIP7-style variant_label constraint as a regex list.
                     "variant_label": [
                         r"r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+"
                     ],
                 }
             }
         )
-        # Malformed label (missing 'f' component) is caught by validate_dataset_values.
+        # Malformed label (missing 'f' component) is rejected.
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv_with_constraint.validate_dataset_values({"variant_label": "r1i1p1"})
+            cv_with_constraint.validate_variant_indices({"variant_label": "r1i1p1"})
         self.assertIn("variant_label", str(ctx.exception))
+
+        # A CV with no variant_label definition accepts any string.
+        cv_no_constraint = self._cv()  # _MINIMAL_CV has no variant_label entry
+        # This must NOT raise — obs4MIPs-style free-form labels are allowed.
+        cv_no_constraint.validate_variant_indices({"variant_label": "CMORGuide"})
 
     def test_wrong_prefix_on_index_is_caught_before_assembly(self):
         """When an index carries the wrong prefix letter (e.g. 'r1' instead of
