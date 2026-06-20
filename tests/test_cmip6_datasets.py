@@ -505,7 +505,6 @@ class TestVariantLabelValidation(unittest.TestCase):
         "1209374928349823498274987234987")`` expected log error containing
         the large number.
         """
-        overflow_index = "r1"
         overflow_value = str(2**31)  # INT32_MAX + 1
         with tempfile.TemporaryDirectory() as tmp:
             attrs = _amip_attrs(tmp)
@@ -624,7 +623,9 @@ class TestParentExperimentValidation(unittest.TestCase):
 
         CMOR3 test ``test_python_CMIP6_CV_forcemultipleparent.py``::
 
-            cmor.set_cur_dataset_attribute("parent_activity_id", "CMIP")  # should be DCPP
+            # should be DCPP
+            cmor.set_cur_dataset_attribute("parent_activity_id", "CMIP")
+
             cmor.set_cur_dataset_attribute("experiment_id", "dcppC-forecast-addAgung")
 
         The dcppC-forecast-addAgung experiment only allows parent_experiment_id
@@ -915,7 +916,8 @@ class TestOutputAttributes(unittest.TestCase):
             tracking_id = dict(info).get("tracking_id", "")
             self.assertTrue(
                 tracking_id.startswith("hdl:21.14100/"),
-                f"tracking_id should start with 'hdl:21.14100/' but got {tracking_id!r}",
+                "tracking_id should start with 'hdl:21.14100/' "
+                f"but got {tracking_id!r}",
             )
 
     def test_tracking_id_has_uuid_suffix(self) -> None:
