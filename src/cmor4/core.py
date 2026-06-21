@@ -111,11 +111,18 @@ def create_dataset(
     axes = _dataset_axes(dataset, axes, variable)
     axes = validate_and_normalize_axes(dataset, variable, axes)
 
-    # Add lat/lon grid coordinates from Grid if provided
-    grid_lat_lon_axes = _grid_axes(
-        grid, tuple(variable.dimensions or ()), dataset.project
-    )
-    axes = list(axes) + grid_lat_lon_axes
+    # Merge the grid's dimensional axes (i, j, …) into the axis list.
+    # For curvilinear/unstructured grids these axes may not be in the
+    # caller's list at all (caller passes only time), so they must be added.
+    # For variables whose data dimensions match the grid axes (e.g. a 2-D
+    # field on the same j/i grid), the same Axis objects may appear in both
+    # lists; deduplicate by out_name so each axis is processed exactly once.
+    if grid is not None and grid.axes:
+        existing_names = {str(a.out_name or a.name) for a in axes}
+        extra = [
+            a for a in grid.axes if str(a.out_name or a.name) not in existing_names
+        ]
+        axes = list(axes) + extra
 
     coords: dict[str, Any] = {}
     data_vars: dict[str, Any] = {}
@@ -130,6 +137,18 @@ def create_dataset(
             data_vars,
             axis_dims,
             scalar_coord_names,
+            auxiliary_coord_names,
+        )
+
+    # Write lat/lon and vertex arrays directly as dataset coords, bypassing
+    # the Axis pipeline — same pattern as CMOR3's cmor_grid associated_variables.
+    if grid is not None:
+        _add_grid_coords(
+            grid,
+            tuple(variable.dimensions or ()),
+            dataset.project,
+            coords,
+            data_vars,
             auxiliary_coord_names,
         )
 
@@ -508,93 +527,57 @@ def string_from_template(
     return render_template(template, _template_tokens(dataset, variable, ds), separator)
 
 
-def _grid_axes(
-    grid: Grid | None,
+def _grid_spatial_dims(
+    grid: Grid,
+    variable_dimensions: tuple[str, ...],
+) -> list[str]:
+    """Return the spatial (non-time) dimension names for a grid's lat/lon arrays.
+
+    Prefers ``grid.dimensions`` when set; falls back to *variable_dimensions*
+    with the time dimension filtered out.
+    """
+    if grid.dimensions:
+        return [str(d) for d in grid.dimensions if str(d).lower() != "time"]
+    return [str(d) for d in variable_dimensions if str(d).lower() != "time"]
+
+
+def _add_grid_coords(
+    grid: Grid,
     variable_dimensions: tuple[str, ...],
     project: Any | None,
-) -> list[Axis]:
-    """Return all Axis objects that a Grid contributes to the dataset.
+    coords: dict[str, Any],
+    data_vars: dict[str, Any],
+    auxiliary_coord_names: list[str],
+) -> None:
+    """Write grid lat/lon/vertices directly into *coords* and *data_vars*.
 
-    Produces two groups, in order:
-
-    1. **Dimensional axes** (``grid.axes``) — the indexing dimensions of the
-       grid (e.g. ``i_index``, ``j_index``).  These are already fully-formed
-       :class:`~cmor4.Axis` instances owned by the grid; they are passed
-       through unchanged.
-
-    2. **Auxiliary coordinate axes** — ``latitude`` and ``longitude`` 2-D
-       arrays written as auxiliary coordinate variables.  Created here from
-       the grid's data arrays; marked ``auxiliary=True``.
+    This is the CMOR4 equivalent of CMOR3's ``cmor_grid`` lat/lon variable
+    registration: latitude, longitude, vertices_latitude, and
+    vertices_longitude are added as dataset entries dimensioned by the grid's
+    own spatial dimensions (and a ``vertices`` dimension for cell-corner
+    arrays).  No :class:`~cmor4.Axis` objects are created.
 
     Parameters
     ----------
     grid
-        Grid object to inspect.
+        Grid whose coordinate arrays should be written.
     variable_dimensions
-        Fallback dimension names (from the variable table) used to infer the
-        spatial dimension list when ``grid.dimensions`` is not set.  Time is
-        filtered out.
+        Fallback spatial dimension names (time filtered out) when
+        ``grid.dimensions`` is not set.
     project
-        Project tables used to merge grid-coordinate metadata from tables.
-
-    Returns
-    -------
-    list[Axis]
-        Dimensional axes followed by auxiliary coordinate axes.  Empty when
-        *grid* is ``None`` or has neither ``axes`` nor lat/lon arrays.
+        Optional project tables; its ``coordinate_table`` is forwarded to
+        :meth:`Grid.to_dataset_coords` for CF-attribute lookup.
+    coords, data_vars, auxiliary_coord_names
+        Dicts/list that are mutated in-place with the new entries.
     """
-    if grid is None:
-        return []
-
-    result: list[Axis] = []
-
-    # --- 1. Dimensional axes (already Axis objects, owned by the grid) -----
-    result.extend(grid.axes)
-
-    # --- 2. Auxiliary lat/lon coordinate axes --------------------------------
-    # Determine spatial dimension names for the auxiliary arrays.
-    if grid.dimensions:
-        spatial_dims = [
-            str(d) for d in grid.dimensions if str(d).lower() not in ("time",)
-        ]
-    elif variable_dimensions:
-        spatial_dims = [
-            str(d) for d in variable_dimensions if str(d).lower() not in ("time",)
-        ]
-    else:
-        spatial_dims = []
-
-    if grid.latitude is not None:
-        lat_data: dict[str, Any] = {
-            "name": "latitude",
-            "grid_coordinate": "latitude",
-            "values": grid.latitude,
-            "dimensions": spatial_dims,
-            "bounds": grid.latitude_vertices,
-            "bounds_name": "vertices_latitude",
-            "bounds_dim": grid.vertices_dim,
-            "auxiliary": True,
-        }
-        if project is not None:
-            lat_data = project.coordinate_table.build(lat_data)
-        result.append(Axis.model_validate(lat_data))
-
-    if grid.longitude is not None:
-        lon_data: dict[str, Any] = {
-            "name": "longitude",
-            "grid_coordinate": "longitude",
-            "values": grid.longitude,
-            "dimensions": spatial_dims,
-            "bounds": grid.longitude_vertices,
-            "bounds_name": "vertices_longitude",
-            "bounds_dim": grid.vertices_dim,
-            "auxiliary": True,
-        }
-        if project is not None:
-            lon_data = project.coordinate_table.build(lon_data)
-        result.append(Axis.model_validate(lon_data))
-
-    return result
+    spatial_dims = _grid_spatial_dims(grid, variable_dimensions)
+    coord_table = getattr(project, "coordinate_table", None)
+    new_coords, new_data_vars, new_aux_names = grid.to_dataset_coords(
+        spatial_dims, coord_table=coord_table
+    )
+    coords.update(new_coords)
+    data_vars.update(new_data_vars)
+    auxiliary_coord_names.extend(new_aux_names)
 
 
 def _add_axis(
@@ -790,6 +773,9 @@ def _validate_final_components(
                 f"{grid.variable_name!r}."
             )
 
+    if grid is not None:
+        _validate_grid_coords(ds, grid)
+
     for zfactor, out_name in zip(zfactors, zfactor_names):
         _validate_final_zfactor(ds, zfactor, out_name)
 
@@ -810,6 +796,29 @@ def _validate_final_axis(ds: xr.Dataset, axis: Axis) -> None:
         raise ValueError(
             f"Bounds variable {bounds_name!r} for axis {axis.name!r} was not created."
         )
+
+
+def _validate_grid_coords(ds: xr.Dataset, grid: Grid) -> None:
+    """Verify that lat/lon/vertex coords declared by the grid were written."""
+    for name in ("latitude", "longitude"):
+        arr = getattr(grid, name)
+        if arr is None:
+            continue
+        if name not in ds.coords:
+            raise ValueError(
+                f"Grid coordinate {name!r} was not created in the dataset."
+            )
+    # vertices_latitude / vertices_longitude are written as data_vars
+    for field, var_name in (
+        ("latitude_vertices", "vertices_latitude"),
+        ("longitude_vertices", "vertices_longitude"),
+    ):
+        if getattr(grid, field) is None:
+            continue
+        if var_name not in ds.data_vars:
+            raise ValueError(
+                f"Grid vertex variable {var_name!r} was not created in the dataset."
+            )
 
 
 def _validate_final_zfactor(

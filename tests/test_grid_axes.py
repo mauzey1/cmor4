@@ -7,7 +7,9 @@ Covers:
 * Caller's original Axis instance is not mutated
 * dimensions derived automatically from axes
 * variable_dimensions() with axes, with strings, fallback
-* _grid_axes() in core includes dimensional axes before lat/lon auxiliaries
+* Grid.axes are appended directly in create_dataset (no _grid_axes wrapper)
+* _add_grid_coords() writes lat/lon/vertices directly as dataset coords
+* Grid.to_dataset_coords() produces correct coords/data_vars/aux names
 * must_call_cmor_grid: isgridaxis axis in user axes without Grid → error
 * ProjectTables.grid(axes=...) validates axes against grid table
 * _validate_grid_dimensions() both paths
@@ -25,7 +27,7 @@ from typing import Any
 import numpy as np
 
 from cmor4 import Axis, Grid, Variable
-from cmor4.core import _grid_axes
+from cmor4.core import _add_grid_coords
 from cmor4.exceptions import TableValidationError
 
 # ---------------------------------------------------------------------------
@@ -155,63 +157,151 @@ class TestVariableDimensions(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 4. _grid_axes() in core
+# 4. _add_grid_coords() in core
 # ---------------------------------------------------------------------------
+# Note: there is no _grid_axes() wrapper. create_dataset() directly appends
+# grid.axes to the axis list (or nothing when grid is None). The round-trip
+# tests in section 9 exercise that path end-to-end.
 
 
-class TestGridAxesInCore(unittest.TestCase):
-    """_grid_axes() should return dimensional axes THEN auxiliary lat/lon."""
+class TestAddGridCoords(unittest.TestCase):
+    """_add_grid_coords() writes lat/lon/vertices directly as dataset entries."""
 
-    def test_returns_dimensional_axes_first(self) -> None:
-        j = Axis(name="j", out_name="j", values=np.arange(4, dtype="f4"))
-        i = Axis(name="i", out_name="i", values=np.arange(8, dtype="f4"))
-        lat2d, lon2d = _latlon(4, 8)
-        grid = Grid(axes=[j, i], latitude=lat2d, longitude=lon2d)
-        result = _grid_axes(grid, (), None)
-        # First two should be the dimensional axes
-        self.assertEqual(result[0].name, "j")
-        self.assertEqual(result[1].name, "i")
+    def _run(self, grid: Grid, spatial_dims: list[str]) -> tuple[dict, dict, list]:
+        coords: dict = {}
+        data_vars: dict = {}
+        aux_names: list = []
+        _add_grid_coords(grid, tuple(spatial_dims), None, coords, data_vars, aux_names)
+        return coords, data_vars, aux_names
 
-    def test_returns_lat_lon_auxiliary_after_dimensional(self) -> None:
-        j = Axis(name="j", out_name="j", values=np.arange(4, dtype="f4"))
-        i = Axis(name="i", out_name="i", values=np.arange(8, dtype="f4"))
-        lat2d, lon2d = _latlon(4, 8)
-        grid = Grid(axes=[j, i], latitude=lat2d, longitude=lon2d)
-        result = _grid_axes(grid, (), None)
-        self.assertEqual(len(result), 4)  # j, i, lat, lon
-        # lat and lon should be auxiliary
-        for aux in result[2:]:
-            self.assertTrue(bool(aux.auxiliary), f"{aux.name} should be auxiliary")
-
-    def test_no_latlon_returns_only_dimensional(self) -> None:
-        j = Axis(name="j", out_name="j", values=np.arange(4, dtype="f4"))
-        i = Axis(name="i", out_name="i", values=np.arange(8, dtype="f4"))
-        grid = Grid(axes=[j, i])
-        result = _grid_axes(grid, (), None)
-        self.assertEqual(len(result), 2)
-        self.assertFalse(result[0].auxiliary)
-        self.assertFalse(result[1].auxiliary)
-
-    def test_none_grid_returns_empty(self) -> None:
-        self.assertEqual(_grid_axes(None, (), None), [])
-
-    def test_no_axes_only_latlon(self) -> None:
-        """Name-based grid: no axes, just lat/lon arrays."""
+    def test_lat_lon_written_as_coords(self) -> None:
         lat2d, lon2d = _latlon(4, 8)
         grid = Grid(dimensions=("j", "i"), latitude=lat2d, longitude=lon2d)
-        result = _grid_axes(grid, (), None)
-        self.assertEqual(len(result), 2)
-        self.assertTrue(bool(result[0].auxiliary))
-        self.assertTrue(bool(result[1].auxiliary))
+        coords, data_vars, aux_names = self._run(grid, ["j", "i"])
+        self.assertIn("latitude", coords)
+        self.assertIn("longitude", coords)
+        self.assertEqual(coords["latitude"][0], ("j", "i"))
+        self.assertEqual(coords["longitude"][0], ("j", "i"))
 
-    def test_auxiliary_lat_uses_grid_dimensions(self) -> None:
-        j = Axis(name="j", out_name="j", values=np.arange(4, dtype="f4"))
-        i = Axis(name="i", out_name="i", values=np.arange(8, dtype="f4"))
+    def test_lat_lon_in_auxiliary_names(self) -> None:
         lat2d, lon2d = _latlon(4, 8)
-        grid = Grid(axes=[j, i], latitude=lat2d, longitude=lon2d)
-        result = _grid_axes(grid, (), None)
-        lat_axis = next(a for a in result if a.name == "latitude")
-        self.assertEqual(list(lat_axis.dimensions), ["j", "i"])
+        grid = Grid(dimensions=("j", "i"), latitude=lat2d, longitude=lon2d)
+        _, _, aux_names = self._run(grid, ["j", "i"])
+        self.assertIn("latitude", aux_names)
+        self.assertIn("longitude", aux_names)
+
+    def test_vertices_written_as_data_vars(self) -> None:
+        nj, ni, nv = 4, 8, 4
+        lat2d, lon2d = _latlon(nj, ni)
+        blat = np.zeros((nj, ni, nv))
+        blon = np.zeros((nj, ni, nv))
+        grid = Grid(
+            dimensions=("j", "i"),
+            latitude=lat2d,
+            longitude=lon2d,
+            latitude_vertices=blat,
+            longitude_vertices=blon,
+        )
+        coords, data_vars, _ = self._run(grid, ["j", "i"])
+        self.assertIn("vertices_latitude", data_vars)
+        self.assertIn("vertices_longitude", data_vars)
+        self.assertEqual(data_vars["vertices_latitude"][0], ("j", "i", "vertices"))
+
+    def test_bounds_attr_set_on_lat_lon(self) -> None:
+        nj, ni, nv = 4, 8, 4
+        lat2d, lon2d = _latlon(nj, ni)
+        blat = np.zeros((nj, ni, nv))
+        blon = np.zeros((nj, ni, nv))
+        grid = Grid(
+            dimensions=("j", "i"),
+            latitude=lat2d,
+            longitude=lon2d,
+            latitude_vertices=blat,
+            longitude_vertices=blon,
+        )
+        coords, _, _ = self._run(grid, ["j", "i"])
+        self.assertEqual(coords["latitude"][2].get("bounds"), "vertices_latitude")
+        self.assertEqual(coords["longitude"][2].get("bounds"), "vertices_longitude")
+
+    def test_no_lat_lon_produces_no_coords(self) -> None:
+        grid = Grid(dimensions=("j", "i"))
+        coords, data_vars, aux_names = self._run(grid, ["j", "i"])
+        self.assertEqual(coords, {})
+        self.assertEqual(data_vars, {})
+        self.assertEqual(aux_names, [])
+
+    def test_spatial_dims_from_grid_dimensions(self) -> None:
+        lat2d, lon2d = _latlon(3, 5)
+        grid = Grid(dimensions=("row", "col"), latitude=lat2d, longitude=lon2d)
+        coords, _, _ = self._run(grid, [])
+        self.assertEqual(coords["latitude"][0], ("row", "col"))
+
+    def test_spatial_dims_fallback_to_variable_dims(self) -> None:
+        lat2d, lon2d = _latlon(3, 5)
+        # Grid has no dimensions set — falls back to variable_dimensions arg
+        grid = Grid(latitude=lat2d, longitude=lon2d)
+        coords: dict = {}
+        data_vars: dict = {}
+        aux_names: list = []
+        _add_grid_coords(grid, ("time", "ny", "nx"), None, coords, data_vars, aux_names)
+        # time must be filtered out
+        self.assertEqual(coords["latitude"][0], ("ny", "nx"))
+
+
+class TestGridToDatasetCoords(unittest.TestCase):
+    """Grid.to_dataset_coords() unit tests."""
+
+    def test_lat_lon_only(self) -> None:
+        lat2d, lon2d = _latlon(4, 8)
+        grid = Grid(latitude=lat2d, longitude=lon2d)
+        coords, data_vars, aux_names = grid.to_dataset_coords(["j", "i"])
+        self.assertIn("latitude", coords)
+        self.assertIn("longitude", coords)
+        self.assertEqual(coords["latitude"][0], ("j", "i"))
+        self.assertNotIn("vertices_latitude", data_vars)
+        self.assertEqual(aux_names, ["latitude", "longitude"])
+
+    def test_default_cf_attrs_no_table(self) -> None:
+        lat2d, lon2d = _latlon(2, 3)
+        grid = Grid(latitude=lat2d, longitude=lon2d)
+        coords, _, _ = grid.to_dataset_coords(["j", "i"])
+        lat_attrs = coords["latitude"][2]
+        self.assertEqual(lat_attrs["standard_name"], "latitude")
+        self.assertEqual(lat_attrs["units"], "degrees_north")
+        lon_attrs = coords["longitude"][2]
+        self.assertEqual(lon_attrs["standard_name"], "longitude")
+        self.assertEqual(lon_attrs["units"], "degrees_east")
+
+    def test_vertices_dims_include_vertices_dim(self) -> None:
+        nj, ni, nv = 3, 5, 4
+        lat2d, lon2d = _latlon(nj, ni)
+        blat = np.zeros((nj, ni, nv))
+        blon = np.zeros((nj, ni, nv))
+        grid = Grid(
+            latitude=lat2d,
+            longitude=lon2d,
+            latitude_vertices=blat,
+            longitude_vertices=blon,
+        )
+        coords, data_vars, _ = grid.to_dataset_coords(["j", "i"])
+        self.assertEqual(data_vars["vertices_latitude"][0], ("j", "i", "vertices"))
+
+    def test_custom_vertices_dim_name(self) -> None:
+        nj, ni, nv = 3, 5, 4
+        lat2d, lon2d = _latlon(nj, ni)
+        blat = np.zeros((nj, ni, nv))
+        grid = Grid(
+            latitude=lat2d, longitude=lon2d, latitude_vertices=blat, vertices_dim="nv"
+        )
+        _, data_vars, _ = grid.to_dataset_coords(["j", "i"])
+        self.assertEqual(data_vars["vertices_latitude"][0], ("j", "i", "nv"))
+
+    def test_no_lat_lon_returns_empty(self) -> None:
+        grid = Grid()
+        coords, data_vars, aux_names = grid.to_dataset_coords(["j", "i"])
+        self.assertEqual(coords, {})
+        self.assertEqual(data_vars, {})
+        self.assertEqual(aux_names, [])
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +660,48 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         self.assertIn("vertices_longitude", ds.data_vars)
         # bounds attribute on lat coordinate
         self.assertEqual(ds["latitude"].attrs.get("bounds"), "vertices_latitude")
+
+    def test_grid_axes_also_in_caller_axes_no_duplicates(self) -> None:
+        """When grid axes are also passed in the caller's axes list they must
+        not be processed twice — no duplicate coords or doubled coordinates
+        attribute entries."""
+        from cmor4.core import create_dataset
+        from cmor4.dataset import DatasetInfo
+
+        nj, ni = 4, 8
+        lat2d, lon2d = _latlon(nj, ni)
+        time_axis = Axis(
+            name="time",
+            values=np.array([15.0]),
+            units="days since 2000-01-01",
+            axis="T",
+        )
+        j_axis = Axis(name="j", out_name="j", values=np.arange(nj, dtype="f4"))
+        i_axis = Axis(name="i", out_name="i", values=np.arange(ni, dtype="f4"))
+        grid = Grid(axes=[j_axis, i_axis], latitude=lat2d, longitude=lon2d)
+
+        variable = Variable(
+            name="tos",
+            units="K",
+            dimensions=("time", "j", "i"),
+            frequency="mon",
+        )
+        data = np.random.rand(1, nj, ni).astype("f4") + 273.15
+        dataset = DatasetInfo.from_mapping({"outpath": "/tmp", "frequency": "mon"})
+
+        # Pass j and i explicitly in the caller's axes list as well as via grid
+        ds = create_dataset(
+            dataset, variable, [time_axis, j_axis, i_axis], data, grid=grid
+        )
+
+        self.assertEqual(tuple(ds["tos"].dims), ("time", "j", "i"))
+        # Each coord appears exactly once
+        self.assertIn("j", ds.coords)
+        self.assertIn("i", ds.coords)
+        # coordinates attribute lists lat and lon exactly once each
+        coord_attr = ds["tos"].attrs.get("coordinates", "")
+        self.assertEqual(coord_attr.split().count("latitude"), 1)
+        self.assertEqual(coord_attr.split().count("longitude"), 1)
 
 
 if __name__ == "__main__":

@@ -197,6 +197,118 @@ class Grid(MetadataModel):
             return time_dims + grid_dims
         return grid_dims
 
+    def to_dataset_coords(
+        self,
+        spatial_dims: list[str],
+        coord_table: Any = None,
+    ) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+        """Produce xarray coord/data-var entries for the grid's lat/lon data.
+
+        This mirrors what CMOR3's ``cmor_grid`` does: latitude, longitude,
+        vertices_latitude, and vertices_longitude are registered as
+        **grid-owned variables** dimensioned by the grid's own spatial
+        dimensions (and a ``vertices`` dimension for the cell-corner arrays).
+        They are written directly as xarray dataset entries rather than being
+        routed through the :class:`~cmor4.Axis` machinery.
+
+        Parameters
+        ----------
+        spatial_dims:
+            Ordered list of the grid's spatial dimension names (e.g.
+            ``["j", "i"]``).  These become the dimension tuple for the
+            lat/lon coordinate arrays.
+        coord_table:
+            Optional :class:`~cmor4._tables.CoordinateTable` used to pull
+            CF metadata (``standard_name``, ``long_name``, ``units``) for
+            latitude and longitude from the project tables.  When ``None``,
+            hard-coded CF defaults are used.
+
+        Returns
+        -------
+        coords : dict
+            Mapping of coordinate-variable name → ``(dims, data, attrs)``
+            tuples ready for ``xr.Dataset(coords=...)``.
+        data_vars : dict
+            Mapping of data-variable name → ``(dims, data, attrs)`` tuples
+            ready for ``xr.Dataset(data_vars=...)``.  Holds
+            ``vertices_latitude`` / ``vertices_longitude`` when vertex arrays
+            were supplied.
+        auxiliary_coord_names : list[str]
+            Names that should be listed in the variable's ``coordinates``
+            attribute (lat, lon, and their vertex counterparts when present).
+        """
+        coords: dict[str, Any] = {}
+        data_vars: dict[str, Any] = {}
+        auxiliary_coord_names: list[str] = []
+
+        dims = tuple(spatial_dims)
+
+        def _cf_attrs(name: str, default_units: str, default_sn: str) -> dict[str, Any]:
+            """Return CF attrs from coord table when available, else defaults."""
+            if coord_table is not None:
+                entry = coord_table.resolve_grid_coord({
+                    "name": name,
+                    "grid_coordinate": name,
+                }) or coord_table.resolve_coord({"name": name})
+                if entry is not None:
+                    raw = dict(entry.entry)
+                    result: dict[str, Any] = {}
+                    if "units" in raw:
+                        result["units"] = str(raw["units"])
+                    if "standard_name" in raw:
+                        result["standard_name"] = str(raw["standard_name"])
+                    if "long_name" in raw:
+                        result["long_name"] = str(raw["long_name"])
+                    return result
+            # CF hard-coded defaults
+            attrs: dict[str, Any] = {
+                "units": default_units,
+                "standard_name": default_sn,
+            }
+            return attrs
+
+        if self.latitude is not None:
+            lat_arr = np.asarray(self.latitude)
+            lat_attrs = _cf_attrs("latitude", "degrees_north", "latitude")
+            coords["latitude"] = (dims, lat_arr, lat_attrs)
+            auxiliary_coord_names.append("latitude")
+
+        if self.longitude is not None:
+            lon_arr = np.asarray(self.longitude)
+            lon_attrs = _cf_attrs("longitude", "degrees_east", "longitude")
+            coords["longitude"] = (dims, lon_arr, lon_attrs)
+            auxiliary_coord_names.append("longitude")
+
+        # Vertex arrays — dimensioned (*spatial_dims, vertices_dim)
+        if self.latitude_vertices is not None or self.longitude_vertices is not None:
+            vdim = self.vertices_dim
+            vert_dims = dims + (vdim,)
+
+            if self.latitude_vertices is not None:
+                blat_arr = np.asarray(self.latitude_vertices)
+                blat_attrs = _cf_attrs("vertices_latitude", "degrees_north", "latitude")
+                data_vars["vertices_latitude"] = (vert_dims, blat_arr, blat_attrs)
+                # Set bounds pointer on the latitude coord
+                if "latitude" in coords:
+                    lat_entry = coords["latitude"]
+                    updated_attrs = dict(lat_entry[2])
+                    updated_attrs["bounds"] = "vertices_latitude"
+                    coords["latitude"] = (lat_entry[0], lat_entry[1], updated_attrs)
+
+            if self.longitude_vertices is not None:
+                blon_arr = np.asarray(self.longitude_vertices)
+                blon_attrs = _cf_attrs(
+                    "vertices_longitude", "degrees_east", "longitude"
+                )
+                data_vars["vertices_longitude"] = (vert_dims, blon_arr, blon_attrs)
+                if "longitude" in coords:
+                    lon_entry = coords["longitude"]
+                    updated_attrs = dict(lon_entry[2])
+                    updated_attrs["bounds"] = "vertices_longitude"
+                    coords["longitude"] = (lon_entry[0], lon_entry[1], updated_attrs)
+
+        return coords, data_vars, auxiliary_coord_names
+
     @property
     def has_mapping(self) -> bool:
         """True when this grid needs a CF grid-mapping variable."""
