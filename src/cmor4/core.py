@@ -120,7 +120,8 @@ def create_dataset(
     if grid is not None and grid.axes:
         existing_names = {str(a.out_name or a.name) for a in axes}
         extra = [
-            a for a in grid.axes if str(a.out_name or a.name) not in existing_names
+            a for a in grid.axes
+            if str(a.out_name or a.name) not in existing_names
         ]
         axes = list(axes) + extra
 
@@ -311,6 +312,7 @@ def write_netcdf(
         )
 
     ds.to_netcdf(output_path, **to_netcdf_kwargs)
+
     return output_path
 
 
@@ -713,9 +715,13 @@ def _set_formula_terms(
 ) -> None:
     variable_dims = set(variable.dimensions or ())
     for axis in axes:
-        formula_terms = variable.formula_terms or axis.z_factors
-        if not formula_terms and set(zfactor_names).issuperset({"a", "b", "p0", "ps"}):
-            formula_terms = "a: a b: b p0: p0 ps: ps"
+        # formula_terms is only valid on a parametric vertical coordinate
+        # (CF §4.3.3).  axis.z_factors is non-None exclusively for such axes
+        # (it comes from the "z_factors" field in the coordinate table entry);
+        # it is None for time, lat, lon, and every other non-parametric axis.
+        # Restrict all formula_terms work to axes that are already identified
+        # as parametric by the coordinate table.
+        formula_terms = axis.z_factors or variable.formula_terms
         if not formula_terms:
             continue
         axis_name = axis.name
@@ -727,6 +733,25 @@ def _set_formula_terms(
             coord_name = str(axis.out_name or axis.name)
             if coord_name in ds.coords:
                 ds[coord_name].attrs["formula_terms"] = formula_terms
+            # Also write formula_terms on the bounds variable, substituting
+            # bounds-specific factor names (e.g. a_bnds, b_bnds) when present.
+            # This mirrors CMOR3 behaviour (cmor_write.c writes both).
+            bounds_name = ds[coord_name].attrs.get("bounds") if coord_name in ds.coords else None
+            if bounds_name and bounds_name in ds:
+                bnds_formula_terms = formula_terms
+                for factor in ("a", "b"):
+                    bnds_name = f"{factor}_bnds"
+                    if bnds_name in ds:
+                        bnds_formula_terms = bnds_formula_terms.replace(
+                            f"{factor}: {factor}", f"{factor}: {bnds_name}"
+                        )
+                # Copy other relevant attrs from the coord to its bounds
+                bnds_attrs = {}
+                for key in ("formula", "standard_name", "units"):
+                    if key in ds[coord_name].attrs:
+                        bnds_attrs[key] = ds[coord_name].attrs[key]
+                bnds_attrs["formula_terms"] = bnds_formula_terms
+                ds[bounds_name].attrs.update(bnds_attrs)
 
 
 def _validate_final_components(

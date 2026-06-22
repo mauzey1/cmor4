@@ -31,11 +31,18 @@ notebook = [
   "nbqa>=1.9",
 ]
 dev = [
+  "pytest>=8.0",
   "ruff>=0.15",
   "mypy>=2.1",
   "sphinx>=7.0",
   "sphinx-autobuild>=2024.0",
   "furo>=2024.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore:numpy.ndarray size changed:RuntimeWarning",
 ]
 
 [tool.setuptools.packages.find]
