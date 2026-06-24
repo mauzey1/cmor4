@@ -120,8 +120,7 @@ def create_dataset(
     if grid is not None and grid.axes:
         existing_names = {str(a.out_name or a.name) for a in axes}
         extra = [
-            a for a in grid.axes
-            if str(a.out_name or a.name) not in existing_names
+            a for a in grid.axes if str(a.out_name or a.name) not in existing_names
         ]
         axes = list(axes) + extra
 
@@ -736,7 +735,9 @@ def _set_formula_terms(
             # Also write formula_terms on the bounds variable, substituting
             # bounds-specific factor names (e.g. a_bnds, b_bnds) when present.
             # This mirrors CMOR3 behaviour (cmor_write.c writes both).
-            bounds_name = ds[coord_name].attrs.get("bounds") if coord_name in ds.coords else None
+            bounds_name = (
+                ds[coord_name].attrs.get("bounds") if coord_name in ds.coords else None
+            )
             if bounds_name and bounds_name in ds:
                 bnds_formula_terms = formula_terms
                 for factor in ("a", "b"):
