@@ -52,29 +52,52 @@ class DatasetInfo(BaseModel, Mapping[str, Any]):
 
     Parameters
     ----------
-    mip_era, activity_id, institution_id, source_id, experiment_id,
-    variant_label, grid_label, license_id:
-        Standard CMIP DRS global attributes.
-    realization_index, initialization_index, physics_index, forcing_index:
-        RIPF ensemble indices.  Accepts CMIP7-style prefixed strings
-        (``"r9"``, ``"i1"``), bare integers (``9``, ``1``), or string
-        integers (``"9"``).  Values are validated to be positive and ≤
-        INT32_MAX at construction time so downstream code can rely on their
-        format.
-    calendar:
+    mip_era : str, optional
+        CMIP model intercomparison project era.
+    activity_id : str, optional
+        CMIP activity identifier.
+    institution_id : str, optional
+        Institution identifier.
+    source_id : str, optional
+        Model or source identifier.
+    experiment_id : str, optional
+        Experiment identifier.
+    variant_label : str, optional
+        Variant label for the dataset.
+    grid_label : str, optional
+        Grid label identifier.
+    license_id : str, optional
+        License identifier.
+    realization_index : str or int, optional
+        Realization ensemble index. Accepts CMIP7-style prefixed strings
+        (``"r9"``), bare integers (``9``), or string integers (``"9"``).
+        Values are validated to be positive and ≤ INT32_MAX.
+    initialization_index : str or int, optional
+        Initialization ensemble index. Accepts CMIP7-style prefixed strings
+        (``"i1"``), bare integers (``1``), or string integers (``"1"``).
+        Values are validated to be positive and ≤ INT32_MAX.
+    physics_index : str or int, optional
+        Physics ensemble index. Accepts CMIP7-style prefixed strings
+        (``"p1"``), bare integers (``1``), or string integers (``"1"``).
+        Values are validated to be positive and ≤ INT32_MAX.
+    forcing_index : str or int, optional
+        Forcing ensemble index. Accepts CMIP7-style prefixed strings
+        (``"f1"``), bare integers (``1``), or string integers (``"1"``).
+        Values are validated to be positive and ≤ INT32_MAX.
+    calendar : str, optional
         CF calendar name for the time axis.
-    frequency:
+    frequency : str, optional
         Data frequency string (e.g. ``"mon"``).
-    nominal_resolution:
+    nominal_resolution : str, optional
         Approximate horizontal resolution description.
-    outpath:
+    outpath : str, optional
         Output directory for NetCDF files (internal, not written to file).
-    version:
+    version : str, optional
         Dataset version string.
-    project:
+    project : ProjectTables, optional
         :class:`~cmor4.tables.ProjectTables` that prepared this record.
         Excluded from the Mapping view and serialisation.
-    user_info:
+    user_info : dict, optional
         Original user-supplied metadata.
         Excluded from the Mapping view and serialisation.
     """

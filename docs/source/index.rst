@@ -11,38 +11,6 @@ CMOR4 is a Python package for creating CF-compliant climate model output in NetC
    api/functions
    api/exceptions
 
-Classes
--------
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Core Classes:
-
-   api/ProjectTables
-   api/Cmor4Result
-   api/DatasetInfo
-   api/Variable
-   api/Axis
-   api/Grid
-   api/ZFactor
-   api/ControlledVocabulary
-
-Functions
----------
-
-.. toctree::
-   :maxdepth: 1
-
-   api/functions
-
-Exceptions
-----------
-
-.. toctree::
-   :maxdepth: 1
-
-   api/exceptions
-
 Indices and tables
 ==================
 
