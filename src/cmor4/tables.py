@@ -73,30 +73,12 @@ class ProjectTables:
         )
         self.grid_table_file = Path(grid_table) if grid_table is not None else None
         self.cv = ControlledVocabulary.from_file(self.cv_file)
-        self.variable_table = VariableTable(self.variable_table_files)
-
-        # Load raw grid table data first — coordinate table needs the axis
-        # entries from it for the overlay that gives grid-specific names priority.
-        raw_grid_axis: dict[str, Mapping[str, Any]] = {}
-        raw_grid_coord: dict[str, Mapping[str, Any]] = {}
-        raw_grid_mapping: dict[str, Mapping[str, Any]] = {}
-        if self.grid_table_file is not None:
-            raw_grid_axis = self._read_entries(self.grid_table_file, "axis_entry")
-            raw_grid_coord = self._read_entries(self.grid_table_file, "variable_entry")
-            raw_grid_mapping = self._read_entries(self.grid_table_file, "mapping_entry")
-        self.grid_table = GridTable(raw_grid_axis, raw_grid_coord, raw_grid_mapping)
-
-        raw_coord: dict[str, Mapping[str, Any]] = {}
-        if self.coordinate_table_file is not None:
-            raw_coord = self._read_entries(self.coordinate_table_file, "axis_entry")
-        self.coordinate_table = CoordinateTable(
-            raw_coord, raw_grid_axis, raw_grid_coord
+        self.variable_table = VariableTable.from_file(self.variable_table_files)
+        self.grid_table = GridTable.from_file(self.grid_table_file)
+        self.coordinate_table = CoordinateTable.from_file(
+            self.coordinate_table_file, self.grid_table_file
         )
-
-        raw_formula: dict[str, Mapping[str, Any]] = {}
-        if self.formula_table_file is not None:
-            raw_formula = self._read_entries(self.formula_table_file, "formula_entry")
-        self.formula_table = FormulaTable(raw_formula)
+        self.formula_table = FormulaTable.from_file(self.formula_table_file)
 
     # ------------------------------------------------------------------
     # Backward-compatible properties (delegate to table objects)
@@ -1232,16 +1214,6 @@ class ProjectTables:
         """
 
         self.cv.validate_parent_attributes(dataset)
-
-    @staticmethod
-    def _read_entries(table_file: Path, key: str) -> dict[str, Mapping[str, Any]]:
-        with table_file.open() as handle:
-            data = json.load(handle)
-        return {
-            str(name): entry
-            for name, entry in data.get(key, {}).items()
-            if isinstance(entry, Mapping)
-        }
 
 
 def _validate_grid_dimensions(

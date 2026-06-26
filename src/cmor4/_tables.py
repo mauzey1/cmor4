@@ -221,6 +221,38 @@ class CoordinateTable:
             _build_generic_level_index(self._all_coord)
         )
 
+    @classmethod
+    def from_file(
+        cls,
+        coordinate_table: Path | None = None,
+        grid_table: Path | None = None,
+    ) -> "CoordinateTable":
+        """Construct a CoordinateTable from table file paths.
+
+        Parameters
+        ----------
+        coordinate_table:
+            Optional path to the coordinate table JSON file.
+        grid_table:
+            Optional path to the grids table JSON file.
+
+        Returns
+        -------
+        CoordinateTable
+            Loaded coordinate table instance.
+        """
+        coord_entries: dict[str, Mapping[str, Any]] = {}
+        grid_axis_entries: dict[str, Mapping[str, Any]] = {}
+        grid_coord_entries: dict[str, Mapping[str, Any]] = {}
+
+        if coordinate_table is not None:
+            coord_entries = _read_table_entries(coordinate_table, "axis_entry")
+        if grid_table is not None:
+            grid_axis_entries = _read_table_entries(grid_table, "axis_entry")
+            grid_coord_entries = _read_table_entries(grid_table, "variable_entry")
+
+        return cls(coord_entries, grid_axis_entries, grid_coord_entries)
+
     # ------------------------------------------------------------------
     # Resolution
     # ------------------------------------------------------------------
@@ -465,6 +497,25 @@ class FormulaTable:
     def __init__(self, entries: dict[str, Mapping[str, Any]]) -> None:
         self._entries = entries
 
+    @classmethod
+    def from_file(cls, formula_table: Path | None = None) -> "FormulaTable":
+        """Construct a FormulaTable from a table file path.
+
+        Parameters
+        ----------
+        formula_table:
+            Optional path to the formula-terms table JSON file.
+
+        Returns
+        -------
+        FormulaTable
+            Loaded formula table instance.
+        """
+        entries: dict[str, Mapping[str, Any]] = {}
+        if formula_table is not None:
+            entries = _read_table_entries(formula_table, "formula_entry")
+        return cls(entries)
+
     # ------------------------------------------------------------------
     # Resolution
     # ------------------------------------------------------------------
@@ -577,6 +628,31 @@ class GridTable:
         self._coord = coord_entries
         self._raw_mapping = mapping_entries
 
+    @classmethod
+    def from_file(cls, grid_table: Path | None = None) -> "GridTable":
+        """Construct a GridTable from a table file path.
+
+        Parameters
+        ----------
+        grid_table:
+            Optional path to the grids table JSON file.
+
+        Returns
+        -------
+        GridTable
+            Loaded grid table instance.
+        """
+        axis_entries: dict[str, Mapping[str, Any]] = {}
+        coord_entries: dict[str, Mapping[str, Any]] = {}
+        mapping_entries: dict[str, Mapping[str, Any]] = {}
+
+        if grid_table is not None:
+            axis_entries = _read_table_entries(grid_table, "axis_entry")
+            coord_entries = _read_table_entries(grid_table, "variable_entry")
+            mapping_entries = _read_table_entries(grid_table, "mapping_entry")
+
+        return cls(axis_entries, coord_entries, mapping_entries)
+
     @property
     def axis_entries(self) -> dict[str, Mapping[str, Any]]:
         """Raw axis entries (passed to :class:`CoordinateTable` for overlay)."""
@@ -664,6 +740,22 @@ class VariableTable:
         self._by_name: dict[str, list[VariableEntry]] = {}
         for path in table_files:
             self._load(path)
+
+    @classmethod
+    def from_file(cls, table_files: Sequence[Path]) -> "VariableTable":
+        """Construct a VariableTable from table file paths.
+
+        Parameters
+        ----------
+        table_files:
+            Paths to variable table JSON files to load.
+
+        Returns
+        -------
+        VariableTable
+            Loaded variable table instance.
+        """
+        return cls(table_files)
 
     # ------------------------------------------------------------------
     # Loading
@@ -905,7 +997,7 @@ class VariableTable:
 
 
 # ---------------------------------------------------------------------------
-# Module-level private helper
+# Module-level private helpers
 # ---------------------------------------------------------------------------
 
 
@@ -919,3 +1011,14 @@ def _build_generic_level_index(
         if is_table_value(generic):
             index.setdefault(str(generic), {})[name] = entry
     return index
+
+
+def _read_table_entries(table_file: Path, key: str) -> dict[str, Mapping[str, Any]]:
+    """Read entries from a table file for a given key."""
+    with table_file.open() as handle:
+        data = json.load(handle)
+    return {
+        str(name): entry
+        for name, entry in data.get(key, {}).items()
+        if isinstance(entry, Mapping)
+    }
