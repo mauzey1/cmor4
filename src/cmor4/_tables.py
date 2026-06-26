@@ -29,7 +29,6 @@ from ._table_utils import (
     is_table_value,
     metadata_value_matches,
     parse_table_value,
-    single_or_original,
     table_dimensions,
     validate_table_metadata,
 )
@@ -854,7 +853,11 @@ class VariableTable:
         if "frequency" in e:
             data.setdefault("frequency", e["frequency"])
         if "modeling_realm" in e:
-            data.setdefault("realm", single_or_original(e["modeling_realm"]))
+            realm = e["modeling_realm"]
+            data.setdefault(
+                "realm",
+                realm[0] if isinstance(realm, list) and len(realm) == 1 else realm,
+            )
         for key in ("valid_min", "valid_max", "ok_min_mean_abs", "ok_max_mean_abs"):
             value = e.get(key)
             if not is_table_value(value) and entry.table_header:

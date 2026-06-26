@@ -1811,24 +1811,18 @@ class PositiveValidationTest(unittest.TestCase):
 
     def test_positive_wrong_direction_raises(self):
         with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_dataset(
-                None, Variable(name="wap", positive="up"), []
-            )
+            self.project.validate_dataset(None, Variable(name="wap", positive="up"), [])
         msg = str(ctx.exception)
         self.assertIn("positive", msg)
         self.assertIn("up", msg)
         self.assertIn("down", msg)
 
     def test_correct_positive_passes(self):
-        self.project.validate_dataset(
-            None, Variable(name="wap", positive="down"), []
-        )
+        self.project.validate_dataset(None, Variable(name="wap", positive="down"), [])
 
     def test_correct_positive_case_insensitive(self):
         """Case-insensitive matching ('Down' == 'down')."""
-        self.project.validate_dataset(
-            None, Variable(name="wap", positive="Down"), []
-        )
+        self.project.validate_dataset(None, Variable(name="wap", positive="Down"), [])
 
     # ------------------------------------------------------------------
     # required positive
@@ -1852,9 +1846,7 @@ class PositiveValidationTest(unittest.TestCase):
     def test_required_positive_none_raises(self):
         """Explicit None counts as not provided."""
         with self.assertRaises(TableValidationError):
-            self.project.validate_dataset(
-                None, Variable(name="wap", positive=None), []
-            )
+            self.project.validate_dataset(None, Variable(name="wap", positive=None), [])
 
     # ------------------------------------------------------------------
     # optional positive
@@ -1943,9 +1935,7 @@ class UnitsConvertibilityTest(unittest.TestCase):
     def test_incompatible_units_raises(self):
         """Units from a different physical dimension are always rejected."""
         with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_dataset(
-                None, Variable(name="tas", units="m s-1"), []
-            )
+            self.project.validate_dataset(None, Variable(name="tas", units="m s-1"), [])
         msg = str(ctx.exception)
         self.assertIn("m s-1", msg)
         self.assertIn("K", msg)
@@ -1953,9 +1943,7 @@ class UnitsConvertibilityTest(unittest.TestCase):
 
     def test_error_message_mentions_convertibility(self):
         with self.assertRaises(TableValidationError) as ctx:
-            self.project.validate_dataset(
-                None, Variable(name="tas", units="m s-1"), []
-            )
+            self.project.validate_dataset(None, Variable(name="tas", units="m s-1"), [])
         self.assertIn("convertible", str(ctx.exception))
 
     def test_pressure_incompatible_with_temperature_raises(self):
@@ -1973,9 +1961,7 @@ class UnitsConvertibilityTest(unittest.TestCase):
     def test_hPa_accepted_for_Pa_table(self):
         if not self._cf_units_available():
             self.skipTest("cf_units not installed")
-        self.project.validate_dataset(
-            None, Variable(name="wap", units="hPa s-1"), []
-        )
+        self.project.validate_dataset(None, Variable(name="wap", units="hPa s-1"), [])
 
     def test_equivalent_units_different_string_passes(self):
         """K and kelvin are the same unit with different string representations."""
@@ -2626,9 +2612,7 @@ class ZFactorUnitsConvertibilityTest(unittest.TestCase):
         )
 
     def test_no_user_units_skips_check(self):
-        self.project.validate_dataset(
-            None, self.var, [], zfactors=[ZFactor(name="ps")]
-        )
+        self.project.validate_dataset(None, self.var, [], zfactors=[ZFactor(name="ps")])
 
     def test_convertible_units_passes(self):
         """hPa is dimensionally equivalent to Pa — should be accepted."""
@@ -2721,9 +2705,7 @@ class ZFactorScalarTest(unittest.TestCase):
 
     def test_no_values_provided_skips_check(self):
         """Without values there is nothing to validate."""
-        self.project.validate_dataset(
-            None, self.var, [], zfactors=[ZFactor(name="p0")]
-        )
+        self.project.validate_dataset(None, self.var, [], zfactors=[ZFactor(name="p0")])
 
     def test_formula_term_with_dimensions_accepts_array(self):
         """ap declares dimensions in the table — a 1-D array is correct."""
@@ -3612,9 +3594,7 @@ class MustHaveBoundsTest(unittest.TestCase):
         """must_have_bounds is enforced even when dataset=None."""
         var = self.project.variable("pr")
         with self.assertRaises(AxisValidationError) as ctx:
-            self.project.validate_dataset(
-                None, var, self._base_axes(lat_bounds=False)
-            )
+            self.project.validate_dataset(None, var, self._base_axes(lat_bounds=False))
         self.assertIn("must have bounds", str(ctx.exception))
         self.assertIn("lat", str(ctx.exception))
 
@@ -4148,9 +4128,7 @@ class ValidateComponentsTest(unittest.TestCase):
             "rotated_latitude_longitude",
             grid_mapping_name="rotated_latitude_longitude",
         )
-        self.project.validate_dataset(
-            None, variable, self._standard_axes(), grid=grid
-        )
+        self.project.validate_dataset(None, variable, self._standard_axes(), grid=grid)
 
     def test_grid_mapping_name_mismatch_raises(self):
         """Grid with grid_mapping_name conflicting with table raises."""
@@ -4185,17 +4163,13 @@ class ValidateComponentsTest(unittest.TestCase):
         variable = self.project.variable("pr")
         # 'unknown_projection' doesn't exist in the grids table
         grid = Grid()
-        self.project.validate_dataset(
-            None, variable, self._standard_axes(), grid=grid
-        )
+        self.project.validate_dataset(None, variable, self._standard_axes(), grid=grid)
 
     def test_grid_dimensions_matching_axes_passes(self):
         """Grid dimensions that resolve to supplied axes pass validation."""
         variable = self.project.variable("pr")
         grid = Grid(dimensions=["latitude", "longitude"])
-        self.project.validate_dataset(
-            None, variable, self._standard_axes(), grid=grid
-        )
+        self.project.validate_dataset(None, variable, self._standard_axes(), grid=grid)
 
     def test_grid_dimension_not_in_axes_raises(self):
         """A grid dimension name that matches no axis raises TableValidationError."""
@@ -4211,9 +4185,7 @@ class ValidateComponentsTest(unittest.TestCase):
         """Grid with no dimensions set does not raise for dimension resolution."""
         variable = self.project.variable("pr")
         grid = Grid(latitude=np.ones((2, 3)))
-        self.project.validate_dataset(
-            None, variable, self._standard_axes(), grid=grid
-        )
+        self.project.validate_dataset(None, variable, self._standard_axes(), grid=grid)
 
     # ==================================================================
     # 7. ZFactor validation

@@ -8,7 +8,6 @@ from typing import Any, Mapping, Sequence
 
 from ._table_utils import (
     is_table_value as _is_table_value,
-    single_or_original as _single_or_original,
     validate_table_metadata as _validate_table_metadata,
 )
 from ._templates import is_unresolved_template as _is_unresolved_template
@@ -753,7 +752,8 @@ class ProjectTables:
 
         # Dataset-variable consistency checks
         if dataset_info is not None:
-            self._validate_dataset_variable_consistency(dataset_info, variable, variable_entry
+            self._validate_dataset_variable_consistency(
+                dataset_info, variable, variable_entry
             )
 
         # Axis validation: only validate axes not prepared by this instance
@@ -1002,7 +1002,10 @@ class ProjectTables:
         for key in ("frequency", "realm", "table_id"):
             value = getattr(variable, key, None)
             if _is_table_value(value):
-                dataset.setdefault(key, _single_or_original(value))
+                dataset.setdefault(
+                    key,
+                    value[0] if isinstance(value, list) and len(value) == 1 else value,
+                )
 
 
 def _validate_grid_dimensions(

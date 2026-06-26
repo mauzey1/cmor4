@@ -396,9 +396,7 @@ class TestMustCallCmorGrid(unittest.TestCase):
         variable = Variable(name="tos", units="K", dimensions=("time", "i", "j"))
 
         with self.assertRaises(TableValidationError) as ctx:
-            project.validate_dataset(
-                None, variable, [time_axis, grid_axis], grid=None
-            )
+            project.validate_dataset(None, variable, [time_axis, grid_axis], grid=None)
         msg = str(ctx.exception)
         self.assertIn("isgridaxis", msg)
         self.assertIn("grid=", msg)

@@ -61,12 +61,6 @@ def parse_table_value(value: Any) -> Any:
         return value
 
 
-def single_or_original(value: Any) -> Any:
-    if isinstance(value, list) and len(value) == 1:
-        return value[0]
-    return value
-
-
 def metadata_value_matches(value: Any, expected: Any) -> bool:
     if isinstance(expected, list):
         return str(value) in {str(item) for item in expected}

@@ -101,14 +101,14 @@ def _validate_and_normalize_axis(
     climatology = bool(axis.climatology)
 
     values, bounds = _normalize_bounds_shape(axis, values, bounds)
-    if enforce_required_bounds and _requires_bounds(axis) and bounds is None:
+    if enforce_required_bounds and bool(axis.must_have_bounds) and bounds is None:
         raise AxisValidationError(
             f"axis {name!r} must have bounds, but none were provided."
         )
 
-    if _is_numeric(values):
+    if values.dtype.kind in {"i", "u", "f"}:
         values = values.astype("f8", copy=True)
-        if bounds is not None and _is_numeric(bounds):
+        if bounds is not None and bounds.dtype.kind in {"i", "u", "f"}:
             bounds = bounds.astype("f8", copy=True)
         if _is_longitude(axis):
             values, bounds = _normalize_longitude(axis, values, bounds)
@@ -117,7 +117,7 @@ def _validate_and_normalize_axis(
         _validate_stored_direction(axis, values, name)
         _validate_monotonic(axis, values, name, is_bounds=False)
 
-    if bounds is not None and _is_numeric(bounds):
+    if bounds is not None and bounds.dtype.kind in {"i", "u", "f"}:
         _validate_valid_range(axis, bounds, name, is_bounds=True)
         if bounds.shape[-1] == 2:
             _validate_requested_bounds(axis, bounds, name)
@@ -141,10 +141,10 @@ def _validate_and_normalize_axis(
 
     updates: dict[str, Any] = {}
     if not np.array_equal(values, axis.values_array()):
-        updates["values"] = _array_to_user_value(values)
+        updates["values"] = values.item() if values.shape == () else values.tolist()
     if bounds is not None and axis.bounds is not None:
         if not np.array_equal(bounds, axis.bounds_array()):
-            updates["bounds"] = _array_to_user_value(bounds)
+            updates["bounds"] = bounds.item() if bounds.shape == () else bounds.tolist()
     return axis.updated(**updates) if updates else axis
 
 
@@ -288,7 +288,7 @@ def _validate_monotonic(
 def _validate_values_inside_bounds(
     values: np.ndarray, bounds: np.ndarray, name: str
 ) -> None:
-    if not _is_numeric(values):
+    if values.dtype.kind not in {"i", "u", "f"}:
         return
     pairs = bounds.reshape(-1, bounds.shape[-1])
     flat_values = values.reshape(-1)
@@ -522,10 +522,6 @@ def _validate_calendar(dataset: DatasetInfo) -> None:
         )
 
 
-def _requires_bounds(axis: Axis) -> bool:
-    return bool(axis.must_have_bounds)
-
-
 def _is_time_axis(axis: Axis) -> bool:
     return str(axis.axis or "").upper() == "T" or (
         str(axis.standard_name or "").lower() == "time"
@@ -548,10 +544,6 @@ def _direction(values: np.ndarray) -> float:
     if values.size < 2:
         return 1.0
     return 1.0 if values[-1] >= values[0] else -1.0
-
-
-def _is_numeric(values: np.ndarray) -> bool:
-    return values.dtype.kind in {"i", "u", "f"}
 
 
 def _tolerance(axis: Axis) -> float:
@@ -583,9 +575,3 @@ def _numeric_list(value: Any) -> list[float]:
         if number is not None:
             parsed.append(number)
     return parsed
-
-
-def _array_to_user_value(array: np.ndarray) -> Any:
-    if array.shape == ():
-        return array.item()
-    return array.tolist()
