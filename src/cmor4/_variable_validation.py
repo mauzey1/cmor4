@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, Union
 import warnings
 
 import numpy as np
@@ -8,14 +8,15 @@ import numpy as np
 from .axis import Axis
 from .exceptions import VariableValidationError
 from .variable import Variable
+from .zfactor import ZFactor
 
 
 def validate_variable_values(
-    variable: Variable,
-    axes: list[Axis],
+    variable: Union[Variable, ZFactor],
+    axes: Sequence[Axis],
     data: Any,
-    dims: list[str],
-    axis_dims: dict[str, tuple[str, ...]],
+    dims: Sequence[str],
+    axis_dims: Mapping[str, tuple[str, ...]],
     *,
     name: str | None = None,
     table_id: str | None = None,
@@ -100,7 +101,7 @@ def _as_float_masked_array(data: Any) -> np.ma.MaskedArray | None:
 
 
 def _warn_for_limit(
-    variable: Variable,
+    variable: Union[Variable, ZFactor],
     numeric: np.ndarray,
     valid_mask: np.ndarray,
     dims: Sequence[str],
@@ -138,7 +139,7 @@ def _warn_for_limit(
 
 
 def _check_absolute_mean(
-    variable: Mapping[str, Any],
+    variable: Union[Variable, ZFactor],
     active: np.ndarray,
     *,
     name: str | None,

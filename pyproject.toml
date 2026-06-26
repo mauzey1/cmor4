@@ -7,7 +7,7 @@ name = "cmor4"
 version = "4.0.0a1"
 description = "Python package for creating CF-compliant climate model output in NetCDF format."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
   { name = "cmor4 contributors" },
@@ -50,3 +50,14 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "cmor4" = ["py.typed"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+files = ["src/cmor4", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["cf_units.*", "cftime.*", "mpl_toolkits.basemap.*"]
+ignore_missing_imports = true

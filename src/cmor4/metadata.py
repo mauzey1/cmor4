@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from collections.abc import Mapping
+from typing import Annotated, Any, Self
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -166,7 +167,7 @@ class MetadataModel(BaseModel):
                 result.setdefault(key, value)
         return result
 
-    def updated(self, **updates: Any) -> MetadataModel:
+    def updated(self, **updates: Any) -> Self:
         """Return a new instance with *updates* applied (no table re-merge)."""
         return type(self).model_validate({**self.to_dict(), **updates})
 
@@ -179,7 +180,7 @@ class MetadataModel(BaseModel):
         return isinstance(value, (str, bytes, int, float, np.integer, np.floating))
 
     @staticmethod
-    def netcdf_attrs(values: dict[str, Any]) -> dict[str, Any]:
+    def netcdf_attrs(values: Mapping[str, Any]) -> dict[str, Any]:
         return {
             str(k): v
             for k, v in values.items()

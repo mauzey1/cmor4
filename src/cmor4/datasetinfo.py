@@ -203,7 +203,7 @@ class DatasetInfo(BaseModel, Mapping[str, Any]):
     def __getitem__(self, key: str) -> Any:
         return self._data()[key]
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
         return iter(self._data())
 
     def __len__(self) -> int:

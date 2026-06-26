@@ -60,7 +60,7 @@ class AxisEntry(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     name: str
-    entry: dict[str, Any]
+    entry: Mapping[str, Any]
     is_grid_coord: bool = False
 
     @field_validator("name")
@@ -90,7 +90,7 @@ class ZFactorEntry(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     name: str
-    entry: dict[str, Any]
+    entry: Mapping[str, Any]
 
     @field_validator("name")
     @classmethod
@@ -120,7 +120,7 @@ class GridMappingEntry(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     name: str
-    entry: dict[str, Any]
+    entry: Mapping[str, Any]
 
     @field_validator("name")
     @classmethod
@@ -156,9 +156,9 @@ class VariableEntry(BaseModel):
 
     name: str
     table_id: str
-    entry: dict[str, Any]
+    entry: Mapping[str, Any]
     table_file: Path | None = None
-    table_header: dict[str, Any] | None = None
+    table_header: Mapping[str, Any] | None = None
 
     @field_validator("name", "table_id")
     @classmethod

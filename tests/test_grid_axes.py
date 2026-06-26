@@ -462,7 +462,7 @@ class TestProjectTablesGridFactory(unittest.TestCase):
         from cmor4 import ProjectTables
 
         cv = {"CV": {"required_global_attributes": [], "mip_era": "CMIP7"}}
-        grids_table = {
+        grids_table: dict[str, dict[str, dict[str, str]]] = {
             "axis_entry": {},
             "variable_entry": {},
             "mapping_entry": {},

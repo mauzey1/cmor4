@@ -219,7 +219,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             str(file_tmpl) if isinstance(file_tmpl, str) and file_tmpl else None,
         )
 
-    def get_dataset_info(self, dataset: dict[str, Any]) -> dict[str, Any]:
+    def get_dataset_info(self, dataset: Mapping[str, Any]) -> dict[str, Any]:
         """Get dataset info with CV defaults.
 
         Parameters
@@ -1271,6 +1271,7 @@ def _new_tracking_id(dataset: Mapping[str, Any], cv: Mapping[str, Any]) -> str:
         return identifier
     # Ensure the prefix is separated from the UUID by a "/" if neither the
     # prefix already ends with one nor the UUID begins with one.
+    assert prefix is not None  # Type narrowing for mypy
     if not prefix.endswith("/"):
         prefix = prefix + "/"
     return f"{prefix}{identifier}"

@@ -1051,6 +1051,7 @@ class TestDrsTemplates(unittest.TestCase):
         self.assertIsNotNone(
             path_tmpl, "CMIP6 CV should define a directory_path_template"
         )
+        assert path_tmpl is not None  # Type narrowing for mypy
         self.assertIn("mip_era", path_tmpl)
         self.assertIn("institution_id", path_tmpl)
 
@@ -1058,12 +1059,14 @@ class TestDrsTemplates(unittest.TestCase):
         """The CMIP6 CV includes a filename_template in its DRS section."""
         _, file_tmpl = self.project.cv.drs_templates()
         self.assertIsNotNone(file_tmpl, "CMIP6 CV should define a filename_template")
+        assert file_tmpl is not None  # Type narrowing for mypy
         self.assertIn("variable_id", file_tmpl)
         self.assertIn("source_id", file_tmpl)
 
     def test_drs_path_example_structure(self) -> None:
         """The CMIP6 DRS path template follows CMIP6/<activity>/<inst>/…."""
         path_tmpl, _ = self.project.cv.drs_templates()
+        assert path_tmpl is not None  # Type narrowing for mypy
         # The template starts with <mip_era> which resolves to CMIP6
         self.assertTrue(
             path_tmpl.startswith("<mip_era>"),
