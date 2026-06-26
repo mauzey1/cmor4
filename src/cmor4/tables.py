@@ -80,54 +80,6 @@ class ProjectTables:
         )
         self.formula_table = FormulaTable.from_file(self.formula_table_file)
 
-    # ------------------------------------------------------------------
-    # Backward-compatible properties (delegate to table objects)
-    # ------------------------------------------------------------------
-
-    @property
-    def coordinate_entries(self) -> dict[str, Mapping[str, Any]]:
-        """Overlaid coordinate entries (grid axis entries take precedence)."""
-        return self.coordinate_table._all_coord
-
-    @property
-    def grid_axis_entries(self) -> dict[str, Mapping[str, Any]]:
-        """Raw axis entries from the grids table."""
-        return self.grid_table.axis_entries
-
-    @property
-    def grid_coordinate_entries(self) -> dict[str, Mapping[str, Any]]:
-        """Raw grid-coordinate entries from the grids table."""
-        return self.grid_table.coord_entries
-
-    @property
-    def grid_mapping_entries(self) -> dict[str, Mapping[str, Any]]:
-        """Raw grid-mapping entries from the grids table."""
-        return self.grid_table._raw_mapping
-
-    @property
-    def scalar_axis_entries(self) -> dict[str, Mapping[str, Any]]:
-        """Coordinate entries that carry a fixed scalar value."""
-        return self.coordinate_table.scalar_entries
-
-    @property
-    def generic_level_entries(self) -> dict[str, dict[str, Mapping[str, Any]]]:
-        """Two-level index: generic_level_name → {entry_name → entry}."""
-        return self.coordinate_table.generic_level_entries
-
-    @property
-    def formula_entries(self) -> dict[str, Mapping[str, Any]]:
-        """Raw formula-term entries."""
-        return self.formula_table._entries
-
-    @property
-    def variable_entries(self) -> dict[str, VariableEntry]:
-        """Variable entries indexed by name (first table wins on duplicates)."""
-        return self.variable_table.entries
-
-    @property
-    def _variable_entries_by_name(self) -> dict[str, list[VariableEntry]]:
-        """Variable entries grouped by short name (may span multiple tables)."""
-        return self.variable_table._by_name
 
     @classmethod
     def from_directory(
@@ -200,9 +152,9 @@ class ProjectTables:
         self.cv.validate_dataset_values(normalized_dataset)
         self.cv.validate_variant_indices(normalized_dataset)
         self.cv.validate_forcing_terms(normalized_dataset)
-        self.validate_source_attributes(normalized_dataset)
-        self.validate_experiment(normalized_dataset)
-        self.validate_parent_attributes(normalized_dataset)
+        self.cv.validate_source_attributes(normalized_dataset)
+        self.cv.validate_experiment(normalized_dataset)
+        self.cv.validate_parent_attributes(normalized_dataset)
         return DatasetInfo.from_mapping(normalized_dataset, project=self)
 
     def _dataset_for_variable(
@@ -220,10 +172,10 @@ class ProjectTables:
         variable_entry = self.variable_table.resolve(variable.to_dict())
         self._add_table_header_defaults(normalized_dataset, variable_entry)
         self._add_variable_global_defaults(normalized_dataset, variable)
-        self.validate_dataset(normalized_dataset)
-        self.validate_source_attributes(normalized_dataset)
-        self.validate_experiment(normalized_dataset)
-        self.validate_parent_attributes(normalized_dataset)
+        self.cv.validate_dataset(normalized_dataset)
+        self.cv.validate_source_attributes(normalized_dataset)
+        self.cv.validate_experiment(normalized_dataset)
+        self.cv.validate_parent_attributes(normalized_dataset)
 
         # Note: Full variable and dataset-variable consistency validation
         # happens in validate_components, not here
@@ -877,7 +829,7 @@ class ProjectTables:
         for dimension in variable.dimensions or ():
             dimension_name = str(dimension)
             if dimension_name not in present:
-                if dimension_name in self.scalar_axis_entries:
+                if dimension_name in self.coordinate_table.scalar_entries:
                     raise TableValidationError(
                         f"Variable requires scalar axis {dimension_name!r} "
                         "but it was not provided. Use "
@@ -1000,10 +952,10 @@ class ProjectTables:
             missing or controlled global attribute values are invalid.
         """
 
-        self.validate_dataset(attrs)
-        self.validate_source_attributes(attrs)
-        self.validate_experiment(attrs)
-        self.validate_parent_attributes(attrs)
+        self.cv.validate_dataset(attrs)
+        self.cv.validate_source_attributes(attrs)
+        self.cv.validate_experiment(attrs)
+        self.cv.validate_parent_attributes(attrs)
 
     def _mark_prepared_axis(self, axis: Axis) -> Axis:
         object.__setattr__(axis, "_cmor4_project_tables", self)
@@ -1055,165 +1007,6 @@ class ProjectTables:
             if _is_table_value(value):
                 dataset.setdefault(key, _single_or_original(value))
 
-    def validate_dataset(self, dataset: Mapping[str, Any]) -> None:
-        """Validate user-supplied controlled values against the project CV.
-
-        This method performs controlled vocabulary validation on dataset-level
-        metadata, checking that CV-controlled attribute values (like
-        institution_id, source_id, experiment_id) are recognized and that
-        required attributes are present.
-
-        Parameters
-        ----------
-        dataset
-            Dataset metadata dictionary containing global attributes to
-            validate against the project's controlled vocabulary.
-
-        Raises
-        ------
-        ControlledVocabularyError
-            If required attributes are missing, if attribute values are not
-            found in the CV, or if attribute combinations are invalid.
-
-        Examples
-        --------
-        Validate dataset before creating variables::
-
-            project = ProjectTables.from_directory(...)
-            dataset_attrs = {
-                "mip_era": "CMIP7",
-                "institution_id": "NCAR",
-                "source_id": "CESM2",
-                "experiment_id": "historical"
-            }
-            project.validate_dataset(dataset_attrs)
-            # Raises ControlledVocabularyError if any value is invalid
-        """
-
-        self.cv.validate_dataset(dataset)
-
-    def validate_required_global_attributes(self, dataset: Mapping[str, Any]) -> None:
-        """Require every CV-listed global attribute that CMOR4 can write.
-
-        Parameters
-        ----------
-        dataset
-            Dataset metadata to check.
-
-        Returns
-        -------
-        None
-            Raises ``ControlledVocabularyError`` if required attributes are
-            missing.
-        """
-
-        self.cv.validate_required_global_attributes(dataset)
-
-    def required_global_attributes(self) -> tuple[str, ...]:
-        """Return CV-listed required global attributes.
-
-        This method returns the list of global attribute names that are marked
-        as required in the project's controlled vocabulary. These attributes
-        must be present in dataset metadata before writing NetCDF output.
-
-        Returns
-        -------
-        tuple[str, ...]
-            Tuple of required global attribute names from the project CV.
-            Common examples include "mip_era", "institution_id", "source_id",
-            "experiment_id", "variant_label", "grid_label", etc.
-
-        Examples
-        --------
-        Check which attributes are required::
-
-            project = ProjectTables.from_directory(...)
-            required = project.required_global_attributes()
-            # Returns ("mip_era", "institution_id", "source_id", ...)
-
-        Validate that dataset has required attributes::
-
-            required = project.required_global_attributes()
-            for attr in required:
-                if attr not in dataset:
-                    print(f"Missing required attribute: {attr}")
-        """
-
-        return self.cv.required_global_attributes()
-
-    def validate_experiment(self, dataset: Mapping[str, Any]) -> None:
-        """Validate experiment-specific CV attributes.
-
-        Parameters
-        ----------
-        dataset
-            Dataset metadata containing an ``experiment_id``.
-
-        Returns
-        -------
-        None
-            Raises ``ControlledVocabularyError`` if experiment metadata is
-            inconsistent.
-        """
-
-        self.cv.validate_experiment(dataset)
-
-    def validate_source_type(
-        self,
-        dataset: Mapping[str, Any],
-        experiment_entry: Mapping[str, Any],
-    ) -> None:
-        """Validate experiment-specific required source_type tokens.
-
-        Parameters
-        ----------
-        dataset
-            Dataset metadata containing ``source_type``.
-        experiment_entry
-            Experiment CV entry with required and allowed source types.
-
-        Returns
-        -------
-        None
-            Raises ``ControlledVocabularyError`` if source types are missing
-            or disallowed.
-        """
-
-        self.cv.validate_source_type(dataset, experiment_entry)
-
-    def validate_source_attributes(self, dataset: Mapping[str, Any]) -> None:
-        """Validate source_id-specific CV attributes.
-
-        Parameters
-        ----------
-        dataset
-            Dataset metadata containing a ``source_id``.
-
-        Returns
-        -------
-        None
-            Raises ``ControlledVocabularyError`` if source-specific metadata
-            is inconsistent.
-        """
-
-        self.cv.validate_source_attributes(dataset)
-
-    def validate_parent_attributes(self, dataset: Mapping[str, Any]) -> None:
-        """Validate CMIP-style parent experiment attributes.
-
-        Parameters
-        ----------
-        dataset
-            Dataset metadata containing experiment and parent metadata.
-
-        Returns
-        -------
-        None
-            Raises ``ControlledVocabularyError`` if parent metadata is missing
-            or inconsistent.
-        """
-
-        self.cv.validate_parent_attributes(dataset)
 
 
 def _validate_grid_dimensions(

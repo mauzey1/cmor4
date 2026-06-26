@@ -236,17 +236,17 @@ class TestTableLoading(unittest.TestCase):
     def test_cmip6_omon_variable_masso_is_available(self) -> None:
         """The Omon table's ``masso`` variable can be resolved."""
         project = _cmip6_project()
-        self.assertIn("masso", project.variable_entries)
+        self.assertIn("masso", project.variable_table.entries)
 
     def test_cmip6_amon_variable_tas_is_available(self) -> None:
         """The Amon table's ``tas`` variable can be resolved."""
         project = _cmip6_project()
-        self.assertIn("tas", project.variable_entries)
+        self.assertIn("tas", project.variable_table.entries)
 
     def test_cmip6_fx_table_loads_areacella(self) -> None:
         """The fx table's ``areacella`` variable can be resolved."""
         project = _cmip6_project(CMIP6_FX_TABLE)
-        self.assertIn("areacella", project.variable_entries)
+        self.assertIn("areacella", project.variable_table.entries)
 
     def test_cmip6_cv_has_expected_activity_ids(self) -> None:
         """CMIP6 CV contains well-known activity IDs such as CMIP and ScenarioMIP."""
