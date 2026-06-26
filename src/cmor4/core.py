@@ -14,7 +14,7 @@ from ._templates import render_template
 from ._time_utils import decode_time_value, add_time_delta, date_part
 from ._variable_validation import validate_variable_values
 from .axis import Axis
-from .dataset import DatasetInfo, INTERNAL_DATASET_KEYS
+from .datasetinfo import DatasetInfo, INTERNAL_DATASET_KEYS
 from .grid import Grid
 from .variable import Variable
 from .zfactor import ZFactor
@@ -768,7 +768,7 @@ def _validate_final_components(
     project = dataset.project
     if project is not None:
         project.validate_global_attributes(ds.attrs)
-        project.validate_components(
+        project.validate_dataset(
             dataset,
             variable,
             axes,

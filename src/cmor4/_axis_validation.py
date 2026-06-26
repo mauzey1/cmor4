@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ._time_utils import cftime_interval_days
 from .axis import Axis
-from .dataset import DatasetInfo
+from .datasetinfo import DatasetInfo
 from .variable import Variable
 from .exceptions import AxisValidationError
 

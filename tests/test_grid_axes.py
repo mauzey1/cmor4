@@ -396,7 +396,7 @@ class TestMustCallCmorGrid(unittest.TestCase):
         variable = Variable(name="tos", units="K", dimensions=("time", "i", "j"))
 
         with self.assertRaises(TableValidationError) as ctx:
-            project.validate_components(
+            project.validate_dataset(
                 None, variable, [time_axis, grid_axis], grid=None
             )
         msg = str(ctx.exception)
@@ -587,7 +587,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
 
     def test_curvilinear_grid_dataset(self) -> None:
         from cmor4.core import create_dataset
-        from cmor4.dataset import DatasetInfo
+        from cmor4.datasetinfo import DatasetInfo
 
         nj, ni = 4, 8
         time_axis, j_axis, i_axis, grid, lat2d, lon2d = self._make_grid_and_axes(nj, ni)
@@ -622,7 +622,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
 
     def test_curvilinear_grid_with_vertices(self) -> None:
         from cmor4.core import create_dataset
-        from cmor4.dataset import DatasetInfo
+        from cmor4.datasetinfo import DatasetInfo
 
         nj, ni, nv = 3, 5, 4
         lat2d, lon2d = _latlon(nj, ni)
@@ -666,7 +666,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         not be processed twice — no duplicate coords or doubled coordinates
         attribute entries."""
         from cmor4.core import create_dataset
-        from cmor4.dataset import DatasetInfo
+        from cmor4.datasetinfo import DatasetInfo
 
         nj, ni = 4, 8
         lat2d, lon2d = _latlon(nj, ni)

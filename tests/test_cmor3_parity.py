@@ -953,7 +953,7 @@ class TestForcingTermsValidation(unittest.TestCase):
     def test_validate_dataset_includes_forcing_check(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv.validate_dataset({
+            cv.validate_dataset_info({
                 "activity_id": "CMIP",
                 "institution_id": "NCAR",
                 "forcing": "GHG BADTOKEN",
@@ -2139,7 +2139,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def _patch_dataset(self, dataset_info, extra: dict):
         """Return a new DatasetInfo with extra keys merged in."""
-        from cmor4.dataset import DatasetInfo
+        from cmor4.datasetinfo import DatasetInfo
 
         return DatasetInfo(
             {**dict(dataset_info), **extra},

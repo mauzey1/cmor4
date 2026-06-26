@@ -880,7 +880,7 @@ class VariableTable:
         """Validate *variable* metadata against a resolved table entry.
 
         Raises :exc:`~cmor4.exceptions.TableValidationError` on any mismatch.
-        Called by :meth:`~cmor4.tables.ProjectTables.validate_components`.
+        Called by :meth:`~cmor4.tables.ProjectTables.validate_dataset`.
         """
         e = entry.entry
         out_name = str(e.get("out_name", entry.name.split("_", 1)[0]))

@@ -24,7 +24,7 @@ from ._tables import (
 )
 from .axis import Axis
 from .cv import ControlledVocabulary
-from .dataset import DatasetInfo
+from .datasetinfo import DatasetInfo
 from .exceptions import TableValidationError
 from .grid import Grid
 from .variable import Variable
@@ -157,20 +157,20 @@ class ProjectTables:
 
     def _dataset_for_variable(
         self,
-        dataset: DatasetInfo,
+        dataset_info: DatasetInfo,
         variable: Variable,
     ) -> DatasetInfo:
         """Prepare dataset info with variable-specific metadata and validation.
 
         This is called by create_dataset to merge variable metadata into
         dataset and perform initial validation. Full component validation
-        happens later via validate_components.
+        happens later via validate_dataset.
         """
-        normalized_dataset = self.cv.get_dataset_info(dataset)
+        normalized_dataset = self.cv.get_dataset_info(dataset_info)
         variable_entry = self.variable_table.resolve(variable.to_dict())
         self._add_table_header_defaults(normalized_dataset, variable_entry)
         self._add_variable_global_defaults(normalized_dataset, variable)
-        self.cv.validate_dataset(normalized_dataset)
+        self.cv.validate_dataset_info(normalized_dataset)
         self.cv.validate_source_attributes(normalized_dataset)
         self.cv.validate_experiment(normalized_dataset)
         self.cv.validate_parent_attributes(normalized_dataset)
@@ -661,9 +661,9 @@ class ProjectTables:
         data = self.formula_table.build({"name": name, **values})
         return ZFactor.model_validate(data)
 
-    def validate_components(
+    def validate_dataset(
         self,
-        dataset: DatasetInfo | None,
+        dataset_info: DatasetInfo | None,
         variable: Variable,
         axes: Sequence[Axis],
         *,
@@ -724,7 +724,7 @@ class ProjectTables:
             axes = [project.axis("time", ...), project.axis("lat", ...)]
 
             # Validate everything before attempting to create dataset
-            project.validate_components(dataset, variable, axes)
+            project.validate_dataset(dataset, variable, axes)
 
             # If validation passes, safe to create dataset
             ds = create_dataset(dataset, variable, axes, data)
@@ -752,9 +752,8 @@ class ProjectTables:
         self.variable_table.validate_against(variable, variable_entry)
 
         # Dataset-variable consistency checks
-        if dataset is not None:
-            self._validate_dataset_variable_consistency(
-                dataset, variable, variable_entry
+        if dataset_info is not None:
+            self._validate_dataset_variable_consistency(dataset_info, variable, variable_entry
             )
 
         # Axis validation: only validate axes not prepared by this instance
@@ -793,12 +792,12 @@ class ProjectTables:
         # Run unconditionally so that must_have_bounds and the variable's
         # table-declared frequency are enforced even when no dataset is
         # provided.
-        _validate_axes(dataset, variable, axes)
+        _validate_axes(dataset_info, variable, axes)
 
         # Calendar validation: warn if the dataset specifies a calendar that
         # is technically valid per CF but inappropriate for MIP data.
-        if dataset is not None:
-            _validate_calendar(dataset)
+        if dataset_info is not None:
+            _validate_calendar(dataset_info)
 
         # Check that required scalar axes are present (if not auto-added)
         present = {
@@ -916,19 +915,19 @@ class ProjectTables:
 
     def _validate_dataset_variable_consistency(
         self,
-        dataset: DatasetInfo,
+        dataset_info: DatasetInfo,
         variable: Variable,
         variable_entry: VariableEntry,
     ) -> None:
         """Validate consistency between dataset and variable metadata."""
         # Check frequency consistency
         if (
-            "frequency" in dataset
+            "frequency" in dataset_info
             and variable.frequency is not None
-            and str(dataset["frequency"]) != str(variable.frequency)
+            and str(dataset_info["frequency"]) != str(variable.frequency)
         ):
             raise TableValidationError(
-                f"Dataset frequency={dataset['frequency']!r} does not match "
+                f"DatasetInfo frequency={dataset_info['frequency']!r} does not match "
                 f"variable {variable_entry.table_id}:{variable_entry.name} "
                 f"frequency={variable.frequency!r}."
             )
@@ -950,7 +949,7 @@ class ProjectTables:
             missing or controlled global attribute values are invalid.
         """
 
-        self.cv.validate_dataset(attrs)
+        self.cv.validate_dataset_info(attrs)
         self.cv.validate_source_attributes(attrs)
         self.cv.validate_experiment(attrs)
         self.cv.validate_parent_attributes(attrs)

@@ -453,7 +453,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         }
         dataset["license"] = _render_template(license_template, tokens)
 
-    def validate_dataset(self, dataset: Mapping[str, Any]) -> None:
+    def validate_dataset_info(self, dataset: Mapping[str, Any]) -> None:
         """Validate user-supplied controlled values against the project CV.
 
         Parameters

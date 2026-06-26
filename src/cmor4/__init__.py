@@ -11,7 +11,7 @@ from .core import (
 )
 from .axis import Axis
 from .cv import ControlledVocabulary
-from .dataset import DatasetInfo
+from .datasetinfo import DatasetInfo
 from .exceptions import (
     TableValidationError,
     AxisValidationError,
