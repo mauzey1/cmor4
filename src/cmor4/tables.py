@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from datetime import datetime, timezone
 import numpy as np
 from pathlib import Path
@@ -79,7 +78,6 @@ class ProjectTables:
             self.coordinate_table_file, self.grid_table_file
         )
         self.formula_table = FormulaTable.from_file(self.formula_table_file)
-
 
     @classmethod
     def from_directory(
@@ -1006,7 +1004,6 @@ class ProjectTables:
             value = getattr(variable, key, None)
             if _is_table_value(value):
                 dataset.setdefault(key, _single_or_original(value))
-
 
 
 def _validate_grid_dimensions(

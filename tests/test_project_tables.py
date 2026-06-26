@@ -435,8 +435,13 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertIn("latitude", project.grid_table.coord_entries)
         self.assertIn("vertices_latitude", project.grid_table.coord_entries)
         self.assertIn("ps", project.formula_table._entries)
-        self.assertIn("alternate_hybrid_sigma", project.coordinate_table.generic_level_entries["alevel"])
-        self.assertIn("depth_coord", project.coordinate_table.generic_level_entries["olevel"])
+        self.assertIn(
+            "alternate_hybrid_sigma",
+            project.coordinate_table.generic_level_entries["alevel"],
+        )
+        self.assertIn(
+            "depth_coord", project.coordinate_table.generic_level_entries["olevel"]
+        )
         self.assertEqual(
             project.variable_table.entries["tos_tavg-u-hxy-sea"].entry["out_name"],
             "tos",
@@ -1336,7 +1341,9 @@ class ConstructorTest(unittest.TestCase):
             },
         )
         project = ProjectTables(cv_file, [t1, t2])
-        self.assertEqual(project.variable_table.entries["pr"].entry["out_name"], "pr_from_t1")
+        self.assertEqual(
+            project.variable_table.entries["pr"].entry["out_name"], "pr_from_t1"
+        )
 
     def test_table_id_stripped_of_table_prefix(self):
         """Table header 'Table Amon' → table_id 'Amon'."""
@@ -2859,7 +2866,10 @@ class ValidateDatasetTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_valid_dataset_passes(self):
-        self.project.cv.validate_dataset({"activity_id": "CMIP", "institution_id": "NCAR"})
+        self.project.cv.validate_dataset({
+            "activity_id": "CMIP",
+            "institution_id": "NCAR",
+        })
 
     def test_invalid_controlled_value_raises(self):
         with self.assertRaises(ControlledVocabularyError):
@@ -3143,7 +3153,9 @@ class ValidateSourceTypeTest(unittest.TestCase):
             # BGC deliberately excluded
         }
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_source_type({"source_type": "AOGCM BGC"}, exp_entry)
+            self.project.cv.validate_source_type(
+                {"source_type": "AOGCM BGC"}, exp_entry
+            )
         self.assertIn("not allowed", str(ctx.exception))
 
     def test_empty_experiment_entry_is_no_op(self):
