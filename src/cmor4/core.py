@@ -138,6 +138,7 @@ def create_dataset(
             axis_dims,
             scalar_coord_names,
             auxiliary_coord_names,
+            dataset=dataset,
         )
 
     # Write lat/lon and vertex arrays directly as dataset coords, bypassing
@@ -230,8 +231,11 @@ def create_dataset(
 
     missing_value = variable.missing_value or variable.fill_value
     if missing_value is not None:
-        ds[var_name].attrs["missing_value"] = missing_value
-        ds[var_name].encoding["_FillValue"] = missing_value
+        # Ensure exact float32 representation to match CMIP7 compliance expectations
+        # (e.g., 1e20 not 1.0000000200408773e+20)
+        mv = np.float32(missing_value) if isinstance(missing_value, (int, float)) else missing_value
+        ds[var_name].attrs["missing_value"] = mv
+        ds[var_name].encoding["_FillValue"] = mv
 
     chunksizes = variable.chunksizes or variable.chunks
     if chunksizes:
@@ -588,11 +592,18 @@ def _add_axis(
     axis_dims: dict[str, tuple[str, ...]],
     scalar_coord_names: list[str],
     auxiliary_coord_names: list[str],
+    dataset: DatasetInfo | None = None,
 ) -> None:
     name = axis.name
     out_name = str(axis.out_name or axis.name)
     values = axis.values_array()
     coord_attrs = axis.attributes()
+
+    # Add calendar attribute to time coordinates (CMIP7 compliance requirement)
+    if axis.axis == "T" and dataset is not None:
+        calendar = dataset.get("calendar")
+        if calendar and "calendar" not in coord_attrs:
+            coord_attrs["calendar"] = calendar
 
     if bool(axis.scalar):
         if values.shape == ():

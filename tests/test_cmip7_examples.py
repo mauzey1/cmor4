@@ -26,6 +26,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import pytest
 import xarray as xr
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +42,20 @@ def _requires_tables(test):
     if not TABLES_DIR.exists() or not CV_PATH.exists():
         return unittest.skip("CMIP7 tables submodule not initialised")(test)
     return test
+
+
+def _requires_compliance_checker(test):
+    """Skip decorator if compliance-checker and cc-plugin-wcrp are not installed."""
+    import unittest
+
+    try:
+        import compliance_checker  # noqa: F401
+
+        return test
+    except ImportError:
+        return unittest.skip(
+            "compliance-checker not installed (install with: pip install cmor4[dev])"
+        )(test)
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +136,70 @@ def _lon_axis(project):
     )
 
 
+def _check_cmip7_compliance(file_path: str) -> tuple[bool, list[str]]:
+    """Run WCRP CMIP7 compliance checker on a NetCDF file.
+
+    Returns:
+        tuple: (is_compliant, list_of_issues)
+            is_compliant: True if all checks pass with no medium/high priority issues
+            list_of_issues: Human-readable list of compliance issues found
+    """
+    try:
+        from compliance_checker.suite import CheckSuite
+    except ImportError:
+        raise ImportError(
+            "compliance-checker not installed. "
+            "Install with: pip install cmor4[dev]"
+        )
+
+    cs = CheckSuite()
+    cs.load_all_available_checkers()
+
+    # Load the dataset
+    ds = cs.load_dataset(file_path)
+
+    # Run CMIP7 checks
+    try:
+        score_groups = cs.run_all(ds, ["wcrp_cmip7"], skip_checks=[])
+    except KeyError:
+        # Plugin not available, return skip marker
+        return None, ["wcrp_cmip7 plugin not available"]
+
+    # Extract results for CMIP7 checker
+    if "wcrp_cmip7" not in score_groups:
+        return None, ["wcrp_cmip7 checker did not run"]
+
+    groups, errors = score_groups["wcrp_cmip7"]
+
+    # Collect issues
+    issues = []
+    has_high_medium_issues = False
+
+    for result_group in groups:
+        # Check if this result passed
+        passed, total = result_group.value
+        if passed < total:
+            # Record the issue
+            weight_str = {1: "LOW", 2: "MEDIUM", 3: "HIGH"}.get(
+                result_group.weight, "UNKNOWN"
+            )
+            issues.append(f"[{weight_str}] {result_group.name}: {passed}/{total} passed")
+
+            # Add messages if available
+            if result_group.msgs:
+                for msg in result_group.msgs:
+                    issues.append(f"  - {msg}")
+
+            # Track if we have medium or high priority issues
+            if result_group.weight >= 2:  # MEDIUM or HIGH
+                has_high_medium_issues = True
+
+    # File is compliant if no high/medium issues
+    is_compliant = not has_high_medium_issues
+
+    return is_compliant, issues
+
+
 # ---------------------------------------------------------------------------
 # Example 1 — usual 2-D field (tos, ocean)
 # ---------------------------------------------------------------------------
@@ -170,8 +249,8 @@ class TestExample01UsualField(unittest.TestCase):
             dtype="f4",
         ).reshape(2, 3, 4)
         ds = cmor4.create_dataset(dataset, variable, axes, data)
-        path = cmor4.write_netcdf(ds, dataset, variable)
-        self.ds = xr.open_dataset(path, decode_times=False)
+        self.file_path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(self.file_path, decode_times=False)
 
     def tearDown(self):
         self.ds.close()
@@ -266,6 +345,23 @@ class TestExample01UsualField(unittest.TestCase):
     def test_global_title(self):
         self.assertIn("DUMMY-MODEL", self.ds.attrs.get("title", ""))
 
+    # --- CMIP7 compliance ---
+
+    @pytest.mark.compliance
+    @_requires_compliance_checker
+    def test_cmip7_compliance(self):
+        """Validate file against WCRP CMIP7 compliance checker."""
+        is_compliant, issues = _check_cmip7_compliance(self.file_path)
+
+        if is_compliant is None:
+            self.skipTest(issues[0])
+
+        if not is_compliant:
+            issues_str = "\n".join(issues)
+            self.fail(
+                f"File does not meet CMIP7 compliance requirements:\n{issues_str}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Example 2 — pressure levels (ta, atmos)
@@ -317,8 +413,8 @@ class TestExample02PressureLevels(unittest.TestCase):
         )
         data[0, 0, 0, 0] = np.float32(1.0e20)
         ds = cmor4.create_dataset(dataset, variable, axes, data)
-        path = cmor4.write_netcdf(ds, dataset, variable)
-        self.ds = xr.open_dataset(path, decode_times=False)
+        self.file_path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(self.file_path, decode_times=False)
 
     def tearDown(self):
         self.ds.close()
@@ -370,6 +466,21 @@ class TestExample02PressureLevels(unittest.TestCase):
 
     def test_global_variant_label(self):
         self.assertEqual(self.ds.attrs["variant_label"], "r1i1p1f1")
+
+    @pytest.mark.compliance
+    @_requires_compliance_checker
+    def test_cmip7_compliance(self):
+        """Validate file against WCRP CMIP7 compliance checker."""
+        is_compliant, issues = _check_cmip7_compliance(self.file_path)
+
+        if is_compliant is None:
+            self.skipTest(issues[0])
+
+        if not is_compliant:
+            issues_str = "\n".join(issues)
+            self.fail(
+                f"File does not meet CMIP7 compliance requirements:\n{issues_str}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -423,8 +534,8 @@ class TestExample03ScalarDimension(unittest.TestCase):
         )
         axes = [_time_axis(project), _lat_axis(project), _lon_axis(project)]
         ds = cmor4.create_dataset(dataset, variable, axes, self._DATA)
-        path = cmor4.write_netcdf(ds, dataset, variable)
-        self.ds = xr.open_dataset(path, decode_times=False)
+        self.file_path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(self.file_path, decode_times=False)
 
     def tearDown(self):
         self.ds.close()
@@ -470,6 +581,21 @@ class TestExample03ScalarDimension(unittest.TestCase):
 
     def test_global_variant_label(self):
         self.assertEqual(self.ds.attrs["variant_label"], "r9i1p1f2")
+
+    @pytest.mark.compliance
+    @_requires_compliance_checker
+    def test_cmip7_compliance(self):
+        """Validate file against WCRP CMIP7 compliance checker."""
+        is_compliant, issues = _check_cmip7_compliance(self.file_path)
+
+        if is_compliant is None:
+            self.skipTest(issues[0])
+
+        if not is_compliant:
+            issues_str = "\n".join(issues)
+            self.fail(
+                f"File does not meet CMIP7 compliance requirements:\n{issues_str}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -523,8 +649,8 @@ class TestExample04AuxiliaryCoordinates(unittest.TestCase):
         basin_axis = project.axis("basin", values=self._BASINS)
         axes = [_time_axis(project), basin_axis, _lat_axis(project)]
         ds = cmor4.create_dataset(dataset, variable, axes, self._DATA)
-        path = cmor4.write_netcdf(ds, dataset, variable)
-        self.ds = xr.open_dataset(path, decode_times=False)
+        self.file_path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(self.file_path, decode_times=False)
 
     def tearDown(self):
         self.ds.close()
@@ -579,6 +705,21 @@ class TestExample04AuxiliaryCoordinates(unittest.TestCase):
     def test_no_time_dim_on_lat(self):
         self.assertIn("lat", self.ds.coords)
         self.assertIn("lat", self.ds["htovgyre"].dims)
+
+    @pytest.mark.compliance
+    @_requires_compliance_checker
+    def test_cmip7_compliance(self):
+        """Validate file against WCRP CMIP7 compliance checker."""
+        is_compliant, issues = _check_cmip7_compliance(self.file_path)
+
+        if is_compliant is None:
+            self.skipTest(issues[0])
+
+        if not is_compliant:
+            issues_str = "\n".join(issues)
+            self.fail(
+                f"File does not meet CMIP7 compliance requirements:\n{issues_str}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -788,8 +929,8 @@ class TestExample05ModelLevels(unittest.TestCase):
             data,
             zfactors=[a_zfactor, b_zfactor, p0_zfactor, ps_zfactor],
         )
-        path = cmor4.write_netcdf(ds, dataset, variable)
-        self.ds = xr.open_dataset(path, decode_times=False)
+        self.file_path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(self.file_path, decode_times=False)
 
     def tearDown(self):
         self.ds.close()
@@ -872,6 +1013,21 @@ class TestExample05ModelLevels(unittest.TestCase):
 
     def test_global_variant_label(self):
         self.assertEqual(self.ds.attrs["variant_label"], "r1i1p1f1")
+
+    @pytest.mark.compliance
+    @_requires_compliance_checker
+    def test_cmip7_compliance(self):
+        """Validate file against WCRP CMIP7 compliance checker."""
+        is_compliant, issues = _check_cmip7_compliance(self.file_path)
+
+        if is_compliant is None:
+            self.skipTest(issues[0])
+
+        if not is_compliant:
+            issues_str = "\n".join(issues)
+            self.fail(
+                f"File does not meet CMIP7 compliance requirements:\n{issues_str}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1012,8 +1168,8 @@ class TestExample06ComplexGrid(unittest.TestCase):
             dtype="f4",
         ).reshape(2, 3, 4)
         ds = cmor4.create_dataset(dataset, variable, [time_axis], data, grid=grid)
-        path = cmor4.write_netcdf(ds, dataset, variable)
-        self.ds = xr.open_dataset(path, decode_times=False)
+        self.file_path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(self.file_path, decode_times=False)
 
     def tearDown(self):
         self.ds.close()
@@ -1153,6 +1309,21 @@ class TestExample06ComplexGrid(unittest.TestCase):
     def test_global_variant_label(self):
         self.assertEqual(self.ds.attrs["variant_label"], "r1i1p1f1")
 
+    @pytest.mark.compliance
+    @_requires_compliance_checker
+    def test_cmip7_compliance(self):
+        """Validate file against WCRP CMIP7 compliance checker."""
+        is_compliant, issues = _check_cmip7_compliance(self.file_path)
+
+        if is_compliant is None:
+            self.skipTest(issues[0])
+
+        if not is_compliant:
+            issues_str = "\n".join(issues)
+            self.fail(
+                f"File does not meet CMIP7 compliance requirements:\n{issues_str}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Example 7 — fixed (time-independent) field (rootd, land)
@@ -1184,8 +1355,8 @@ class TestExample07FixedField(unittest.TestCase):
         )
         axes = [_lat_axis(project), _lon_axis(project)]
         ds = cmor4.create_dataset(dataset, variable, axes, self._DATA)
-        path = cmor4.write_netcdf(ds, dataset, variable)
-        self.ds = xr.open_dataset(path, decode_times=False)
+        self.file_path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(self.file_path, decode_times=False)
 
     def tearDown(self):
         self.ds.close()
@@ -1244,6 +1415,21 @@ class TestExample07FixedField(unittest.TestCase):
 
     def test_global_variant_label(self):
         self.assertEqual(self.ds.attrs["variant_label"], "r1i1p1f1")
+
+    @pytest.mark.compliance
+    @_requires_compliance_checker
+    def test_cmip7_compliance(self):
+        """Validate file against WCRP CMIP7 compliance checker."""
+        is_compliant, issues = _check_cmip7_compliance(self.file_path)
+
+        if is_compliant is None:
+            self.skipTest(issues[0])
+
+        if not is_compliant:
+            issues_str = "\n".join(issues)
+            self.fail(
+                f"File does not meet CMIP7 compliance requirements:\n{issues_str}"
+            )
 
 
 if __name__ == "__main__":

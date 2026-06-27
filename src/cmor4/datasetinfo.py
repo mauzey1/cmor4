@@ -115,6 +115,8 @@ class DatasetInfo(BaseModel, Mapping[str, Any]):
     institution_id: str | None = None
     source_id: str | None = None
     experiment_id: str | None = None
+    parent_experiment_id: str | None = None
+    sub_experiment_id: str | None = None
     grid_label: str | None = None
     license_id: str | None = None
     realization_index: str | int | None = None
