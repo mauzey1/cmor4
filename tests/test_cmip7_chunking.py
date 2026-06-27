@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+import sysconfig
 import subprocess
 import tempfile
 import unittest
@@ -124,6 +126,40 @@ def _create_bounds(vals, coord_name=None):
         bounds = np.clip(bounds, 0, 360)
 
     return bounds
+
+
+class CMIP7RepackCheckAssertion:
+    """Call cmip7-repack-check on NetCDF files to tests CMIP7 repack compliance."""
+
+    def assertCMIP7Repack(self, path: Path, msg: str = None):
+        # Run check_cmip7_repack on the output file
+        # Try command line tool first, then Python script
+        try:
+            proc = subprocess.run(
+                ["check_cmip7_repack", str(path)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except FileNotFoundError:
+            # Use Python script directly
+            site_packages = sysconfig.get_path("purelib")
+            check_script = Path(site_packages) / "cmip7_repack" / "check_cmip7_packing"
+            proc = subprocess.run(
+                [sys.executable, str(check_script), str(path)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+        if proc.returncode != 0:
+            default_msg = (
+                "check_cmip7_repack failed:\n"
+                f"stdout: {proc.stdout}\n"
+                f"stderr: {proc.stderr}"
+            )
+            full_msg = self._formatMessage(msg, default_msg)
+            raise AssertionError(full_msg)
 
 
 @_requires_tables
@@ -603,7 +639,7 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
 
 @unittest.skipUnless(_has_check_cmip7_repack(), "check_cmip7_repack not installed")
 @_requires_tables
-class TestCheckCMIP7RepackIntegration(unittest.TestCase):
+class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAssertion):
     """Test integration with check_cmip7_repack tool."""
 
     def setUp(self):
@@ -659,35 +695,7 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase):
 
         result = cmor4.cmorize(dataset, variable, axes, data)
 
-        # Run check_cmip7_repack on the output file
-        # Try command line tool first, then Python script
-        try:
-            proc = subprocess.run(
-                ["check_cmip7_repack", str(result.path)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        except FileNotFoundError:
-            # Use Python script directly
-            import sys
-            import sysconfig
-
-            site_packages = sysconfig.get_path("purelib")
-            check_script = Path(site_packages) / "cmip7_repack" / "check_cmip7_packing"
-            proc = subprocess.run(
-                [sys.executable, str(check_script), str(result.path)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-
-        # Check that it passed (return code 0)
-        self.assertEqual(
-            proc.returncode,
-            0,
-            f"check_cmip7_repack failed:\nstdout: {proc.stdout}\nstderr: {proc.stderr}",
-        )
+        self.assertCMIP7Repack(result.path)
 
 
 if __name__ == "__main__":
