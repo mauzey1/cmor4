@@ -148,8 +148,7 @@ def _check_cmip7_compliance(file_path: str) -> tuple[bool, list[str]]:
         from compliance_checker.suite import CheckSuite
     except ImportError:
         raise ImportError(
-            "compliance-checker not installed. "
-            "Install with: pip install cmor4[dev]"
+            "compliance-checker not installed. Install with: pip install cmor4[dev]"
         )
 
     cs = CheckSuite()
@@ -183,7 +182,9 @@ def _check_cmip7_compliance(file_path: str) -> tuple[bool, list[str]]:
             weight_str = {1: "LOW", 2: "MEDIUM", 3: "HIGH"}.get(
                 result_group.weight, "UNKNOWN"
             )
-            issues.append(f"[{weight_str}] {result_group.name}: {passed}/{total} passed")
+            issues.append(
+                f"[{weight_str}] {result_group.name}: {passed}/{total} passed"
+            )
 
             # Add messages if available
             if result_group.msgs:

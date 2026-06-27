@@ -233,7 +233,11 @@ def create_dataset(
     if missing_value is not None:
         # Ensure exact float32 representation to match CMIP7 compliance expectations
         # (e.g., 1e20 not 1.0000000200408773e+20)
-        mv = np.float32(missing_value) if isinstance(missing_value, (int, float)) else missing_value
+        mv = (
+            np.float32(missing_value)
+            if isinstance(missing_value, (int, float))
+            else missing_value
+        )
         ds[var_name].attrs["missing_value"] = mv
         ds[var_name].encoding["_FillValue"] = mv
 
