@@ -37,6 +37,7 @@ dev = [
   "sphinx>=7.0",
   "sphinx-autobuild>=2024.0",
   "furo>=2024.0",
+  "cmip7-repack>=0.3.0",
 ]
 
 [tool.pytest.ini_options]
