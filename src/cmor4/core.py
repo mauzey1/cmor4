@@ -116,7 +116,7 @@ def create_dataset(
         requested metadata, or if CMIP7 chunking requirements are not met.
     """
 
-    dataset = _dataset_for_variable(dataset, variable)
+    dataset, variable = _dataset_for_variable(dataset, variable)
     axes = _dataset_axes(dataset, axes, variable)
     axes = validate_and_normalize_axes(dataset, variable, axes)
 
@@ -418,7 +418,7 @@ def cmorize(
         The in-memory dataset and path to the written NetCDF file.
     """
 
-    dataset = _dataset_for_variable(dataset, variable)
+    dataset, variable = _dataset_for_variable(dataset, variable)
     ds = create_dataset(
         dataset,
         variable,
@@ -522,7 +522,7 @@ def build_output_path(
         Rendered output path, including the ``.nc`` filename.
     """
 
-    dataset = _dataset_for_variable(dataset, variable)
+    dataset, variable = _dataset_for_variable(dataset, variable)
     root = Path(str(dataset.get("outpath", "."))).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
 
@@ -586,7 +586,7 @@ def string_from_template(
         Rendered template string.
     """
 
-    dataset = _dataset_for_variable(dataset, variable)
+    dataset, variable = _dataset_for_variable(dataset, variable)
     return render_template(template, _template_tokens(dataset, variable, ds), separator)
 
 
@@ -929,10 +929,17 @@ def _validate_final_zfactor(
 def _dataset_for_variable(
     dataset: DatasetInfo,
     variable: Variable,
-) -> DatasetInfo:
+) -> tuple[DatasetInfo, Variable]:
+    """Return dataset and variable prepared for a specific variable.
+
+    Project-backed datasets delegate to :meth:`ProjectTables._dataset_for_variable`,
+    which may apply context-specific table metadata such as CMIP7 long-name and
+    cell-measures remappings. Non-project datasets are returned unchanged.
+    """
+
     project = dataset.project
     if project is None:
-        return dataset
+        return dataset, variable
     return project._dataset_for_variable(dataset, variable)
 
 
