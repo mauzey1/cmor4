@@ -649,38 +649,38 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
         self.project = cmor4.ProjectTables.from_directory(
             CMIP7_TABLE_ROOT,
             cv_file="tables-cvs/cmor-cvs.json",
-            variable_tables=["tables/CMIP7_atmos.json"],
+            variable_tables=[
+                "tables/CMIP7_atmos.json",
+                "tables/CMIP7_land.json",
+                "tables/CMIP7_ocean.json",
+                "tables/CMIP7_seaIce.json",
+            ],
             coordinate_table="tables/CMIP7_coordinate.json",
             formula_table="tables/CMIP7_formula_terms.json",
             grid_table="tables/CMIP7_grids.json",
         )
 
-    def test_auto_chunked_file_passes_check_cmip7_repack(self):
-        """File with auto-applied CMIP7 chunking passes check_cmip7_repack."""
-        import cmor4
-
-        dataset = self.project.dataset_info({
+    def _dataset(self):
+        return self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
             "outpath": self.tmp,
         })
-        variable = self.project.variable(
-            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
-        )
 
-        time_vals = np.array([
-            15.0 + 30 * i for i in range(100)
-        ])  # 100 monthly timesteps
-        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(100)])
-        lat_vals = np.linspace(-90, 90, 120)
-        lon_vals = np.linspace(0, 359, 180)
+    def _time_axis(self, count=100, *, point=False):
+        time_vals = np.array([15.0 + 30 * i for i in range(count)])
+        name = "time1" if point else "time"
+        kwargs = {
+            "values": time_vals,
+            "units": "days since 2000-01-01",
+        }
+        if not point:
+            kwargs["bounds"] = np.array([[30 * i, 30 * (i + 1)] for i in range(count)])
+        return self.project.axis(name, **kwargs)
 
-        axes = [
-            self.project.axis(
-                "time",
-                values=time_vals,
-                bounds=time_bnds,
-                units="days since 2000-01-01",
-            ),
+    def _horizontal_axes(self, lat_count=120, lon_count=180):
+        lat_vals = np.linspace(-90, 90, lat_count)
+        lon_vals = np.linspace(0, 359, lon_count)
+        return [
             self.project.axis(
                 "latitude", values=lat_vals, bounds=_create_bounds(lat_vals, "latitude")
             ),
@@ -691,11 +691,112 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
             ),
         ]
 
-        data = np.random.rand(100, 120, 180).astype(np.float32) * 30 + 270
+    def _assert_repack_compliant_file(self, variable, axes, data, *, encoding=None):
+        import cmor4
 
-        result = cmor4.cmorize(dataset, variable, axes, data)
+        result = cmor4.cmorize(
+            self._dataset(),
+            variable,
+            axes,
+            data,
+            encoding=encoding,
+        )
 
         self.assertCMIP7Repack(result.path)
+        return result.path
+
+    def test_auto_chunked_file_passes_check_cmip7_repack(self):
+        """Auto-chunked time-mean latitude/longitude files pass the repack check."""
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+        axes = [
+            self._time_axis(),
+            *self._horizontal_axes(),
+        ]
+        data = np.zeros((100, 120, 180), dtype=np.float32)
+
+        self._assert_repack_compliant_file(variable, axes, data)
+
+    def test_multi_chunk_file_passes_check_cmip7_repack(self):
+        """Files with multiple compliant data chunks pass the repack check."""
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+        axes = [
+            self._time_axis(),
+            *self._horizontal_axes(lat_count=64, lon_count=384),
+        ]
+        data = np.zeros((100, 64, 384), dtype=np.float32)
+        encoding = {"bldep": {"chunksizes": (100, 32, 384)}}
+
+        self._assert_repack_compliant_file(
+            variable,
+            axes,
+            data,
+            encoding=encoding,
+        )
+
+    def test_time_point_file_passes_check_cmip7_repack(self):
+        """Time-point files pass when the time coordinate is stored as one chunk."""
+        variable = self.project.variable(
+            "bldep_tpt-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+        axes = [
+            self._time_axis(point=True),
+            *self._horizontal_axes(),
+        ]
+        data = np.zeros((100, 120, 180), dtype=np.float32)
+
+        self._assert_repack_compliant_file(variable, axes, data)
+
+    def test_landuse_time_point_file_passes_check_cmip7_repack(self):
+        """Four-dimensional files with a categorical axis pass the repack check."""
+        variable = self.project.variable(
+            "fracLut_tpt-u-hxy-u",
+            table_id="land",
+            missing_value=np.float32(1.0e20),
+        )
+        axes = [
+            self._time_axis(point=True),
+            self.project.axis(
+                "landuse",
+                values=[
+                    "primary_and_secondary_land",
+                    "pastures",
+                    "crops",
+                    "urban",
+                ],
+            ),
+            *self._horizontal_axes(lat_count=64, lon_count=64),
+        ]
+        data = np.zeros((100, 4, 64, 64), dtype=np.float32)
+
+        self._assert_repack_compliant_file(variable, axes, data)
+
+    def test_ocean_and_sea_ice_surface_files_pass_check_cmip7_repack(self):
+        """Non-atmospheric CMIP7 surface files pass the repack check."""
+        cases = [
+            ("tos_tavg-u-hxy-sea", "ocean", "tos", -1.8),
+            ("siconc_tavg-u-hxy-u", "seaIce", "siconc", 0.0),
+        ]
+
+        for variable_name, table_id, out_name, value in cases:
+            with self.subTest(variable=variable_name):
+                variable = self.project.variable(
+                    variable_name,
+                    table_id=table_id,
+                    missing_value=np.float32(1.0e20),
+                )
+                axes = [
+                    self._time_axis(),
+                    *self._horizontal_axes(),
+                ]
+                data = np.full((100, 120, 180), value, dtype=np.float32)
+
+                path = self._assert_repack_compliant_file(variable, axes, data)
+                with xr.open_dataset(path) as ds:
+                    self.assertEqual(ds.attrs["variable_id"], out_name)
 
 
 if __name__ == "__main__":
