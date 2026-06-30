@@ -103,6 +103,8 @@ def _project(*table_names: str):
         coordinate_table="tables/CMIP7_coordinate.json",
         formula_table="tables/CMIP7_formula_terms.json",
         grid_table="tables/CMIP7_grids.json",
+        long_name_override_table="tables/CMIP7_long_name_overrides.json",
+        cell_measures_table="tables/CMIP7_cell_measures.json",
     )
 
 
@@ -1431,6 +1433,104 @@ class TestExample07FixedField(unittest.TestCase):
             self.fail(
                 f"File does not meet CMIP7 compliance requirements:\n{issues_str}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Example 8 — long_name overrides for region-specific variables
+# ---------------------------------------------------------------------------
+
+
+@_requires_tables
+class TestExample08LongNameOverrides(unittest.TestCase):
+    """Example 8: long_name remapping for region-specific sea ice variables."""
+
+    def setUp(self):
+        import cmor4
+
+        self.tmp = tempfile.mkdtemp()
+        # NH region dataset with daily frequency
+        base = {**_BASE_DATASET, "frequency": "day", "region": "nh"}
+        project = _project("CMIP7_seaIce.json")
+        dataset = _make_dataset(project, base, self.tmp)
+        variable = project.variable(
+            "siarea_tavg-u-hm-u", table_id="seaIce", missing_value=np.float32(1.0e20)
+        )
+        # Daily time axis
+        time_axis = project.axis(
+            "time",
+            values=np.array([0.5, 1.5], dtype="d"),
+            bounds=np.array([[0.0, 1.0], [1.0, 2.0]], dtype="d"),
+            units=_TIME_UNITS,
+        )
+        axes = [time_axis]
+        data = np.array([10.0e6, 11.0e6], dtype="f4")
+        ds = cmor4.create_dataset(dataset, variable, axes, data)
+        path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(path, decode_times=False)
+
+    def tearDown(self):
+        self.ds.close()
+
+    def test_long_name_override_nh(self):
+        # Should be "Sea-Ice Area North" not generic "Sea-Ice Area"
+        self.assertEqual(self.ds["siarea"].attrs["long_name"], "Sea-Ice Area North")
+
+    def test_variable_id(self):
+        self.assertEqual(self.ds.attrs["variable_id"], "siarea")
+
+    def test_region(self):
+        self.assertEqual(self.ds.attrs["region"], "nh")
+
+    def test_global_frequency(self):
+        self.assertEqual(self.ds.attrs["frequency"], "day")
+
+
+# ---------------------------------------------------------------------------
+# Example 9 — cell_measures remapping
+# ---------------------------------------------------------------------------
+
+
+@_requires_tables
+class TestExample09CellMeasures(unittest.TestCase):
+    """Example 9: cell_measures remapping from mapping table."""
+
+    def setUp(self):
+        import cmor4
+
+        self.tmp = tempfile.mkdtemp()
+        base = {**_BASE_DATASET, "region": "glb"}
+        project = _project("CMIP7_aerosol.json")
+        dataset = _make_dataset(project, base, self.tmp)
+        # This variable has empty cell_measures in the table
+        variable = project.variable(
+            "abs550aer_tavg-u-hxy-u",
+            table_id="aerosol",
+            missing_value=np.float32(1.0e20),
+        )
+        axes = [_time_axis(project), _lat_axis(project), _lon_axis(project)]
+        data = np.linspace(0.1, 0.5, 2 * 3 * 4, dtype="f4").reshape(2, 3, 4)
+        ds = cmor4.create_dataset(dataset, variable, axes, data)
+        path = cmor4.write_netcdf(ds, dataset, variable)
+        self.ds = xr.open_dataset(path, decode_times=False)
+
+    def tearDown(self):
+        self.ds.close()
+
+    def test_cell_measures_remapped(self):
+        # Should be "area: areacella" from mapping file
+        self.assertEqual(self.ds["abs550aer"].attrs["cell_measures"], "area: areacella")
+
+    def test_variable_standard_name(self):
+        self.assertEqual(
+            self.ds["abs550aer"].attrs["standard_name"],
+            "atmosphere_absorption_optical_thickness_due_to_ambient_aerosol_particles",
+        )
+
+    def test_global_variable_id(self):
+        self.assertEqual(self.ds.attrs["variable_id"], "abs550aer")
+
+    def test_global_realm(self):
+        self.assertEqual(self.ds.attrs["realm"], "aerosol")
 
 
 if __name__ == "__main__":

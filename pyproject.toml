@@ -39,6 +39,7 @@ dev = [
   "furo>=2024.0",
   "cc-plugin-wcrp>=2.3",
   "esgvoc>=4.0",
+  "cmip7-repack>=0.3.0",
 ]
 
 [tool.pytest.ini_options]

@@ -149,6 +149,9 @@ class VariableEntry(BaseModel):
         Path to the source table file, if available.
     table_header:
         Header metadata from the table file, if available.
+    contextual_attrs:
+        Attribute names overlaid from context-dependent remapping tables. Empty
+        unless this entry was produced by :meth:`VariableTable.contextual_entry`.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -158,6 +161,7 @@ class VariableEntry(BaseModel):
     entry: Mapping[str, Any]
     table_file: Path | None = None
     table_header: Mapping[str, Any] | None = None
+    contextual_attrs: tuple[str, ...] = ()
 
     @field_validator("name", "table_id")
     @classmethod
@@ -717,6 +721,59 @@ class GridTable:
 
 
 # ---------------------------------------------------------------------------
+# VariableRemappingTable
+# ---------------------------------------------------------------------------
+
+
+class VariableRemappingTable:
+    """Indexed contextual variable metadata entries.
+
+    Keys follow the CMIP7 remapping format:
+    ``{realm}.{variable_id}.{branding_suffix}.{frequency}.{region}``.
+    Values are strings and may be empty; an empty value is still an explicit
+    table value and must be distinguished from a missing key.
+    """
+
+    def __init__(self, section: str, values: dict[str, str]) -> None:
+        self.section = section
+        self._values = values
+
+    @classmethod
+    def from_file(
+        cls, remapping_table: Path | None, section: str
+    ) -> "VariableRemappingTable":
+        values: dict[str, str] = {}
+        if remapping_table is not None:
+            with remapping_table.open() as handle:
+                data = json.load(handle)
+            raw_values = data.get(section)
+            if not isinstance(raw_values, Mapping):
+                raise TableValidationError(
+                    f"Remapping table {str(remapping_table)!r} must contain a "
+                    f"{section!r} mapping."
+                )
+            bad_values = [
+                name for name, value in raw_values.items() if not isinstance(value, str)
+            ]
+            if bad_values:
+                names = ", ".join(str(n) for n in bad_values[:5])
+                raise TableValidationError(
+                    f"Remapping table {str(remapping_table)!r} has non-string "
+                    f"values for {section!r}: {names}."
+                )
+            values = {str(name): value for name, value in raw_values.items()}
+        return cls(section, values)
+
+    def lookup(self, keys: Sequence[str]) -> tuple[bool, str | None]:
+        """Return ``(found, value)`` for the first matching composite key."""
+
+        for key in keys:
+            if key in self._values:
+                return True, self._values[key]
+        return False, None
+
+
+# ---------------------------------------------------------------------------
 # VariableTable
 # ---------------------------------------------------------------------------
 
@@ -734,27 +791,69 @@ class VariableTable:
         Paths to variable table JSON files to load.
     """
 
-    def __init__(self, table_files: Sequence[Path]) -> None:
+    def __init__(
+        self,
+        table_files: Sequence[Path],
+        *,
+        long_name_override_table: Path | None = None,
+        cell_measures_table: Path | None = None,
+    ) -> None:
+        """Load variable tables and optional contextual remapping tables.
+
+        Parameters
+        ----------
+        table_files:
+            Variable table JSON files to index.
+        long_name_override_table:
+            Optional table containing ``long_name_overrides`` entries keyed by
+            realm, variable id, branding suffix, frequency, and region.
+        cell_measures_table:
+            Optional table containing ``cell_measures`` entries keyed by the
+            same composite context.
+        """
+
         self.entries: dict[str, VariableEntry] = {}
         self._by_name: dict[str, list[VariableEntry]] = {}
         for path in table_files:
             self._load(path)
+        self._contextual_remaps = {
+            "long_name": VariableRemappingTable.from_file(
+                long_name_override_table, "long_name_overrides"
+            ),
+            "cell_measures": VariableRemappingTable.from_file(
+                cell_measures_table, "cell_measures"
+            ),
+        }
 
     @classmethod
-    def from_file(cls, table_files: Sequence[Path]) -> "VariableTable":
+    def from_file(
+        cls,
+        table_files: Sequence[Path],
+        *,
+        long_name_override_table: Path | None = None,
+        cell_measures_table: Path | None = None,
+    ) -> "VariableTable":
         """Construct a VariableTable from table file paths.
 
         Parameters
         ----------
         table_files:
             Paths to variable table JSON files to load.
+        long_name_override_table:
+            Optional contextual long-name override table.
+        cell_measures_table:
+            Optional contextual cell-measures table.
 
         Returns
         -------
         VariableTable
-            Loaded variable table instance.
+            Loaded variable table instance with remapping indexes attached.
         """
-        return cls(table_files)
+        return cls(
+            table_files,
+            long_name_override_table=long_name_override_table,
+            cell_measures_table=cell_measures_table,
+        )
 
     # ------------------------------------------------------------------
     # Loading
@@ -840,6 +939,114 @@ class VariableTable:
         entry = self.resolve(data)
         return self._merge(data, entry)
 
+    def contextual_entry(
+        self,
+        entry: VariableEntry,
+        variable: Variable,
+        dataset: Mapping[str, Any] | None,
+    ) -> VariableEntry:
+        """Return *entry* with context-specific metadata overlaid.
+
+        The returned entry is a copy of the resolved variable-table row when a
+        remapping applies, with ``long_name`` and/or ``cell_measures`` replaced
+        by the contextual table value. If no remapping key matches, the original
+        entry is returned unchanged.
+
+        Context keys are derived from the resolved table entry, the prepared
+        variable, and dataset metadata. The table id is considered before the
+        variable's possibly multi-token ``modeling_realm`` so CMIP7 realm tables
+        such as ``aerosol`` can match entries whose modeling realm is
+        ``"aerosol atmosChem"``.
+        """
+
+        keys = self._remapping_keys(entry, variable, dataset)
+        if not keys:
+            return entry
+
+        updates: dict[str, str] = {}
+        for attr, remap_table in self._contextual_remaps.items():
+            found, value = remap_table.lookup(keys)
+            if found:
+                updates[attr] = str(value)
+
+        if not updates:
+            return entry
+
+        effective = dict(entry.entry)
+        effective.update(updates)
+        return entry.model_copy(
+            update={
+                "entry": effective,
+                "contextual_attrs": tuple(sorted(updates)),
+            }
+        )
+
+    def apply_contextual_metadata(
+        self, variable: Variable, entry: VariableEntry
+    ) -> Variable:
+        """Overlay contextual entry metadata onto *variable*.
+
+        Only attributes listed in ``entry.contextual_attrs`` are copied. Empty
+        string remap values are converted to ``None`` so the resulting NetCDF
+        variable omits the attribute while validation still knows the effective
+        table expected an explicit empty value.
+        """
+
+        if not entry.contextual_attrs:
+            return variable
+
+        updates: dict[str, str | None] = {}
+        for attr in entry.contextual_attrs:
+            value = entry.entry.get(attr)
+            updates[attr] = None if value == "" else str(value)
+        return variable.model_copy(update=updates)
+
+    def _remapping_keys(
+        self,
+        entry: VariableEntry,
+        variable: Variable,
+        dataset: Mapping[str, Any] | None,
+    ) -> tuple[str, ...]:
+        """Return candidate remapping keys ordered from most to least specific.
+
+        Candidate realms include the variable table id, dataset realm, table
+        ``modeling_realm`` tokens, and variable realm. Candidate frequencies
+        prefer dataset metadata, then variable metadata, then table metadata.
+        Region is dataset-specific; without it no remapping key is produced.
+        """
+
+        data = dataset or {}
+        variable_id = str(
+            entry.entry.get("out_name")
+            or variable.id
+            or variable.variable_id
+            or entry.name.split("_", 1)[0]
+        )
+        branding_suffix = entry.name.split("_", 1)[1] if "_" in entry.name else ""
+
+        realms = _unique_strings([
+            entry.table_id,
+            *_split_context_values(data.get("realm")),
+            *_split_context_values(entry.entry.get("modeling_realm")),
+            *_split_context_values(variable.realm),
+        ])
+        frequencies = _unique_strings([
+            *_split_context_values(data.get("frequency")),
+            *_split_context_values(variable.frequency),
+            *_split_context_values(entry.entry.get("frequency")),
+        ])
+        regions = _unique_strings(_split_context_values(data.get("region")))
+
+        if not all((realms, variable_id, frequencies, regions)):
+            return ()
+
+        return tuple(
+            f"{realm}.{variable_id}.{branding_suffix}.{frequency}.{region}"
+            for realm in realms
+            for frequency in frequencies
+            for region in regions
+        )
+
     def _merge(self, data: dict[str, Any], entry: VariableEntry) -> dict[str, Any]:
         """Copy *entry* defaults into *data*."""
         e = entry.entry
@@ -880,10 +1087,25 @@ class VariableTable:
         return data
 
     def validate_against(self, variable: Variable, entry: VariableEntry) -> None:
-        """Validate *variable* metadata against a resolved table entry.
+        """Validate *variable* metadata against a resolved/effective table entry.
 
-        Raises :exc:`~cmor4.exceptions.TableValidationError` on any mismatch.
-        Called by :meth:`~cmor4.tables.ProjectTables.validate_dataset`.
+        Parameters
+        ----------
+        variable
+            Variable to validate.
+        entry
+            Resolved variable table entry. This may be a contextual entry with
+            remapped ``long_name`` or ``cell_measures`` values already overlaid.
+        Raises
+        ------
+        TableValidationError
+            On any mismatch between variable and table entry.
+
+        Notes
+        -----
+        Called by :meth:`~cmor4.tables.ProjectTables.validate_dataset`. For
+        contextual empty-string remaps, the accepted variable value is ``None``
+        or ``""``; non-empty values are rejected.
         """
         e = entry.entry
         out_name = str(e.get("out_name", entry.name.split("_", 1)[0]))
@@ -917,6 +1139,7 @@ class VariableTable:
                 f"units={user_units!r} does not match {entry.table_id}:{entry.name} "
                 f"value {table_units!r} and the two are not dimensionally convertible."
             )
+        contextual_attrs = set(entry.contextual_attrs)
         for key in (
             "standard_name",
             "long_name",
@@ -926,11 +1149,14 @@ class VariableTable:
         ):
             expected = e.get(key)
             user_val = getattr(variable, key, None)
-            if (
-                expected not in (None, "")
-                and user_val is not None
-                and str(user_val) != str(expected)
-            ):
+            if expected in (None, ""):
+                if key in contextual_attrs and user_val not in (None, ""):
+                    raise TableValidationError(
+                        f"{key}={user_val!r} does not match "
+                        f"{entry.table_id}:{entry.name} contextual value {expected!r}."
+                    )
+                continue
+            if user_val is not None and str(user_val) != str(expected):
                 raise TableValidationError(
                     f"{key}={user_val!r} does not match "
                     f"{entry.table_id}:{entry.name} value {expected!r}."
@@ -1014,6 +1240,42 @@ def _build_generic_level_index(
         if is_table_value(generic):
             index.setdefault(str(generic), {})[name] = entry
     return index
+
+
+def _split_context_values(value: Any) -> list[str]:
+    """Return remapping context tokens from strings or simple sequences.
+
+    CMIP table realms are often encoded as space-separated strings, while some
+    dataset metadata can arrive as one-item lists. This helper normalizes those
+    forms for composite-key generation.
+    """
+
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        return [part for part in value.split() if part]
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        result: list[str] = []
+        for item in value:
+            result.extend(_split_context_values(item))
+        return result
+    return [str(value)]
+
+
+def _unique_strings(values: Sequence[str]) -> list[str]:
+    """Return non-empty strings with first-seen ordering preserved.
+
+    Ordering controls remapping precedence, so this intentionally keeps the
+    first occurrence of each token rather than sorting.
+    """
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value and value not in seen:
+            result.append(value)
+            seen.add(value)
+    return result
 
 
 def _read_table_entries(table_file: Path, key: str) -> dict[str, Mapping[str, Any]]:

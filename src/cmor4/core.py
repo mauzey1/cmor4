@@ -56,6 +56,7 @@ def create_dataset(
     zfactors: Sequence[ZFactor] | None = None,
     grid: Grid | None = None,
     attrs: Mapping[str, Any] | None = None,
+    encoding: Mapping[str, Any] | None = None,
 ) -> xr.Dataset:
     """Create an xarray dataset from metadata objects.
 
@@ -65,6 +66,10 @@ def create_dataset(
     ``Variable``, ``Axis``, ``Grid``, and ``ZFactor`` records, validate the
     final global attributes, and verify that the generated xarray dataset
     contains the expected variables.
+
+    For CMIP7 datasets, CMIP7-compliant chunking is automatically applied unless
+    user-provided chunking is specified. User-provided chunking for CMIP7
+    datasets is validated for compliance with cloud-optimization requirements.
 
     Parameters
     ----------
@@ -84,6 +89,10 @@ def create_dataset(
         Optional runtime grid dimensions and grid-mapping metadata.
     attrs:
         Extra global attributes.
+    encoding:
+        Optional encoding parameters (chunksizes, compression, etc.) to apply
+        to variables. For CMIP7 datasets, user-provided chunksizes are validated
+        for compliance.
 
     Returns
     -------
@@ -104,10 +113,10 @@ def create_dataset(
         If data values violate variable validation limits.
     ValueError
         If the data shape or final dataset structure is inconsistent with the
-        requested metadata.
+        requested metadata, or if CMIP7 chunking requirements are not met.
     """
 
-    dataset = _dataset_for_variable(dataset, variable)
+    dataset, variable = _dataset_for_variable(dataset, variable)
     axes = _dataset_axes(dataset, axes, variable)
     axes = validate_and_normalize_axes(dataset, variable, axes)
 
@@ -241,9 +250,53 @@ def create_dataset(
         ds[var_name].attrs["missing_value"] = mv
         ds[var_name].encoding["_FillValue"] = mv
 
-    chunksizes = variable.chunksizes or variable.chunks
-    if chunksizes:
+    # Handle chunking with CMIP7 compliance
+    from ._chunking import (
+        calculate_cmip7_chunks,
+        is_cmip7_dataset,
+        validate_cmip7_encoding,
+    )
+
+    # Check if user provided chunking via encoding parameter
+    user_provided_chunks = None
+    if encoding and var_name in encoding and "chunksizes" in encoding[var_name]:
+        user_provided_chunks = encoding[var_name]["chunksizes"]
+
+    # Existing chunks from variable metadata
+    chunksizes = user_provided_chunks or variable.chunksizes or variable.chunks
+
+    # Validate user-provided chunks for CMIP7 if applicable
+    if user_provided_chunks and is_cmip7_dataset(dataset):
+        data_array = ds[var_name]
+        validate_cmip7_encoding(
+            encoding[var_name],
+            var_name,
+            data_array.dims,
+            data_array.shape,
+            data_array.dtype,
+            data_array.dims,
+        )
+
+    # Auto-apply CMIP7 chunks if needed (no user chunks, no variable metadata chunks)
+    if chunksizes is None and is_cmip7_dataset(dataset):
+        data_array = ds[var_name]
+        cmip7_chunks = calculate_cmip7_chunks(
+            data_array.dims,
+            data_array.shape,
+            data_array.dtype,
+            data_array.dims,
+        )
+        ds[var_name].encoding["chunksizes"] = tuple(
+            cmip7_chunks[d] for d in data_array.dims
+        )
+    elif chunksizes:
         ds[var_name].encoding["chunksizes"] = tuple(int(value) for value in chunksizes)
+
+    # Apply other encoding parameters (compression, quantization, etc.)
+    if encoding and var_name in encoding:
+        for key, value in encoding[var_name].items():
+            if key != "chunksizes":  # chunksizes already handled above
+                ds[var_name].encoding[key] = value
 
     _validate_final_components(
         ds,
@@ -333,9 +386,13 @@ def cmorize(
     grid: Grid | None = None,
     path: str | Path | None = None,
     attrs: Mapping[str, Any] | None = None,
+    encoding: Mapping[str, Any] | None = None,
     **to_netcdf_kwargs: Any,
 ) -> Cmor4Result:
     """Create and write a CMOR-like NetCDF file from metadata objects.
+
+    For CMIP7 datasets, CMIP7-compliant chunking is automatically applied unless
+    user-provided chunking is specified via the encoding parameter.
 
     Parameters
     ----------
@@ -356,6 +413,10 @@ def cmorize(
         metadata.
     attrs:
         Extra global attributes to include in the output dataset.
+    encoding:
+        Optional encoding parameters (chunksizes, compression, etc.) to apply
+        to variables. For CMIP7 datasets, user-provided chunksizes are validated
+        for compliance.
     **to_netcdf_kwargs:
         Additional keyword arguments forwarded to ``xarray.Dataset.to_netcdf``.
 
@@ -365,7 +426,7 @@ def cmorize(
         The in-memory dataset and path to the written NetCDF file.
     """
 
-    dataset = _dataset_for_variable(dataset, variable)
+    dataset, variable = _dataset_for_variable(dataset, variable)
     ds = create_dataset(
         dataset,
         variable,
@@ -374,6 +435,7 @@ def cmorize(
         zfactors=zfactors,
         grid=grid,
         attrs=attrs,
+        encoding=encoding,
     )
     output_path = write_netcdf(ds, dataset, variable, path=path, **to_netcdf_kwargs)
     return Cmor4Result(dataset=ds, path=output_path)
@@ -468,7 +530,7 @@ def build_output_path(
         Rendered output path, including the ``.nc`` filename.
     """
 
-    dataset = _dataset_for_variable(dataset, variable)
+    dataset, variable = _dataset_for_variable(dataset, variable)
     root = Path(str(dataset.get("outpath", "."))).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
 
@@ -532,7 +594,7 @@ def string_from_template(
         Rendered template string.
     """
 
-    dataset = _dataset_for_variable(dataset, variable)
+    dataset, variable = _dataset_for_variable(dataset, variable)
     return render_template(template, _template_tokens(dataset, variable, ds), separator)
 
 
@@ -882,10 +944,17 @@ def _validate_final_zfactor(
 def _dataset_for_variable(
     dataset: DatasetInfo,
     variable: Variable,
-) -> DatasetInfo:
+) -> tuple[DatasetInfo, Variable]:
+    """Return dataset and variable prepared for a specific variable.
+
+    Project-backed datasets delegate to :meth:`ProjectTables._dataset_for_variable`,
+    which may apply context-specific table metadata such as CMIP7 long-name and
+    cell-measures remappings. Non-project datasets are returned unchanged.
+    """
+
     project = dataset.project
     if project is None:
-        return dataset
+        return dataset, variable
     return project._dataset_for_variable(dataset, variable)
 
 

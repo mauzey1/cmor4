@@ -39,6 +39,12 @@ class ProjectTables:
     more variable tables under ``cmip7-cmor-tables/tables/``, and the project
     coordinate and formula-term tables.
 
+    Optional remapping tables (long_name_override_table, cell_measures_table)
+    provide context-specific variable metadata based on composite keys that
+    include realm, variable_id, branding suffix, frequency, and region. These
+    remappings are treated as effective variable-table values during
+    preparation and validation.
+
     Parameters
     ----------
     cv_file
@@ -51,6 +57,13 @@ class ProjectTables:
         Optional path to the formula-terms table JSON file.
     grid_table
         Optional path to the grids table JSON file.
+    long_name_override_table
+        Optional path to the long_name overrides table JSON file. Entries are
+        applied as contextual ``long_name`` table values.
+    cell_measures_table
+        Optional path to the cell_measures table JSON file. Entries are applied
+        as contextual ``cell_measures`` table values, including explicit empty
+        strings.
     """
 
     def __init__(
@@ -60,6 +73,8 @@ class ProjectTables:
         coordinate_table: str | Path | None = None,
         formula_table: str | Path | None = None,
         grid_table: str | Path | None = None,
+        long_name_override_table: str | Path | None = None,
+        cell_measures_table: str | Path | None = None,
     ):
         self.cv_file = Path(cv_file)
         self.variable_table_files = tuple(Path(path) for path in variable_tables)
@@ -70,8 +85,20 @@ class ProjectTables:
             Path(formula_table) if formula_table is not None else None
         )
         self.grid_table_file = Path(grid_table) if grid_table is not None else None
+        self.long_name_override_table_file = (
+            Path(long_name_override_table)
+            if long_name_override_table is not None
+            else None
+        )
+        self.cell_measures_table_file = (
+            Path(cell_measures_table) if cell_measures_table is not None else None
+        )
         self.cv = ControlledVocabulary.from_file(self.cv_file)
-        self.variable_table = VariableTable.from_file(self.variable_table_files)
+        self.variable_table = VariableTable.from_file(
+            self.variable_table_files,
+            long_name_override_table=self.long_name_override_table_file,
+            cell_measures_table=self.cell_measures_table_file,
+        )
         self.grid_table = GridTable.from_file(self.grid_table_file)
         self.coordinate_table = CoordinateTable.from_file(
             self.coordinate_table_file, self.grid_table_file
@@ -88,8 +115,15 @@ class ProjectTables:
         coordinate_table: str | Path | None = None,
         formula_table: str | Path | None = None,
         grid_table: str | Path | None = None,
+        long_name_override_table: str | Path | None = None,
+        cell_measures_table: str | Path | None = None,
     ) -> "ProjectTables":
         """Load tables using paths relative to a project root.
+
+        Optional remapping tables are resolved the same way as coordinate,
+        formula, and grid tables: explicit paths are interpreted relative to
+        ``root``; omitted paths are auto-discovered from ``tables`` or
+        ``Tables`` by suffix.
 
         Parameters
         ----------
@@ -105,6 +139,10 @@ class ProjectTables:
             Optional formula-terms table path relative to ``root``.
         grid_table
             Optional grids table path relative to ``root``.
+        long_name_override_table
+            Optional long_name overrides table path relative to ``root``.
+        cell_measures_table
+            Optional cell_measures table path relative to ``root``.
 
         Returns
         -------
@@ -120,12 +158,20 @@ class ProjectTables:
             root_path, formula_table, "formula_terms"
         )
         resolved_grid_table = _resolve_optional_table(root_path, grid_table, "grids")
+        resolved_long_name_override_table = _resolve_optional_table(
+            root_path, long_name_override_table, "long_name_overrides"
+        )
+        resolved_cell_measures_table = _resolve_optional_table(
+            root_path, cell_measures_table, "cell_measures"
+        )
         return cls(
             root_path / cv_file,
             [root_path / table_file for table_file in variable_tables],
             coordinate_table=resolved_coordinate_table,
             formula_table=resolved_formula_table,
             grid_table=resolved_grid_table,
+            long_name_override_table=resolved_long_name_override_table,
+            cell_measures_table=resolved_cell_measures_table,
         )
 
     def dataset_info(
@@ -158,15 +204,31 @@ class ProjectTables:
         self,
         dataset_info: DatasetInfo,
         variable: Variable,
-    ) -> DatasetInfo:
+    ) -> tuple[DatasetInfo, Variable]:
         """Prepare dataset info with variable-specific metadata and validation.
 
         This is called by create_dataset to merge variable metadata into
         dataset and perform initial validation. Full component validation
-        happens later via validate_dataset.
+        happens later via validate_dataset. If contextual remapping tables are
+        loaded, matching ``long_name`` and ``cell_measures`` values are applied
+        to the returned ``Variable`` and used as the expected table values for
+        validation.
+
+        Returns
+        -------
+        tuple[DatasetInfo, Variable]
+            Prepared dataset metadata and variable, with contextual remappings
+            applied when a key matches the dataset and variable context.
         """
         normalized_dataset = self.cv.get_dataset_info(dataset_info)
         variable_entry = self.variable_table.resolve(variable.to_dict())
+        variable_entry = self.variable_table.contextual_entry(
+            variable_entry, variable, normalized_dataset
+        )
+        variable = self.variable_table.apply_contextual_metadata(
+            variable, variable_entry
+        )
+
         self._add_table_header_defaults(normalized_dataset, variable_entry)
         self._add_variable_global_defaults(normalized_dataset, variable)
         self.cv.validate_dataset_info(normalized_dataset)
@@ -180,13 +242,13 @@ class ProjectTables:
 
         # Quick validation check for dataset-variable consistency
         # This is duplicated in validate_components but done early for fast
-        # failure
+        # failure.
         self.variable_table.validate_against(variable, variable_entry)
         self._validate_dataset_variable_consistency(
             prepared_dataset, variable, variable_entry
         )
 
-        return prepared_dataset
+        return prepared_dataset, variable
 
     def variable(self, name: str, **values: Any) -> Variable:
         """Create a variable with metadata from the loaded variable tables.
@@ -748,6 +810,13 @@ class ProjectTables:
         # but we validate again here to ensure consistency when called directly
         # by users or if variable was modified after _dataset_for_variable
         variable_entry = self.variable_table.resolve(variable.to_dict())
+
+        if dataset_info is not None:
+            normalized_dataset = self.cv.get_dataset_info(dataset_info)
+            variable_entry = self.variable_table.contextual_entry(
+                variable_entry, variable, normalized_dataset
+            )
+
         self.variable_table.validate_against(variable, variable_entry)
 
         # Dataset-variable consistency checks
