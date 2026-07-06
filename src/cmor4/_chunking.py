@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Sequence
 
 import numpy as np
 
@@ -39,12 +39,12 @@ def calculate_cmip7_chunks(
     """Calculate CMIP7-compliant chunk sizes.
 
     CMIP7 requirements:
-    - Time coordinate must have a single chunk (full length)
+    - Time coordinate and bounds variables must have a single chunk along time
     - Data variable chunks must be ≥ 4 MiB
 
     Strategy:
-    - Time dimension: use full length (single chunk)
-    - Other dimensions: calculate to meet 4 MiB minimum
+    - Use full dimensions for the data variable, which always satisfies the
+      single-time-chunk requirement and maximizes chunk size for small arrays.
 
     Parameters
     ----------
@@ -106,26 +106,27 @@ def calculate_cmip7_chunks(
     return chunks
 
 
-def validate_cmip7_encoding(
-    encoding: dict[str, Any],
+def validate_cmip7_chunksizes(
+    chunksizes: Sequence[int],
     var_name: str,
     dims: Sequence[str],
     shape: tuple[int, ...],
     dtype: np.dtype,
-    dim_names: Sequence[str],
 ) -> None:
-    """Validate user-provided encoding for CMIP7 compliance.
+    """Validate user-provided chunksizes for CMIP7 compliance.
 
-    Checks that chunksizes meet CMIP7 requirements:
-    - Time coordinate must have single chunk (full length)
-    - Data variable chunks must be ≥ 4 MiB
+    Checks that chunksizes meet CMIP7 requirements for the data variable:
+    - Data variable chunks must be ≥ 4 MiB (4,194,304 bytes)
+    - Data variable chunks can have any shape as long as they meet the size requirement
+    - Data variables may have multiple chunks along time if each chunk is ≥ 4 MiB
 
-    Non-chunking encoding parameters (zlib, complevel, etc.) are ignored.
+    The single-chunk requirement for time coordinates and time bounds is enforced
+    separately in core.py, not by this function.
 
     Parameters
     ----------
-    encoding
-        Encoding dictionary for the variable.
+    chunksizes
+        User-provided chunk sizes for each dimension.
     var_name
         Variable name (for error messages).
     dims
@@ -134,18 +135,12 @@ def validate_cmip7_encoding(
         Array shape.
     dtype
         Array data type.
-    dim_names
-        Logical dimension names.
 
     Raises
     ------
     ValueError
-        If chunksizes do not meet CMIP7 requirements.
+        If chunksizes do not meet CMIP7 ≥4 MiB requirement.
     """
-    if "chunksizes" not in encoding:
-        return
-
-    chunksizes = encoding["chunksizes"]
     if len(chunksizes) != len(dims):
         raise ValueError(
             f"Variable '{var_name}': chunksizes length {len(chunksizes)} "
@@ -153,18 +148,6 @@ def validate_cmip7_encoding(
         )
 
     itemsize = np.dtype(dtype).itemsize
-
-    # Check time dimension has single chunk
-    for i, dim in enumerate(dims):
-        dim_lower = str(dim).lower()
-        if dim_lower == "time" or dim_lower.startswith("time"):
-            if chunksizes[i] != shape[i]:
-                raise ValueError(
-                    f"Variable '{var_name}': CMIP7 requires time coordinate "
-                    f"to have a single chunk. Got chunk size {chunksizes[i]} "
-                    f"but dimension size is {shape[i]}. "
-                    f"Set chunksizes[{i}] = {shape[i]} for dimension '{dim}'."
-                )
 
     # Check total chunk size meets minimum
     chunk_size_bytes = np.prod(chunksizes) * itemsize

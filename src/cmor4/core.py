@@ -246,30 +246,40 @@ def create_dataset(
     from ._chunking import (
         calculate_cmip7_chunks,
         is_cmip7_dataset,
-        validate_cmip7_encoding,
+        validate_cmip7_chunksizes,
     )
 
-    # Check if user provided chunking via encoding parameter
+    # Extract user-provided chunksizes for the data variable.
+    # Priority: variable-specific encoding["var_name"]["chunksizes"] >
+    #           top-level encoding["chunksizes"] >
+    #           variable metadata (chunksizes/chunks)
     user_provided_chunks = None
-    if encoding and var_name in encoding and "chunksizes" in encoding[var_name]:
-        user_provided_chunks = encoding[var_name]["chunksizes"]
+    if encoding:
+        var_encoding = encoding.get(var_name)
+        if isinstance(var_encoding, Mapping) and "chunksizes" in var_encoding:
+            user_provided_chunks = var_encoding["chunksizes"]
+        elif "chunksizes" in encoding and not isinstance(
+            encoding["chunksizes"], Mapping
+        ):
+            user_provided_chunks = encoding["chunksizes"]
 
-    # Existing chunks from variable metadata
+    # Fallback to variable metadata for chunksizes if not in encoding
     chunksizes = user_provided_chunks or variable.chunksizes or variable.chunks
 
-    # Validate user-provided chunks for CMIP7 if applicable
+    # For CMIP7 datasets, validate user-provided chunksizes meet the
+    # ≥4 MiB requirement. Allow all other encoding parameters to pass through.
     if user_provided_chunks and is_cmip7_dataset(dataset):
         data_array = ds[var_name]
-        validate_cmip7_encoding(
-            encoding[var_name],
+        validate_cmip7_chunksizes(
+            user_provided_chunks,
             var_name,
             data_array.dims,
             data_array.shape,
             data_array.dtype,
-            data_array.dims,
         )
 
-    # Auto-apply CMIP7 chunks if needed (no user chunks, no variable metadata chunks)
+    # Auto-generate CMIP7-compliant chunks if no chunksizes were provided
+    # (neither in encoding nor in variable metadata)
     if chunksizes is None and is_cmip7_dataset(dataset):
         data_array = ds[var_name]
         cmip7_chunks = calculate_cmip7_chunks(
@@ -284,11 +294,82 @@ def create_dataset(
     elif chunksizes:
         ds[var_name].encoding["chunksizes"] = tuple(int(value) for value in chunksizes)
 
-    # Apply other encoding parameters (compression, quantization, etc.)
-    if encoding and var_name in encoding:
-        for key, value in encoding[var_name].items():
-            if key != "chunksizes":  # chunksizes already handled above
-                ds[var_name].encoding[key] = value
+    # For CMIP7 datasets, identify time-related variables that must have
+    # a single chunk (time coordinate and its bounds/climatology).
+    if is_cmip7_dataset(dataset):
+        protected_chunks: set[str] = set()
+        for coord_name in ds.coords:
+            coord_name_str = str(coord_name)
+            lower = coord_name_str.lower()
+            # Only protect time coordinates, not other coordinates
+            if lower != "time" and not lower.startswith("time"):
+                continue
+            protected_chunks.add(coord_name_str)
+            coord = ds[coord_name_str]
+            # Also protect time bounds and climatology bounds
+            for attr_name in ("bounds", "climatology"):
+                bounds_name = coord.attrs.get(attr_name)
+                if bounds_name is not None and str(bounds_name) in ds:
+                    protected_chunks.add(str(bounds_name))
+    else:
+        protected_chunks = set()
+
+    # Apply user-provided encoding to variables
+    if encoding:
+        for name in ds.variables:
+            name_str = str(name)
+
+            # Start with top-level encoding parameters, excluding chunksizes
+            # and nested dicts.
+            # This mimics xarray's encoding behavior
+            for key, value in encoding.items():
+                if key == "chunksizes" or isinstance(value, Mapping):
+                    continue
+                ds[name_str].encoding[key] = value
+
+            # Apply variable-specific encoding overrides
+            var_specific = encoding.get(name_str)
+            if isinstance(var_specific, Mapping):
+                for key, value in var_specific.items():
+                    if key == "chunksizes":
+                        # Handle chunksizes for non-data variables
+                        if name_str == var_name:
+                            # Data variable chunksizes already applied above
+                            continue
+
+                        array = ds[name_str]
+                        if len(value) != array.ndim:
+                            raise ValueError(
+                                f"Variable {name_str!r}: chunksizes length "
+                                f"{len(value)} does not match dimensions {array.dims}"
+                            )
+                        normalized_chunksizes = tuple(int(v) for v in value)
+
+                        # For CMIP7, enforce single chunk for time and time_bnds
+                        if (
+                            name_str in protected_chunks
+                            and normalized_chunksizes != array.shape
+                        ):
+                            raise ValueError(
+                                f"Variable {name_str!r}: CMIP7 requires time "
+                                "coordinates and time bounds to have a single "
+                                f"chunk. Got chunk sizes {normalized_chunksizes} "
+                                f"but variable shape is {array.shape}."
+                            )
+                        array.encoding["chunksizes"] = normalized_chunksizes
+                    else:
+                        # Apply other variable-specific encoding parameters
+                        ds[name_str].encoding[key] = value
+
+    # For CMIP7, automatically apply single-chunk encoding to time coordinates
+    # and time bounds if not already set by user
+    if protected_chunks:
+        for name in protected_chunks:
+            array = ds[name]
+            # Skip scalar variables and empty arrays
+            if array.ndim != 0 and not any(size == 0 for size in array.shape):
+                # Set chunk size to full array shape (single chunk)
+                array.encoding["chunksizes"] = tuple(int(size) for size in array.shape)
 
     _validate_final_components(
         ds,
