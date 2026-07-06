@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import sys
-import sysconfig
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
+import pyfive
 import numpy as np
 import xarray as xr
 
@@ -23,40 +21,6 @@ def _requires_tables(test):
     if not TABLES_DIR.exists() or not CV_PATH.exists():
         return unittest.skip("CMIP7 tables submodule not initialised")(test)
     return test
-
-
-def _has_check_cmip7_repack():
-    """Check if check_cmip7_repack tool is available."""
-    try:
-        # Try command line tool first
-        result = subprocess.run(
-            ["check_cmip7_repack", "--help"],
-            capture_output=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            return True
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    # Try Python module script
-    try:
-        import sys
-        import sysconfig
-
-        site_packages = sysconfig.get_path("purelib")
-        check_script = Path(site_packages) / "cmip7_repack" / "check_cmip7_packing"
-        if check_script.exists():
-            result = subprocess.run(
-                [sys.executable, str(check_script), "--help"],
-                capture_output=True,
-                timeout=5,
-            )
-            return result.returncode == 0
-    except Exception:
-        pass
-
-    return False
 
 
 _BASE_CMIP7_DATASET = {
@@ -128,38 +92,75 @@ def _create_bounds(vals, coord_name=None):
     return bounds
 
 
-class CMIP7RepackCheckAssertion:
-    """Call cmip7-repack-check on NetCDF files to tests CMIP7 repack compliance."""
+class CMIP7ChunkingCheckAssertion:
+    """Check if NetCDF files meet CMIP7 repack chunking requirements."""
 
-    def assertCMIP7Repack(self, path: Path, msg: str = None):
-        # Run check_cmip7_repack on the output file
-        # Try command line tool first, then Python script
-        try:
-            proc = subprocess.run(
-                ["check_cmip7_repack", str(path)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-        except FileNotFoundError:
-            # Use Python script directly
-            site_packages = sysconfig.get_path("purelib")
-            check_script = Path(site_packages) / "cmip7_repack" / "check_cmip7_packing"
-            proc = subprocess.run(
-                [sys.executable, str(check_script), str(path)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
+    def assertCMIP7Chunking(self, path: Path, msg: str = None):
+        BYTES_4MiB = 4 * 2**20
 
-        if proc.returncode != 0:
-            default_msg = (
-                "check_cmip7_repack failed:\n"
-                f"stdout: {proc.stdout}\n"
-                f"stderr: {proc.stderr}"
-            )
-            full_msg = self._formatMessage(msg, default_msg)
-            raise AssertionError(full_msg)
+        # Chunking checks from cmip7_chunking.
+        f = pyfive.File(path)
+        for time_name in f:
+            lower = str(time_name).lower()
+            if lower != "time" and (
+                not lower.startswith("time") or "bnds" in lower or "bounds" in lower
+            ):
+                continue
+
+            # Check for the time coordinates variable having one chunk
+            t = f[time_name]
+            chunks = t.chunks
+            if chunks is not None and t.id.get_num_chunks() > 1:
+                # At least two chunks
+                message = self._formatMessage(
+                    msg,
+                    f"FAIL: File {path.name!r} time coordinates variable "
+                    f"{time_name!r} has {t.id.get_num_chunks()} chunks "
+                    "(expected 1 chunk or contiguous)",
+                )
+                raise AssertionError(message)
+
+            # Check for the time bounds variable having one chunk
+            if "bounds" in t.attrs:
+                bounds = str(np.array(t.attrs["bounds"]).astype("U"))
+                if bounds in f:
+                    b = f[bounds]
+                    chunks = b.chunks
+                    if chunks is not None and b.id.get_num_chunks() > 1:
+                        # At least two chunks
+                        message = self._formatMessage(
+                            msg,
+                            f"FAIL: File {path.name!r} time bounds variable "
+                            f"{bounds!r} has {b.id.get_num_chunks()} chunks "
+                            "(expected 1 chunk or contiguous)",
+                        )
+                        raise AssertionError(message)
+
+        # Check for data variable chunks of at least ~4 MiB.
+        if "variable_id" in f.attrs:
+            variable_id = str(np.array(f.attrs["variable_id"]).astype("U"))
+            if variable_id in f:
+                d = f[variable_id]
+                chunks = d.chunks
+                if chunks is not None and d.id.get_num_chunks() > 1:
+                    # At least two chunks
+                    wordsize = d.dtype.itemsize
+                    chunksize = np.prod(chunks) * wordsize
+
+                    lee_way = 0
+                    if len(chunks) > 1:
+                        lee_way = np.prod(chunks[1:]) * wordsize
+
+                    if chunksize + lee_way < BYTES_4MiB:
+                        message = self._formatMessage(
+                            msg,
+                            f"FAIL: File {path.name!r} data variable "
+                            f"{variable_id!r} has uncompressed chunk size "
+                            f"{chunksize} B (expected at least "
+                            f"{BYTES_4MiB - lee_way} B or 1 chunk "
+                            "or contiguous)",
+                        )
+                        raise AssertionError(message)
 
 
 @_requires_tables
@@ -226,6 +227,8 @@ class TestCMIP7AutoChunking(unittest.TestCase):
 
         # Time dimension should be full length (single chunk)
         self.assertEqual(chunksizes[0], 100, "Time dimension should be unchunked")
+        self.assertEqual(ds["time"].encoding["chunksizes"], (100,))
+        self.assertEqual(ds["time_bnds"].encoding["chunksizes"], (100, 2))
 
         # Calculate chunk size
         itemsize = ds["bldep"].dtype.itemsize
@@ -424,8 +427,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         ds = cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
         self.assertEqual(ds["bldep"].encoding["chunksizes"], (100, 120, 180))
 
-    def test_chunked_time_rejected(self):
-        """Time dimension with chunks < full length is rejected."""
+    def test_data_variable_chunks_along_time_accepted(self):
+        """Data chunks may split time when each chunk is large enough."""
         import cmor4
 
         dataset = self.project.dataset_info({
@@ -436,12 +439,10 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
             "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
         )
 
-        time_vals = np.array([
-            15.0 + 30 * i for i in range(100)
-        ])  # 100 monthly timesteps
-        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(100)])
-        lat_vals = np.linspace(-90, 90, 90)
-        lon_vals = np.linspace(0, 359, 180)
+        time_vals = np.array([15.0 + 30 * i for i in range(200)])
+        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(200)])
+        lat_vals = np.linspace(-90, 90, 64)
+        lon_vals = np.linspace(0, 359, 384)
 
         axes = [
             self.project.axis(
@@ -460,16 +461,59 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
             ),
         ]
 
-        data = np.random.rand(100, 90, 180).astype(np.float32) * 30 + 270
+        data = np.zeros((200, 64, 384), dtype=np.float32)
 
-        # Invalid: time is chunked (10 instead of 100)
-        encoding = {"bldep": {"chunksizes": (10, 90, 180)}}
+        # 50*64*384*4 = 4,915,200 bytes, so the data chunk is CMIP7-sized
+        # even though the data variable has multiple chunks along time.
+        encoding = {"bldep": {"chunksizes": (50, 64, 384)}}
 
-        with self.assertRaises(ValueError) as cm:
-            cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
+        ds = cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
 
-        self.assertIn("time coordinate", str(cm.exception).lower())
-        self.assertIn("single chunk", str(cm.exception).lower())
+        self.assertEqual(ds["bldep"].encoding["chunksizes"], (50, 64, 384))
+        self.assertEqual(ds["time"].encoding["chunksizes"], (200,))
+        self.assertEqual(ds["time_bnds"].encoding["chunksizes"], (200, 2))
+
+    def test_top_level_chunksizes_accepted(self):
+        """Top-level chunksizes apply to data without splitting time bounds."""
+        import cmor4
+
+        dataset = self.project.dataset_info({
+            **_BASE_CMIP7_DATASET,
+            "outpath": self.tmp,
+        })
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+
+        time_vals = np.array([15.0 + 30 * i for i in range(200)])
+        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(200)])
+        lat_vals = np.linspace(-90, 90, 64)
+        lon_vals = np.linspace(0, 359, 384)
+        axes = [
+            self.project.axis(
+                "time",
+                values=time_vals,
+                bounds=time_bnds,
+                units="days since 2000-01-01",
+            ),
+            self.project.axis(
+                "latitude", values=lat_vals, bounds=_create_bounds(lat_vals, "latitude")
+            ),
+            self.project.axis(
+                "longitude",
+                values=lon_vals,
+                bounds=_create_bounds(lon_vals, "longitude"),
+            ),
+        ]
+
+        data = np.zeros((200, 64, 384), dtype=np.float32)
+        encoding = {"chunksizes": (50, 64, 384)}
+
+        ds = cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
+
+        self.assertEqual(ds["bldep"].encoding["chunksizes"], (50, 64, 384))
+        self.assertEqual(ds["time"].encoding["chunksizes"], (200,))
+        self.assertEqual(ds["time_bnds"].encoding["chunksizes"], (200, 2))
 
     def test_small_chunks_rejected(self):
         """Chunks smaller than 4 MiB are rejected."""
@@ -514,6 +558,98 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
             cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
 
         self.assertIn("4 mib", str(cm.exception).lower())
+
+    def test_top_level_small_chunks_rejected(self):
+        """Top-level chunksizes are validated against CMIP7 chunk size rules."""
+        import cmor4
+
+        dataset = self.project.dataset_info({
+            **_BASE_CMIP7_DATASET,
+            "outpath": self.tmp,
+        })
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+
+        time_vals = np.array([15.0 + 30 * i for i in range(10)])
+        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(10)])
+        lat_vals = np.linspace(-90, 90, 10)
+        lon_vals = np.linspace(0, 359, 20)
+        axes = [
+            self.project.axis(
+                "time",
+                values=time_vals,
+                bounds=time_bnds,
+                units="days since 2000-01-01",
+            ),
+            self.project.axis(
+                "latitude", values=lat_vals, bounds=_create_bounds(lat_vals, "latitude")
+            ),
+            self.project.axis(
+                "longitude",
+                values=lon_vals,
+                bounds=_create_bounds(lon_vals, "longitude"),
+            ),
+        ]
+
+        data = np.random.rand(10, 10, 20).astype(np.float32) * 30 + 270
+        encoding = {"chunksizes": (10, 10, 20)}
+
+        with self.assertRaises(ValueError) as cm:
+            cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
+
+        self.assertIn("4 mib", str(cm.exception).lower())
+
+    def test_time_coordinate_chunksizes_rejected(self):
+        """Variable-specific time chunks must keep time and bounds as one chunk."""
+        import cmor4
+
+        dataset = self.project.dataset_info({
+            **_BASE_CMIP7_DATASET,
+            "outpath": self.tmp,
+        })
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+
+        time_vals = np.array([15.0 + 30 * i for i in range(200)])
+        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(200)])
+        lat_vals = np.linspace(-90, 90, 64)
+        lon_vals = np.linspace(0, 359, 384)
+        axes = [
+            self.project.axis(
+                "time",
+                values=time_vals,
+                bounds=time_bnds,
+                units="days since 2000-01-01",
+            ),
+            self.project.axis(
+                "latitude", values=lat_vals, bounds=_create_bounds(lat_vals, "latitude")
+            ),
+            self.project.axis(
+                "longitude",
+                values=lon_vals,
+                bounds=_create_bounds(lon_vals, "longitude"),
+            ),
+        ]
+        data = np.zeros((200, 64, 384), dtype=np.float32)
+
+        cases = [
+            {"time": {"chunksizes": (50,)}},
+            {"time_bnds": {"chunksizes": (200, 1)}},
+        ]
+        for encoding in cases:
+            with self.subTest(encoding=encoding):
+                with self.assertRaises(ValueError) as cm:
+                    cmor4.create_dataset(
+                        dataset,
+                        variable,
+                        axes,
+                        data,
+                        encoding=encoding,
+                    )
+
+                self.assertIn("single chunk", str(cm.exception).lower())
 
 
 @_requires_tables
@@ -636,11 +772,164 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
         self.assertEqual(ds["bldep"].encoding.get("zlib"), True)
         self.assertEqual(ds["bldep"].encoding.get("complevel"), 4)
 
+    def test_top_level_compression_and_quantization(self):
+        """Top-level encoding keys apply to the primary variable."""
+        import cmor4
 
-@unittest.skipUnless(_has_check_cmip7_repack(), "check_cmip7_repack not installed")
+        dataset = self.project.dataset_info({
+            **_BASE_CMIP7_DATASET,
+            "outpath": self.tmp,
+        })
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+
+        time_vals = np.array([15.0 + 30 * i for i in range(100)])
+        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(100)])
+        lat_vals = np.linspace(-90, 90, 120)
+        lon_vals = np.linspace(0, 359, 180)
+        axes = [
+            self.project.axis(
+                "time",
+                values=time_vals,
+                bounds=time_bnds,
+                units="days since 2000-01-01",
+            ),
+            self.project.axis(
+                "latitude", values=lat_vals, bounds=_create_bounds(lat_vals, "latitude")
+            ),
+            self.project.axis(
+                "longitude",
+                values=lon_vals,
+                bounds=_create_bounds(lon_vals, "longitude"),
+            ),
+        ]
+
+        data = np.random.rand(100, 120, 180).astype(np.float32) * 30 + 270
+        encoding = {
+            "zlib": True,
+            "complevel": 4,
+            "least_significant_digit": 2,
+        }
+
+        ds = cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
+
+        self.assertIn("chunksizes", ds["bldep"].encoding)
+        self.assertEqual(ds["bldep"].encoding.get("zlib"), True)
+        self.assertEqual(ds["bldep"].encoding.get("complevel"), 4)
+        self.assertEqual(ds["bldep"].encoding.get("least_significant_digit"), 2)
+
+    def test_top_level_and_variable_specific_encoding_keys_pass_through(self):
+        """CMOR4 only special-cases chunksizes and passes other encoding keys."""
+        import cmor4
+
+        dataset = self.project.dataset_info({
+            **_BASE_CMIP7_DATASET,
+            "outpath": self.tmp,
+        })
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+
+        time_vals = np.array([15.0 + 30 * i for i in range(100)])
+        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(100)])
+        lat_vals = np.linspace(-90, 90, 120)
+        lon_vals = np.linspace(0, 359, 180)
+        axes = [
+            self.project.axis(
+                "time",
+                values=time_vals,
+                bounds=time_bnds,
+                units="days since 2000-01-01",
+            ),
+            self.project.axis(
+                "latitude", values=lat_vals, bounds=_create_bounds(lat_vals, "latitude")
+            ),
+            self.project.axis(
+                "longitude",
+                values=lon_vals,
+                bounds=_create_bounds(lon_vals, "longitude"),
+            ),
+        ]
+
+        data = np.random.rand(100, 120, 180).astype(np.float32) * 30 + 270
+        encoding = {
+            "backend_specific_option": "global",
+            "bldep": {
+                "another_backend_option": 7,
+            },
+            "time": {
+                "time_backend_option": "coordinate",
+            },
+        }
+
+        ds = cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
+
+        self.assertEqual(ds["bldep"].encoding.get("backend_specific_option"), "global")
+        self.assertEqual(ds["bldep"].encoding.get("another_backend_option"), 7)
+        self.assertEqual(ds["time"].encoding.get("backend_specific_option"), "global")
+        self.assertEqual(ds["time"].encoding.get("time_backend_option"), "coordinate")
+        self.assertEqual(
+            ds["time_bnds"].encoding.get("backend_specific_option"), "global"
+        )
+        self.assertNotIn("another_backend_option", ds["time"].encoding)
+
+    def test_variable_encoding_overrides_top_level_encoding(self):
+        """Variable-specific encoding has precedence over top-level defaults."""
+        import cmor4
+
+        dataset = self.project.dataset_info({
+            **_BASE_CMIP7_DATASET,
+            "outpath": self.tmp,
+        })
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+
+        time_vals = np.array([15.0 + 30 * i for i in range(100)])
+        time_bnds = np.array([[30 * i, 30 * (i + 1)] for i in range(100)])
+        lat_vals = np.linspace(-90, 90, 120)
+        lon_vals = np.linspace(0, 359, 180)
+        axes = [
+            self.project.axis(
+                "time",
+                values=time_vals,
+                bounds=time_bnds,
+                units="days since 2000-01-01",
+            ),
+            self.project.axis(
+                "latitude", values=lat_vals, bounds=_create_bounds(lat_vals, "latitude")
+            ),
+            self.project.axis(
+                "longitude",
+                values=lon_vals,
+                bounds=_create_bounds(lon_vals, "longitude"),
+            ),
+        ]
+
+        data = np.random.rand(100, 120, 180).astype(np.float32) * 30 + 270
+        encoding = {
+            "chunksizes": (100, 120, 180),
+            "zlib": True,
+            "complevel": 1,
+            "bldep": {
+                "chunksizes": (50, 120, 180),
+                "zlib": False,
+                "least_significant_digit": 3,
+            },
+        }
+
+        ds = cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
+
+        self.assertEqual(ds["bldep"].encoding["chunksizes"], (50, 120, 180))
+        self.assertEqual(ds["bldep"].encoding.get("zlib"), False)
+        self.assertEqual(ds["bldep"].encoding.get("complevel"), 1)
+        self.assertEqual(ds["bldep"].encoding.get("least_significant_digit"), 3)
+
+
 @_requires_tables
-class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAssertion):
-    """Test integration with check_cmip7_repack tool."""
+class TestCheckCMIP7RepackChunking(unittest.TestCase, CMIP7ChunkingCheckAssertion):
+    """Test if files generated have chunking that meets CMIP7 repack requirements."""
 
     def setUp(self):
         import cmor4
@@ -691,7 +980,7 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
             ),
         ]
 
-    def _assert_repack_compliant_file(self, variable, axes, data, *, encoding=None):
+    def _assert_chunking_compliant_file(self, variable, axes, data, *, encoding=None):
         import cmor4
 
         result = cmor4.cmorize(
@@ -702,11 +991,11 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
             encoding=encoding,
         )
 
-        self.assertCMIP7Repack(result.path)
+        self.assertCMIP7Chunking(result.path)
         return result.path
 
-    def test_auto_chunked_file_passes_check_cmip7_repack(self):
-        """Auto-chunked time-mean latitude/longitude files pass the repack check."""
+    def test_auto_chunked_file_passes_check_cmip7_chunking(self):
+        """Auto-chunked time-mean latitude/longitude files pass the chunking checks."""
         variable = self.project.variable(
             "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
         )
@@ -716,10 +1005,10 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
         ]
         data = np.zeros((100, 120, 180), dtype=np.float32)
 
-        self._assert_repack_compliant_file(variable, axes, data)
+        self._assert_chunking_compliant_file(variable, axes, data)
 
-    def test_multi_chunk_file_passes_check_cmip7_repack(self):
-        """Files with multiple compliant data chunks pass the repack check."""
+    def test_multi_chunk_file_passes_check_cmip7_chunking(self):
+        """Files with multiple compliant data chunks pass the chunking checks."""
         variable = self.project.variable(
             "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
         )
@@ -730,14 +1019,54 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
         data = np.zeros((100, 64, 384), dtype=np.float32)
         encoding = {"bldep": {"chunksizes": (100, 32, 384)}}
 
-        self._assert_repack_compliant_file(
+        self._assert_chunking_compliant_file(
             variable,
             axes,
             data,
             encoding=encoding,
         )
 
-    def test_time_point_file_passes_check_cmip7_repack(self):
+    def test_multiple_chunks_along_time_passes_check_cmip7_chunking(self):
+        """File with multiple compliant data chunks along time"""
+        num_times = 1000
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+        axes = [
+            self._time_axis(count=num_times),
+            *self._horizontal_axes(lat_count=64, lon_count=384),
+        ]
+        data = np.zeros((num_times, 64, 384), dtype=np.float32)
+        encoding = {"bldep": {"chunksizes": (100, 64, 384)}}
+
+        self._assert_chunking_compliant_file(
+            variable,
+            axes,
+            data,
+            encoding=encoding,
+        )
+
+    def test_top_level_chunksizes_passes_check_cmip7_chunking(self):
+        """Top-level chunksizes can split data time but not time coordinates."""
+        num_times = 1000
+        variable = self.project.variable(
+            "bldep_tavg-u-hxy-u", missing_value=np.float32(1.0e20)
+        )
+        axes = [
+            self._time_axis(count=num_times),
+            *self._horizontal_axes(lat_count=64, lon_count=384),
+        ]
+        data = np.zeros((num_times, 64, 384), dtype=np.float32)
+        encoding = {"chunksizes": (100, 64, 384)}
+
+        self._assert_chunking_compliant_file(
+            variable,
+            axes,
+            data,
+            encoding=encoding,
+        )
+
+    def test_time_point_file_passes_check_cmip7_chunking(self):
         """Time-point files pass when the time coordinate is stored as one chunk."""
         variable = self.project.variable(
             "bldep_tpt-u-hxy-u", missing_value=np.float32(1.0e20)
@@ -748,10 +1077,10 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
         ]
         data = np.zeros((100, 120, 180), dtype=np.float32)
 
-        self._assert_repack_compliant_file(variable, axes, data)
+        self._assert_chunking_compliant_file(variable, axes, data)
 
-    def test_landuse_time_point_file_passes_check_cmip7_repack(self):
-        """Four-dimensional files with a categorical axis pass the repack check."""
+    def test_landuse_time_point_file_passes_check_cmip7_chunking(self):
+        """Four-dimensional files with a categorical axis pass the chunking checks."""
         variable = self.project.variable(
             "fracLut_tpt-u-hxy-u",
             table_id="land",
@@ -772,10 +1101,10 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
         ]
         data = np.zeros((100, 4, 64, 64), dtype=np.float32)
 
-        self._assert_repack_compliant_file(variable, axes, data)
+        self._assert_chunking_compliant_file(variable, axes, data)
 
-    def test_ocean_and_sea_ice_surface_files_pass_check_cmip7_repack(self):
-        """Non-atmospheric CMIP7 surface files pass the repack check."""
+    def test_ocean_and_sea_ice_surface_files_pass_check_cmip7_chunking(self):
+        """Non-atmospheric CMIP7 surface files pass the chunking checks."""
         cases = [
             ("tos_tavg-u-hxy-sea", "ocean", "tos", -1.8),
             ("siconc_tavg-u-hxy-u", "seaIce", "siconc", 0.0),
@@ -794,7 +1123,7 @@ class TestCheckCMIP7RepackIntegration(unittest.TestCase, CMIP7RepackCheckAsserti
                 ]
                 data = np.full((100, 120, 180), value, dtype=np.float32)
 
-                path = self._assert_repack_compliant_file(variable, axes, data)
+                path = self._assert_chunking_compliant_file(variable, axes, data)
                 with xr.open_dataset(path) as ds:
                     self.assertEqual(ds.attrs["variable_id"], out_name)
 

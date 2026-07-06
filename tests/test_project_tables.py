@@ -227,6 +227,8 @@ def _build_project(
     coordinate_entries: dict | None = None,
     formula_entries: dict | None = None,
     mapping_entries: dict | None = None,
+    long_name_overrides: dict | None = None,
+    cell_measures: dict | None = None,
     table_id: str = "Amon",
     include_formula: bool = True,
     include_grid: bool = True,
@@ -237,6 +239,8 @@ def _build_project(
     coord_file = tmp / "coordinate.json"
     formula_file = tmp / "formula.json"
     grids_file = tmp / "grids.json"
+    long_name_file = tmp / "long_name_overrides.json"
+    cell_measures_file = tmp / "cell_measures.json"
 
     _write(cv_file, cv or _RICH_CV)
     _write(
@@ -269,6 +273,14 @@ def _build_project(
             },
         )
         kwargs["grid_table"] = grids_file
+
+    if long_name_overrides is not None:
+        _write(long_name_file, {"long_name_overrides": long_name_overrides})
+        kwargs["long_name_override_table"] = long_name_file
+
+    if cell_measures is not None:
+        _write(cell_measures_file, {"cell_measures": cell_measures})
+        kwargs["cell_measures_table"] = cell_measures_file
 
     return ProjectTables(cv_file, [vtable_file], **kwargs)
 
@@ -1712,6 +1724,126 @@ class VariableMethodTest(unittest.TestCase):
     def test_variable_without_positive_has_none(self):
         """Variables whose table entry has no positive have positive=None."""
         self.assertIsNone(self.project.variable("pr").positive)
+
+
+class VariableRemappingTest(unittest.TestCase):
+    def setUp(self):
+        self._ctx = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._ctx.name)
+        self.project = _build_project(
+            self.tmp,
+            cv={"CV": {}},
+            table_id="realmA",
+            variable_entries={
+                "foo_tavg-u-hxy-u": {
+                    "dimensions": [],
+                    "out_name": "foo",
+                    "units": "1",
+                    "standard_name": "foo_standard",
+                    "long_name": "Base Foo",
+                    "cell_measures": "",
+                    "frequency": "mon",
+                    "modeling_realm": "realmA realmB",
+                },
+                "bar_tavg-u-hxy-u": {
+                    "dimensions": [],
+                    "out_name": "bar",
+                    "units": "1",
+                    "standard_name": "bar_standard",
+                    "long_name": "Base Bar",
+                    "cell_measures": "area: base_area",
+                    "frequency": "mon",
+                    "modeling_realm": "realmA realmB",
+                },
+            },
+            long_name_overrides={
+                "realmA.foo.tavg-u-hxy-u.mon.glb": "Regional Foo",
+            },
+            cell_measures={
+                "realmA.foo.tavg-u-hxy-u.mon.glb": "area: areacella",
+                "realmA.bar.tavg-u-hxy-u.mon.glb": "",
+            },
+        )
+        self.dataset = self.project.dataset_info({"frequency": "mon", "region": "glb"})
+
+    def tearDown(self):
+        self._ctx.cleanup()
+
+    def test_dataset_preparation_applies_contextual_metadata(self):
+        variable = self.project.variable("foo_tavg-u-hxy-u")
+
+        _, prepared = self.project._dataset_for_variable(self.dataset, variable)
+
+        self.assertEqual(prepared.long_name, "Regional Foo")
+        self.assertEqual(prepared.cell_measures, "area: areacella")
+
+    def test_validate_dataset_rejects_wrong_contextual_long_name(self):
+        variable = self.project.variable("foo_tavg-u-hxy-u").model_copy(
+            update={"long_name": "Wrong Foo", "cell_measures": "area: areacella"}
+        )
+
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_dataset(self.dataset, variable, [])
+
+        self.assertIn("long_name", str(ctx.exception))
+        self.assertIn("Regional Foo", str(ctx.exception))
+
+    def test_validate_dataset_rejects_wrong_contextual_cell_measures(self):
+        variable = self.project.variable("foo_tavg-u-hxy-u").model_copy(
+            update={"long_name": "Regional Foo", "cell_measures": "area: wrong_area"}
+        )
+
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_dataset(self.dataset, variable, [])
+
+        self.assertIn("cell_measures", str(ctx.exception))
+        self.assertIn("areacella", str(ctx.exception))
+
+    def test_table_id_candidate_supports_multi_realm_table_entries(self):
+        variable = self.project.variable("foo_tavg-u-hxy-u")
+        entry = self.project.variable_table.resolve(variable.to_dict())
+
+        effective = self.project.variable_table.contextual_entry(
+            entry, variable, self.dataset
+        )
+
+        self.assertEqual(effective.entry["cell_measures"], "area: areacella")
+
+    def test_empty_cell_measures_remap_clears_existing_value(self):
+        variable = self.project.variable("bar_tavg-u-hxy-u")
+
+        _, prepared = self.project._dataset_for_variable(self.dataset, variable)
+
+        self.assertIsNone(prepared.cell_measures)
+
+    def test_empty_cell_measures_remap_rejects_nonempty_value(self):
+        variable = self.project.variable("bar_tavg-u-hxy-u").model_copy(
+            update={"cell_measures": "area: wrong_area"}
+        )
+
+        with self.assertRaises(TableValidationError) as ctx:
+            self.project.validate_dataset(self.dataset, variable, [])
+
+        self.assertIn("cell_measures", str(ctx.exception))
+
+    def test_remapping_table_requires_string_values(self):
+        bad_tmp = self.tmp / "bad"
+        bad_tmp.mkdir()
+
+        with self.assertRaises(TableValidationError):
+            _build_project(
+                bad_tmp,
+                cv={"CV": {}},
+                table_id="realmA",
+                variable_entries={
+                    "foo_tavg-u-hxy-u": {
+                        "dimensions": [],
+                        "out_name": "foo",
+                        "units": "1",
+                    }
+                },
+                cell_measures={"realmA.foo.tavg-u-hxy-u.mon.glb": None},
+            )
 
 
 # ---------------------------------------------------------------------------
