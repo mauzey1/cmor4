@@ -9,26 +9,26 @@ CMOR4 currently operates as a single-pass, whole-dataset builder: users provide 
 3. **Preserve mode** — reusing metadata definitions across multiple output segments
 4. **Large datasets** — datasets where holding all time slices in memory simultaneously is impractical
 
-CMOR3 supports these workflows through a stateful session API with repeated `write()` calls. The feature gap report (`CMOR3_FEATURE_GAP_REPORT.md`) identifies this as "Gap 5: Incremental and Streaming Writes" and "Gap 6: Append, Preserve, Replace, and Close Semantics" — both marked as target CMOR4 features.
+Many climate modeling workflows produce data incrementally over time (e.g., monthly or annual output from long simulations) and would benefit from being able to write CMOR-compliant output as the data becomes available rather than waiting for the complete time series. Similarly, users may want to extend previously written datasets with new time records or split large time series across multiple files while reusing the same metadata definition.
 
-The goal is to add CMOR4-native incremental write capability without replicating CMOR3's stateful global-session design. The new functionality should integrate with CMOR4's existing validation, axis construction, and path-generation logic while providing a streaming interface for time-series data.
+The goal is to add CMOR4-native incremental write capability that integrates with CMOR4's existing validation, axis construction, and path-generation logic while providing a streaming interface for time-series data. This should use modern Python patterns (context managers, explicit method calls) rather than replicating legacy stateful global-session designs.
 
-## Should We Skip Stage 1?
+## Implementation Strategy: Zarr-Backed Staging
 
-The feature gap report proposes a two-stage implementation:
+Two potential approaches were considered for implementing incremental writes:
 
-- **Stage 1**: In-memory chunk collector that accumulates write() calls and builds the complete dataset at close() time
-- **Stage 2**: Zarr-backed disk staging that persists each chunk immediately and streams to NetCDF at close() time
+- **Approach 1**: In-memory chunk collector that accumulates write() calls and builds the complete dataset at close() time
+- **Approach 2**: Zarr-backed disk staging that persists each chunk immediately and streams to NetCDF at close() time
 
-### Recommendation: Implement Stage 2 First (Zarr-backed)
+### Decision: Use Zarr-Backed Staging (Approach 2)
 
-**Reasons to skip Stage 1 and go directly to Zarr:**
+**Rationale for Zarr-backed approach:**
 
-1. **Memory is the core motivation** — If users can hold the full dataset in memory, they can already use `create_dataset()` with lazy dask arrays or manual chunking. The value of a `DatasetWriter` is enabling workflows where the complete dataset does *not* fit in memory. Stage 1 does not address this.
+1. **Memory is the core motivation** — If users can hold the full dataset in memory, they can already use `create_dataset()` with lazy dask arrays or manual chunking. The value of a `DatasetWriter` is enabling workflows where the complete dataset does *not* fit in memory. An in-memory collector does not address this.
 
 2. **Zarr is already in xarray's ecosystem** — xarray has excellent Zarr support via `to_zarr()` with `append_dim` and `region` arguments. Zarr is designed for incremental writes and cloud-native workflows. It's a natural fit for CMOR4's xarray foundation.
 
-3. **Stage 1 adds API churn** — Releasing Stage 1 means users adopt an interface that later switches backends. If Stage 1 performance or memory is insufficient, we'd need to document when to use it vs. when not to, creating confusion. Going straight to Stage 2 delivers the full capability immediately.
+3. **Avoid API churn** — Releasing an in-memory implementation first means users adopt an interface that later switches backends. If the initial approach has memory limitations, we'd need to document when to use it vs. when not to, creating confusion. Going directly to disk-backed staging delivers the full capability immediately.
 
 4. **Zarr is not a heavy dependency** — Adding `zarr` as an optional dependency is lightweight. It's widely used in scientific Python and has minimal transitive dependencies that don't overlap with CMOR4's existing stack (xarray, numpy, netCDF4, cftime).
 
@@ -38,9 +38,9 @@ The feature gap report proposes a two-stage implementation:
 
 - **Dependency management**: Zarr would be an optional dependency. Users who don't need incremental writes don't need to install it. Those who do can `pip install cmor4[streaming]` or similar.
 - **NetCDF4 finalization complexity**: Writing a Zarr store to NetCDF requires careful handling of chunking, compression, bounds variables, and fill values. However, this is well-trodden ground — xarray, h5netcdf, and netCDF4-python all have robust patterns for this.
-- **Testing overhead**: We'll need tests for incremental writes, append mode, metadata validation across chunks, and NetCDF finalization. These tests would be needed for *any* incremental-write implementation, so Stage 1 doesn't reduce testing burden.
+- **Testing overhead**: We'll need tests for incremental writes, append mode, metadata validation across chunks, and NetCDF finalization. These tests would be needed for *any* incremental-write implementation.
 
-**Verdict**: Skip Stage 1. Implement the Zarr-backed disk-staging writer as the initial and primary incremental-write API. This delivers the full capability immediately, avoids API churn, and aligns with the scientific Python ecosystem's direction.
+**Conclusion**: Implement Zarr-backed disk-staging as the primary incremental-write API. This delivers the full capability immediately, avoids API churn, and aligns with the scientific Python ecosystem's direction toward cloud-native data formats.
 
 ## Architecture
 
@@ -555,9 +555,9 @@ Update user guide with new "Incremental Writes" section covering:
 
 ## Out of Scope (Future Work)
 
-- **Gap 7: Companion variables and `store_with`**: Support for writing associated variables (e.g., `ps` with `ta`) into the same file. This will be addressed in a separate feature after `DatasetWriter` is stable.
-- **Gap 10: Enhanced Grid mapping/CRS**: CRS parameter normalization and projection validation. Orthogonal to incremental writes.
-- **Gap 11: Forecast leadtime derivation**: Automatic leadtime computation from reference time. Orthogonal to incremental writes.
+- **Companion variables**: Support for writing associated variables (e.g., `ps` with `ta`) into the same file with explicit companion-variable write operations. This will be addressed in a separate feature after `DatasetWriter` is stable.
+- **Enhanced Grid mapping/CRS**: Advanced CRS parameter normalization and projection validation beyond current `Grid` capabilities. Orthogonal to incremental writes.
+- **Forecast leadtime derivation**: Automatic leadtime coordinate computation from reference time. Orthogonal to incremental writes.
 - **Parallel writes**: Support for multiple concurrent `DatasetWriter` instances writing different variables to the same output directory.
 - **Dask integration**: Using dask for distributed Zarr writes. Initial implementation is single-threaded.
 - **Cloud-native output**: Direct write to S3/GCS without local staging. Future optimization.
