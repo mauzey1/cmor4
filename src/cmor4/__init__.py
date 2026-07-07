@@ -1,6 +1,6 @@
 """CMOR-like NetCDF creation with xarray."""
 
-from .core import (
+from .dataset import (
     Cmor4Result,
     build_output_path,
     cmorize,

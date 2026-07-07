@@ -56,7 +56,7 @@ from typing import Any
 import numpy as np
 
 import cmor4
-from cmor4.core import _collect_external_variables
+from cmor4.dataset import _collect_external_variables
 
 # ---------------------------------------------------------------------------
 # Location of the CMIP6 tables submodule

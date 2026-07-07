@@ -11,9 +11,6 @@ from ._table_utils import (
     validate_table_metadata as _validate_table_metadata,
 )
 from ._templates import is_unresolved_template as _is_unresolved_template
-from ._axis_validation import validate_axes as _validate_axes
-from ._axis_validation import validate_axis_values_early as _validate_axis_values_early
-from ._axis_validation import _validate_calendar
 from ._tables import (
     CoordinateTable,
     FormulaTable,
@@ -26,6 +23,11 @@ from .cv import ControlledVocabulary
 from .datasetinfo import DatasetInfo
 from .exceptions import TableValidationError
 from .grid import Grid
+from .utils.validation import (
+    _validate_calendar,
+    validate_axes as _validate_axes,
+    validate_axis_values_early as _validate_axis_values_early,
+)
 from .variable import Variable
 from ._unit_conversion import units_are_convertible as _units_are_convertible
 from .zfactor import ZFactor

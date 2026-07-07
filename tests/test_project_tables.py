@@ -3627,7 +3627,7 @@ class StoredDirectionTest(unittest.TestCase):
 
     def test_raw_axis_with_wrong_direction_raises_on_early_validation(self):
         """An unprepared Axis with stored_direction set is also validated."""
-        from cmor4._axis_validation import validate_axis_values_early
+        from cmor4.utils.validation import validate_axis_values_early
 
         raw = Axis(
             name="plev",
@@ -3639,7 +3639,7 @@ class StoredDirectionTest(unittest.TestCase):
             validate_axis_values_early(raw)
 
     def test_raw_axis_correct_direction_passes_early_validation(self):
-        from cmor4._axis_validation import validate_axis_values_early
+        from cmor4.utils.validation import validate_axis_values_early
 
         raw = Axis(
             name="plev",

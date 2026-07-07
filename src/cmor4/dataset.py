@@ -4,18 +4,28 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 import re
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 import xarray as xr
 
-from ._axis_validation import validate_and_normalize_axes
 from ._templates import render_template
 from ._time_utils import decode_time_value, add_time_delta, date_part
-from ._variable_validation import validate_variable_values
 from .axis import Axis
 from .datasetinfo import DatasetInfo, INTERNAL_DATASET_KEYS
 from .grid import Grid
+from .utils.construction import (
+    add_grid_coords,
+    add_zfactor,
+    build_axis_mappings,
+    set_formula_terms,
+)
+from .utils.validation import (
+    _dataset_for_variable,
+    validate_data_chunk,
+    validate_final_dataset,
+    validate_metadata,
+)
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -116,43 +126,25 @@ def create_dataset(
         requested metadata, or if CMIP7 chunking requirements are not met.
     """
 
-    dataset, variable = _dataset_for_variable(dataset, variable)
-    axes = _dataset_axes(dataset, axes, variable)
-    axes = validate_and_normalize_axes(dataset, variable, axes)
+    ctx = validate_metadata(dataset, variable, axes, zfactors, grid)
+    dataset = ctx.dataset
+    variable = ctx.variable
+    axes = ctx.axes
+    data_array = validate_data_chunk(ctx, data)
+    var_name, var_labels = variable.names()
 
-    # Merge the grid's dimensional axes (i, j, …) into the axis list.
-    # For curvilinear/unstructured grids these axes may not be in the
-    # caller's list at all (caller passes only time), so they must be added.
-    # For variables whose data dimensions match the grid axes (e.g. a 2-D
-    # field on the same j/i grid), the same Axis objects may appear in both
-    # lists; deduplicate by out_name so each axis is processed exactly once.
-    if grid is not None and grid.axes:
-        existing_names = {str(a.out_name or a.name) for a in axes}
-        extra = [
-            a for a in grid.axes if str(a.out_name or a.name) not in existing_names
-        ]
-        axes = list(axes) + extra
-
-    coords: dict[str, Any] = {}
-    data_vars: dict[str, Any] = {}
-    axis_dims: dict[str, tuple[str, ...]] = {}
-    scalar_coord_names: list[str] = []
-    auxiliary_coord_names: list[str] = []
-
-    for axis in axes:
-        _add_axis(
-            axis,
-            coords,
-            data_vars,
-            axis_dims,
-            scalar_coord_names,
-            auxiliary_coord_names,
-        )
+    (
+        coords,
+        data_vars,
+        axis_dims,
+        scalar_coord_names,
+        auxiliary_coord_names,
+    ) = build_axis_mappings(axes)
 
     # Write lat/lon and vertex arrays directly as dataset coords, bypassing
     # the Axis pipeline — same pattern as CMOR3's cmor_grid associated_variables.
     if grid is not None:
-        _add_grid_coords(
+        add_grid_coords(
             grid,
             tuple(variable.dimensions or ()),
             dataset.project,
@@ -172,29 +164,8 @@ def create_dataset(
         )
 
     zfactor_names: list[str] = []
-    for zfactor in zfactors or ():
-        zfactor_names.append(_add_zfactor(zfactor, axes, data_vars, axis_dims))
-
-    data_array = np.asarray(data)
-    var_name, var_labels = variable.names()
-    if grid is not None:
-        dim_names = grid.variable_dimensions(variable)
-    else:
-        dim_names = None
-    if dim_names is None:
-        if variable.dimensions is not None:
-            dim_names = tuple(str(name) for name in variable.dimensions)
-        else:
-            dim_names = tuple(axis.name for axis in axes if not bool(axis.auxiliary))
-    dims = tuple(dim for name in dim_names for dim in axis_dims.get(name, ()))
-
-    if data_array.ndim != len(dims):
-        expected = " x ".join(dims) if dims else "scalar"
-        raise ValueError(
-            f"Data for {var_name!r} has {data_array.ndim} dimensions, "
-            f"but variable dimensions resolve to {expected!r}."
-        )
-    validate_variable_values(variable, axes, data, dims, axis_dims)
+    for zfactor in ctx.zfactors:
+        zfactor_names.append(add_zfactor(zfactor, data_vars, axis_dims))
 
     var_attrs = variable.attributes(var_labels)
     explicit_coordinates = variable.coordinates
@@ -227,7 +198,7 @@ def create_dataset(
             merged_attrs.update(attrs)
         attrs = merged_attrs
 
-    data_vars[var_name] = (dims, data_array, var_attrs)
+    data_vars[var_name] = (ctx.dims, data_array, var_attrs)
     ds = xr.Dataset(
         data_vars=data_vars,
         coords=coords,
@@ -235,7 +206,7 @@ def create_dataset(
     )
 
     if zfactor_names:
-        _set_formula_terms(ds, axes, variable, zfactor_names)
+        set_formula_terms(ds, axes, variable, zfactor_names)
 
     missing_value = variable.missing_value or variable.fill_value
     if missing_value is not None:
@@ -371,16 +342,7 @@ def create_dataset(
                 # Set chunk size to full array shape (single chunk)
                 array.encoding["chunksizes"] = tuple(int(size) for size in array.shape)
 
-    _validate_final_components(
-        ds,
-        dataset,
-        variable,
-        axes,
-        zfactors or (),
-        grid,
-        dims,
-        zfactor_names,
-    )
+    validate_final_dataset(ds, ctx, zfactor_names)
 
     return ds
 
@@ -669,398 +631,6 @@ def string_from_template(
 
     dataset, variable = _dataset_for_variable(dataset, variable)
     return render_template(template, _template_tokens(dataset, variable, ds), separator)
-
-
-def _grid_spatial_dims(
-    grid: Grid,
-    variable_dimensions: tuple[str, ...],
-) -> list[str]:
-    """Return the spatial (non-time) dimension names for a grid's lat/lon arrays.
-
-    Prefers ``grid.dimensions`` when set; falls back to *variable_dimensions*
-    with the time dimension filtered out.
-    """
-    if grid.dimensions:
-        return [str(d) for d in grid.dimensions if str(d).lower() != "time"]
-    return [str(d) for d in variable_dimensions if str(d).lower() != "time"]
-
-
-def _add_grid_coords(
-    grid: Grid,
-    variable_dimensions: tuple[str, ...],
-    project: Any | None,
-    coords: dict[str, Any],
-    data_vars: dict[str, Any],
-    auxiliary_coord_names: list[str],
-) -> None:
-    """Write grid lat/lon/vertices directly into *coords* and *data_vars*.
-
-    This is the CMOR4 equivalent of CMOR3's ``cmor_grid`` lat/lon variable
-    registration: latitude, longitude, vertices_latitude, and
-    vertices_longitude are added as dataset entries dimensioned by the grid's
-    own spatial dimensions (and a ``vertices`` dimension for cell-corner
-    arrays).  No :class:`~cmor4.Axis` objects are created.
-
-    Parameters
-    ----------
-    grid
-        Grid whose coordinate arrays should be written.
-    variable_dimensions
-        Fallback spatial dimension names (time filtered out) when
-        ``grid.dimensions`` is not set.
-    project
-        Optional project tables; its ``coordinate_table`` is forwarded to
-        :meth:`Grid.to_dataset_coords` for CF-attribute lookup.
-    coords, data_vars, auxiliary_coord_names
-        Dicts/list that are mutated in-place with the new entries.
-    """
-    spatial_dims = _grid_spatial_dims(grid, variable_dimensions)
-    coord_table = getattr(project, "coordinate_table", None)
-    new_coords, new_data_vars, new_aux_names = grid.to_dataset_coords(
-        spatial_dims, coord_table=coord_table
-    )
-    coords.update(new_coords)
-    data_vars.update(new_data_vars)
-    auxiliary_coord_names.extend(new_aux_names)
-
-
-def _add_axis(
-    axis: Axis,
-    coords: dict[str, Any],
-    data_vars: dict[str, Any],
-    axis_dims: dict[str, tuple[str, ...]],
-    scalar_coord_names: list[str],
-    auxiliary_coord_names: list[str],
-) -> None:
-    name = axis.name
-    out_name = str(axis.out_name or axis.name)
-    values = axis.values_array()
-    coord_attrs = axis.attributes()
-
-    if bool(axis.scalar):
-        if values.shape == ():
-            scalar_value = values.item()
-        elif values.size == 1:
-            scalar_value = values.reshape(()).item()
-        else:
-            raise ValueError("Scalar coordinates must contain exactly one value.")
-        coords[out_name] = ((), scalar_value, coord_attrs)
-        axis_dims[name] = ()
-        _add_axis_dim_aliases(axis, axis_dims, ())
-        scalar_coord_names.append(out_name)
-    elif axis.auxiliary_name:
-        axis_dims[name] = (out_name,)
-        _add_axis_dim_aliases(axis, axis_dims, (out_name,))
-        coords[out_name] = (
-            out_name,
-            np.arange(len(values), dtype="i4"),
-            axis.attributes(include_units=False),
-        )
-        aux_name = str(axis.auxiliary_name)
-        data_vars[aux_name] = (
-            (out_name,),
-            values.astype(str),
-            axis.auxiliary_attributes(),
-        )
-        auxiliary_coord_names.append(aux_name)
-    else:
-        dims = (
-            _named_dimensions(axis.dimensions, axis_dims)
-            if axis.dimensions is not None
-            else (out_name,)
-        )
-        coords[out_name] = (dims, values, coord_attrs)
-        if len(dims) == 1:
-            axis_dims[name] = dims
-            _add_axis_dim_aliases(axis, axis_dims, dims)
-        auxiliary = bool(axis.auxiliary) or len(dims) > 1
-        if auxiliary:
-            auxiliary_coord_names.append(out_name)
-        else:
-            axis_dims.setdefault(out_name, dims)
-
-    if axis.bounds is not None:
-        climatology_axis = bool(axis.climatology)
-        bounds_name = str(
-            axis.bounds_name
-            or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
-        )
-        bounds = axis.bounds_array()
-        bounds_dims = tuple(coords[out_name][0]) + (str(axis.bounds_dim or "bnds"),)
-        data_vars[bounds_name] = (
-            bounds_dims,
-            bounds,
-            axis.bounds_attributes(),
-        )
-        coord_data = coords[out_name]
-        attrs = dict(coord_data[2])
-        attrs["climatology" if climatology_axis else "bounds"] = bounds_name
-        coords[out_name] = (coord_data[0], coord_data[1], attrs)
-
-
-def _add_zfactor(
-    zfactor: ZFactor,
-    axes: Sequence[Axis],
-    data_vars: dict[str, Any],
-    axis_dims: Mapping[str, tuple[str, ...]],
-) -> str:
-    name = zfactor.name
-    out_name = str(zfactor.out_name or name)
-    values = zfactor.values_array()
-    dims = _named_dimensions(zfactor.dimensions or (), axis_dims)
-    # If the formula term has no declared dimensions, treat it as a scalar.
-    # Accept a size-1 array (CMOR3-compatible input) by squeezing it.
-    if not dims:
-        if values.size == 1:
-            values = values.reshape(())
-        # values.ndim > 0 with size > 1 was already caught by validation
-    validate_variable_values(
-        zfactor,
-        axes,
-        values,
-        dims,
-        axis_dims,
-        name=out_name,
-        table_id=str(zfactor.table_entry or "formula_terms"),
-    )
-    attrs = zfactor.attributes()
-    data_vars[out_name] = (dims, values, attrs)
-
-    if zfactor.bounds is not None:
-        bounds_name = str(zfactor.bounds_name or f"{out_name}_bnds")
-        bounds_dims = dims + (str(zfactor.bounds_dim or "bnds"),)
-        validate_variable_values(
-            zfactor,
-            axes,
-            zfactor.bounds_array(),
-            bounds_dims,
-            axis_dims,
-            name=bounds_name,
-            table_id=str(zfactor.table_entry or "formula_terms"),
-        )
-        data_vars[bounds_name] = (
-            bounds_dims,
-            zfactor.bounds_array(),
-            zfactor.bounds_attributes(),
-        )
-        attrs = dict(data_vars[out_name][2])
-        attrs["bounds"] = bounds_name
-        data_vars[out_name] = (dims, values, attrs)
-    return out_name
-
-
-def _set_formula_terms(
-    ds: xr.Dataset,
-    axes: Sequence[Axis],
-    variable: Variable,
-    zfactor_names: Sequence[str],
-) -> None:
-    variable_dims = set(variable.dimensions or ())
-    for axis in axes:
-        # formula_terms is only valid on a parametric vertical coordinate
-        # (CF §4.3.3).  axis.z_factors is non-None exclusively for such axes
-        # (it comes from the "z_factors" field in the coordinate table entry);
-        # it is None for time, lat, lon, and every other non-parametric axis.
-        # Restrict all formula_terms work to axes that are already identified
-        # as parametric by the coordinate table.
-        formula_terms = axis.z_factors or variable.formula_terms
-        if not formula_terms:
-            continue
-        axis_name = axis.name
-        generic_level_name = axis.generic_level_name
-        out_name = str(axis.out_name or axis.name)
-        if {
-            str(value) for value in (axis_name, generic_level_name, out_name) if value
-        } & variable_dims:
-            coord_name = str(axis.out_name or axis.name)
-            if coord_name in ds.coords:
-                ds[coord_name].attrs["formula_terms"] = formula_terms
-            # Also write formula_terms on the bounds variable, substituting
-            # bounds-specific factor names (e.g. a_bnds, b_bnds) when present.
-            # This mirrors CMOR3 behaviour (cmor_write.c writes both).
-            bounds_name = (
-                ds[coord_name].attrs.get("bounds") if coord_name in ds.coords else None
-            )
-            if bounds_name and bounds_name in ds:
-                bnds_formula_terms = formula_terms
-                for factor in ("a", "b"):
-                    bnds_name = f"{factor}_bnds"
-                    if bnds_name in ds:
-                        bnds_formula_terms = bnds_formula_terms.replace(
-                            f"{factor}: {factor}", f"{factor}: {bnds_name}"
-                        )
-                # Copy other relevant attrs from the coord to its bounds
-                bnds_attrs = {}
-                for key in ("formula", "standard_name", "units"):
-                    if key in ds[coord_name].attrs:
-                        bnds_attrs[key] = ds[coord_name].attrs[key]
-                bnds_attrs["formula_terms"] = bnds_formula_terms
-                ds[bounds_name].attrs.update(bnds_attrs)
-
-
-def _validate_final_components(
-    ds: xr.Dataset,
-    dataset: DatasetInfo,
-    variable: Variable,
-    axes: Sequence[Axis],
-    zfactors: Sequence[ZFactor],
-    grid: Grid | None,
-    dims: Sequence[str],
-    zfactor_names: Sequence[str],
-) -> None:
-    project = dataset.project
-    if project is not None:
-        project.validate_global_attributes(ds.attrs)
-        project.validate_dataset(
-            dataset,
-            variable,
-            axes,
-            grid=grid,
-            zfactors=zfactors,
-        )
-
-    var_name = variable.names()[0]
-    if var_name not in ds.data_vars:
-        raise ValueError(f"Variable {var_name!r} was not created.")
-    if tuple(ds[var_name].dims) != tuple(dims):
-        raise ValueError(
-            f"Variable {var_name!r} dimensions {tuple(ds[var_name].dims)!r} "
-            f"do not match expected dimensions {tuple(dims)!r}."
-        )
-
-    for axis in axes:
-        _validate_final_axis(ds, axis)
-
-    if grid is not None and grid.has_mapping:
-        if grid.variable_name not in ds.data_vars:
-            raise ValueError(
-                f"Grid mapping variable {grid.variable_name!r} was not created."
-            )
-        if ds[var_name].attrs.get("grid_mapping") != grid.variable_name:
-            raise ValueError(
-                f"Variable {var_name!r} does not reference grid mapping "
-                f"{grid.variable_name!r}."
-            )
-
-    if grid is not None:
-        _validate_grid_coords(ds, grid)
-
-    for zfactor, out_name in zip(zfactors, zfactor_names):
-        _validate_final_zfactor(ds, zfactor, out_name)
-
-
-def _validate_final_axis(ds: xr.Dataset, axis: Axis) -> None:
-    out_name = str(axis.out_name or axis.name)
-    value_name = str(axis.auxiliary_name or out_name)
-    if out_name not in ds.coords and value_name not in ds.variables:
-        raise ValueError(f"Axis {axis.name!r} was not created.")
-    if axis.bounds is None:
-        return
-    climatology_axis = bool(axis.climatology)
-    bounds_name = str(
-        axis.bounds_name
-        or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
-    )
-    if bounds_name not in ds.data_vars:
-        raise ValueError(
-            f"Bounds variable {bounds_name!r} for axis {axis.name!r} was not created."
-        )
-
-
-def _validate_grid_coords(ds: xr.Dataset, grid: Grid) -> None:
-    """Verify that lat/lon/vertex coords declared by the grid were written."""
-    for name in ("latitude", "longitude"):
-        arr = getattr(grid, name)
-        if arr is None:
-            continue
-        if name not in ds.coords:
-            raise ValueError(
-                f"Grid coordinate {name!r} was not created in the dataset."
-            )
-    # vertices_latitude / vertices_longitude are written as data_vars
-    for field, var_name in (
-        ("latitude_vertices", "vertices_latitude"),
-        ("longitude_vertices", "vertices_longitude"),
-    ):
-        if getattr(grid, field) is None:
-            continue
-        if var_name not in ds.data_vars:
-            raise ValueError(
-                f"Grid vertex variable {var_name!r} was not created in the dataset."
-            )
-
-
-def _validate_final_zfactor(
-    ds: xr.Dataset,
-    zfactor: ZFactor,
-    out_name: str,
-) -> None:
-    if out_name not in ds.variables:
-        raise ValueError(f"Z-factor {out_name!r} was not created.")
-    if zfactor.bounds is None:
-        return
-    bounds_name = str(zfactor.bounds_name or f"{out_name}_bnds")
-    if bounds_name not in ds.data_vars:
-        raise ValueError(
-            f"Bounds variable {bounds_name!r} for z-factor {out_name!r} "
-            "was not created."
-        )
-
-
-def _dataset_for_variable(
-    dataset: DatasetInfo,
-    variable: Variable,
-) -> tuple[DatasetInfo, Variable]:
-    """Return dataset and variable prepared for a specific variable.
-
-    Project-backed datasets delegate to :meth:`ProjectTables._dataset_for_variable`,
-    which may apply context-specific table metadata such as CMIP7 long-name and
-    cell-measures remappings. Non-project datasets are returned unchanged.
-    """
-
-    project = dataset.project
-    if project is None:
-        return dataset, variable
-    return project._dataset_for_variable(dataset, variable)
-
-
-def _dataset_axes(
-    dataset: DatasetInfo,
-    axes: Sequence[Axis],
-    variable: Variable,
-) -> tuple[Axis, ...]:
-    project = dataset.project
-    if project is None:
-        return tuple(axes)
-    return project._axes(axes, variable)
-
-
-def _add_axis_dim_aliases(
-    axis: Axis,
-    axis_dims: dict[str, tuple[str, ...]],
-    dims: tuple[str, ...],
-) -> None:
-    for key, value in (
-        ("table_entry", axis.table_entry),
-        ("generic_level_name", axis.generic_level_name),
-        ("out_name", axis.out_name),
-    ):
-        if value:
-            axis_dims.setdefault(str(value), dims)
-
-
-def _named_dimensions(
-    names: Iterable[Any], axis_dims: Mapping[str, tuple[str, ...]]
-) -> tuple[str, ...]:
-    dims: list[str] = []
-    for name in names:
-        text = str(name)
-        resolved = axis_dims.get(text)
-        if resolved:
-            dims.extend(resolved)
-        else:
-            dims.append(text)
-    return tuple(dims)
 
 
 def _template_tokens(

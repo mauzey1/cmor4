@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Mapping, Sequence, Union
 import re
 import warnings
 
 import cftime
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
+import xarray as xr
 
-from ._time_utils import cftime_interval_days
-from .axis import Axis
-from .datasetinfo import DatasetInfo
-from .variable import Variable
-from .exceptions import AxisValidationError
+from .._time_utils import cftime_interval_days
+from ..axis import Axis
+from ..datasetinfo import DatasetInfo
+from ..exceptions import AxisValidationError, VariableValidationError
+from ..grid import Grid
+from ..variable import Variable
+from ..zfactor import ZFactor
 
 DEFAULT_INTERVAL_WARNING = 0.1
 DEFAULT_INTERVAL_ERROR = 0.2
@@ -48,6 +52,252 @@ class _IntervalSpec(BaseModel):
             raise ValueError(
                 f"_IntervalSpec warning={self.warning} must be ≤ error={self.error}"
             )
+
+
+@dataclass(frozen=True)
+class ValidationContext:
+    """Validated metadata and resolved dimension state for dataset creation."""
+
+    dataset: DatasetInfo
+    variable: Variable
+    axes: tuple[Axis, ...]
+    zfactors: tuple[ZFactor, ...]
+    grid: Grid | None
+    axis_dims: dict[str, tuple[str, ...]]
+    dim_names: tuple[str, ...]
+    dims: tuple[str, ...]
+
+
+def validate_metadata(
+    dataset: DatasetInfo,
+    variable: Variable,
+    axes: Sequence[Axis],
+    zfactors: Sequence[ZFactor] | None = None,
+    grid: Grid | None = None,
+) -> ValidationContext:
+    """Validate project metadata and resolve dimensions without data values."""
+
+    dataset, variable = _dataset_for_variable(dataset, variable)
+    axes = _dataset_axes(dataset, axes, variable)
+    axes = validate_and_normalize_axes(dataset, variable, axes)
+    axes = _merge_grid_axes(axes, grid)
+    axis_dims = build_axis_dimension_map(axes)
+
+    if grid is not None:
+        dim_names = grid.variable_dimensions(variable)
+    else:
+        dim_names = None
+    if dim_names is None:
+        if variable.dimensions is not None:
+            dim_names = tuple(str(name) for name in variable.dimensions)
+        else:
+            dim_names = tuple(axis.name for axis in axes if not bool(axis.auxiliary))
+    else:
+        dim_names = tuple(str(name) for name in dim_names)
+
+    dims = tuple(dim for name in dim_names for dim in axis_dims.get(name, ()))
+    ctx = ValidationContext(
+        dataset=dataset,
+        variable=variable,
+        axes=tuple(axes),
+        zfactors=tuple(zfactors or ()),
+        grid=grid,
+        axis_dims=axis_dims,
+        dim_names=dim_names,
+        dims=dims,
+    )
+    validate_zfactor_values(ctx)
+    return ctx
+
+
+def validate_data_chunk(ctx: ValidationContext, data: Any) -> np.ndarray:
+    """Validate a complete data array or write chunk against resolved metadata."""
+
+    data_array = np.asarray(data)
+    var_name = ctx.variable.names()[0]
+    if data_array.ndim != len(ctx.dims):
+        expected = " x ".join(ctx.dims) if ctx.dims else "scalar"
+        raise ValueError(
+            f"Data for {var_name!r} has {data_array.ndim} dimensions, "
+            f"but variable dimensions resolve to {expected!r}."
+        )
+    validate_variable_values(ctx.variable, ctx.axes, data, ctx.dims, ctx.axis_dims)
+    return data_array
+
+
+def validate_zfactor_values(ctx: ValidationContext) -> None:
+    """Validate formula-term values against resolved axis dimensions."""
+
+    for zfactor in ctx.zfactors:
+        out_name = str(zfactor.out_name or zfactor.name)
+        values = zfactor.values_array()
+        dims = named_dimensions(zfactor.dimensions or (), ctx.axis_dims)
+        if not dims and values.size == 1:
+            values = values.reshape(())
+        validate_variable_values(
+            zfactor,
+            ctx.axes,
+            values,
+            dims,
+            ctx.axis_dims,
+            name=out_name,
+            table_id=str(zfactor.table_entry or "formula_terms"),
+        )
+        if zfactor.bounds is not None:
+            bounds_name = str(zfactor.bounds_name or f"{out_name}_bnds")
+            bounds_dims = dims + (str(zfactor.bounds_dim or "bnds"),)
+            validate_variable_values(
+                zfactor,
+                ctx.axes,
+                zfactor.bounds_array(),
+                bounds_dims,
+                ctx.axis_dims,
+                name=bounds_name,
+                table_id=str(zfactor.table_entry or "formula_terms"),
+            )
+
+
+def validate_final_dataset(
+    ds: xr.Dataset,
+    ctx: ValidationContext,
+    zfactor_names: Sequence[str],
+) -> None:
+    """Validate final xarray dataset structure and project-level requirements."""
+
+    project = ctx.dataset.project
+    if project is not None:
+        project.validate_global_attributes(ds.attrs)
+        project.validate_dataset(
+            ctx.dataset,
+            ctx.variable,
+            ctx.axes,
+            grid=ctx.grid,
+            zfactors=ctx.zfactors,
+        )
+
+    var_name = ctx.variable.names()[0]
+    if var_name not in ds.data_vars:
+        raise ValueError(f"Variable {var_name!r} was not created.")
+    if tuple(ds[var_name].dims) != tuple(ctx.dims):
+        raise ValueError(
+            f"Variable {var_name!r} dimensions {tuple(ds[var_name].dims)!r} "
+            f"do not match expected dimensions {tuple(ctx.dims)!r}."
+        )
+
+    for axis in ctx.axes:
+        _validate_final_axis(ds, axis)
+
+    if ctx.grid is not None and ctx.grid.has_mapping:
+        if ctx.grid.variable_name not in ds.data_vars:
+            raise ValueError(
+                f"Grid mapping variable {ctx.grid.variable_name!r} was not created."
+            )
+        if ds[var_name].attrs.get("grid_mapping") != ctx.grid.variable_name:
+            raise ValueError(
+                f"Variable {var_name!r} does not reference grid mapping "
+                f"{ctx.grid.variable_name!r}."
+            )
+
+    if ctx.grid is not None:
+        _validate_grid_coords(ds, ctx.grid)
+
+    for zfactor, out_name in zip(ctx.zfactors, zfactor_names):
+        _validate_final_zfactor(ds, zfactor, out_name)
+
+
+def _dataset_for_variable(
+    dataset: DatasetInfo,
+    variable: Variable,
+) -> tuple[DatasetInfo, Variable]:
+    """Return dataset and variable prepared for a specific variable."""
+
+    project = dataset.project
+    if project is None:
+        return dataset, variable
+    return project._dataset_for_variable(dataset, variable)
+
+
+def _dataset_axes(
+    dataset: DatasetInfo,
+    axes: Sequence[Axis],
+    variable: Variable,
+) -> tuple[Axis, ...]:
+    project = dataset.project
+    if project is None:
+        return tuple(axes)
+    return project._axes(axes, variable)
+
+
+def _merge_grid_axes(axes: Sequence[Axis], grid: Grid | None) -> tuple[Axis, ...]:
+    if grid is None or not grid.axes:
+        return tuple(axes)
+    existing_names = {str(axis.out_name or axis.name) for axis in axes}
+    extra = [
+        axis
+        for axis in grid.axes
+        if str(axis.out_name or axis.name) not in existing_names
+    ]
+    return tuple(axes) + tuple(extra)
+
+
+def build_axis_dimension_map(axes: Sequence[Axis]) -> dict[str, tuple[str, ...]]:
+    """Resolve logical axis names to physical xarray dimension names."""
+
+    axis_dims: dict[str, tuple[str, ...]] = {}
+    for axis in axes:
+        name = axis.name
+        out_name = str(axis.out_name or axis.name)
+        values = axis.values_array()
+        if bool(axis.scalar):
+            if values.shape == ():
+                pass
+            elif values.size != 1:
+                raise ValueError("Scalar coordinates must contain exactly one value.")
+            axis_dims[name] = ()
+            add_axis_dim_aliases(axis, axis_dims, ())
+        elif axis.auxiliary_name:
+            axis_dims[name] = (out_name,)
+            add_axis_dim_aliases(axis, axis_dims, (out_name,))
+        else:
+            dims = (
+                named_dimensions(axis.dimensions, axis_dims)
+                if axis.dimensions is not None
+                else (out_name,)
+            )
+            if len(dims) == 1:
+                axis_dims[name] = dims
+                add_axis_dim_aliases(axis, axis_dims, dims)
+            if not (bool(axis.auxiliary) or len(dims) > 1):
+                axis_dims.setdefault(out_name, dims)
+    return axis_dims
+
+
+def add_axis_dim_aliases(
+    axis: Axis,
+    axis_dims: dict[str, tuple[str, ...]],
+    dims: tuple[str, ...],
+) -> None:
+    for key, value in (
+        ("table_entry", axis.table_entry),
+        ("generic_level_name", axis.generic_level_name),
+        ("out_name", axis.out_name),
+    ):
+        if value:
+            axis_dims.setdefault(str(value), dims)
+
+
+def named_dimensions(
+    names: Sequence[Any], axis_dims: Mapping[str, tuple[str, ...]]
+) -> tuple[str, ...]:
+    dims: list[str] = []
+    for name in names:
+        text = str(name)
+        resolved = axis_dims.get(text)
+        if resolved:
+            dims.extend(resolved)
+        else:
+            dims.append(text)
+    return tuple(dims)
 
 
 def validate_and_normalize_axes(
@@ -575,3 +825,296 @@ def _numeric_list(value: Any) -> list[float]:
         if number is not None:
             parsed.append(number)
     return parsed
+
+
+def validate_variable_values(
+    variable: Union[Variable, ZFactor],
+    axes: Sequence[Axis],
+    data: Any,
+    dims: Sequence[str],
+    axis_dims: Mapping[str, tuple[str, ...]],
+    *,
+    name: str | None = None,
+    table_id: str | None = None,
+) -> None:
+    """Apply CMOR-style checks to data variable and formula-term values."""
+
+    values = _as_float_masked_array(data)
+    if values is None:
+        return
+
+    valid_mask = ~np.ma.getmaskarray(values)
+    missing_value = getattr(variable, "missing_value", None) or getattr(
+        variable, "fill_value", None
+    )
+    if missing_value is not None:
+        try:
+            valid_mask &= ~np.isclose(
+                values.filled(np.nan),
+                float(missing_value),
+                rtol=float(variable.extra.get("tolerance", 1.0e-6)),
+                atol=0.0,
+                equal_nan=False,
+            )
+        except (TypeError, ValueError):
+            pass
+
+    numeric = values.filled(np.nan)
+    nan_mask = np.isnan(numeric) & valid_mask
+    if np.any(nan_mask):
+        count = int(np.count_nonzero(nan_mask))
+        index = _first_index(nan_mask)
+        raise VariableValidationError(
+            "Invalid value(s) detected for variable "
+            f"{_variable_name(variable, name)!r} "
+            f"(table: {_table_id(variable, table_id)}): "
+            f"{count} values were NaNs. First encountered NaN was at "
+            "(axis: index/value):"
+            f"{_format_location(index, dims, axes, axis_dims)}"
+        )
+
+    active = numeric[valid_mask]
+    active = active[np.isfinite(active)]
+    if active.size == 0:
+        return
+
+    _warn_for_limit(
+        variable,
+        numeric,
+        valid_mask,
+        dims,
+        axes,
+        axis_dims,
+        "valid_min",
+        np.less,
+        "lower than minimum valid value",
+        np.nanmin,
+        name=name,
+        table_id=table_id,
+    )
+    _warn_for_limit(
+        variable,
+        numeric,
+        valid_mask,
+        dims,
+        axes,
+        axis_dims,
+        "valid_max",
+        np.greater,
+        "greater than maximum valid value",
+        np.nanmax,
+        name=name,
+        table_id=table_id,
+    )
+    _check_absolute_mean(variable, active, name=name, table_id=table_id)
+
+
+def _as_float_masked_array(data: Any) -> np.ma.MaskedArray | None:
+    try:
+        return np.ma.asarray(data, dtype=float)
+    except (TypeError, ValueError):
+        return None
+
+
+def _warn_for_limit(
+    variable: Union[Variable, ZFactor],
+    numeric: np.ndarray,
+    valid_mask: np.ndarray,
+    dims: Sequence[str],
+    axes: Sequence[Axis],
+    axis_dims: Mapping[str, tuple[str, ...]],
+    key: str,
+    compare: Any,
+    phrase: str,
+    extrema: Any,
+    *,
+    name: str | None,
+    table_id: str | None,
+) -> None:
+    limit = _numeric_or_none(getattr(variable, key, None))
+    if limit is None:
+        return
+    bad_mask = compare(numeric, limit) & valid_mask
+    if not np.any(bad_mask):
+        return
+    count = int(np.count_nonzero(bad_mask))
+    bad_values = np.where(bad_mask, numeric, np.nan)
+    bad_value = float(extrema(bad_values))
+    index = _first_index(bad_mask)
+    warnings.warn(
+        "Invalid value(s) detected for variable "
+        f"{_variable_name(variable, name)!r} "
+        f"(table: {_table_id(variable, table_id)}): "
+        f"{count} values were {phrase} ({limit:.4g}). "
+        f"Encountered bad value ({bad_value:.5g}) was at "
+        "(axis: index/value):"
+        f"{_format_location(index, dims, axes, axis_dims)}",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
+def _check_absolute_mean(
+    variable: Union[Variable, ZFactor],
+    active: np.ndarray,
+    *,
+    name: str | None,
+    table_id: str | None,
+) -> None:
+    mean_abs = float(np.mean(np.abs(active)))
+    ok_min = _numeric_or_none(variable.ok_min_mean_abs)
+    if ok_min is not None:
+        if mean_abs < 0.1 * ok_min:
+            raise VariableValidationError(
+                "Invalid Absolute Mean for variable "
+                f"{_variable_name(variable, name)!r} "
+                f"(table: {_table_id(variable, table_id)}) "
+                f"({mean_abs:.5g}) is lower by more than an order of "
+                f"magnitude than minimum allowed: {ok_min:.4g}"
+            )
+        if mean_abs < ok_min:
+            warnings.warn(
+                "Invalid Absolute Mean for variable "
+                f"{_variable_name(variable, name)!r} "
+                f"(table: {_table_id(variable, table_id)}) "
+                f"({mean_abs:.5g}) is lower "
+                f"than minimum allowed: {ok_min:.4g}",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+
+    ok_max = _numeric_or_none(variable.ok_max_mean_abs)
+    if ok_max is not None:
+        if mean_abs > 10.0 * ok_max:
+            raise VariableValidationError(
+                "Invalid Absolute Mean for variable "
+                f"{_variable_name(variable, name)!r} "
+                f"(table: {_table_id(variable, table_id)}) "
+                f"({mean_abs:.5g}) is greater by more than an order of "
+                f"magnitude than maximum allowed: {ok_max:.4g}"
+            )
+        if mean_abs > ok_max:
+            warnings.warn(
+                "Invalid Absolute Mean for variable "
+                f"{_variable_name(variable, name)!r} "
+                f"(table: {_table_id(variable, table_id)}) "
+                f"({mean_abs:.5g}) is greater "
+                f"than maximum allowed: {ok_max:.4g}",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+
+
+def _first_index(mask: np.ndarray) -> tuple[int, ...]:
+    return tuple(int(value) for value in np.argwhere(mask)[0])
+
+
+def _format_location(
+    index: tuple[int, ...],
+    dims: Sequence[str],
+    axes: Sequence[Axis],
+    axis_dims: Mapping[str, tuple[str, ...]],
+) -> str:
+    axis_by_dim = _axis_by_dim(axes, axis_dims)
+    parts: list[str] = []
+    for dim, location in zip(dims, index):
+        axis = axis_by_dim.get(str(dim))
+        value = _axis_value(axis, location) if axis is not None else location
+        parts.append(f" {dim}: {location}/{value}")
+    return "".join(parts)
+
+
+def _axis_by_dim(
+    axes: Sequence[Axis],
+    axis_dims: Mapping[str, tuple[str, ...]],
+) -> dict[str, Axis]:
+    mapped: dict[str, Axis] = {}
+    for axis in axes:
+        name = axis.name
+        dims = axis_dims.get(name, ())
+        if len(dims) == 1:
+            mapped.setdefault(dims[0], axis)
+    return mapped
+
+
+def _axis_value(axis: Axis, location: int) -> Any:
+    values = axis.values_array()
+    if values.ndim == 1 and location < values.shape[0]:
+        value = values[location]
+        if hasattr(value, "item"):
+            value = value.item()
+        return f"{value:.5g}" if isinstance(value, float) else value
+    return location
+
+
+def _variable_name(variable: Any, name: str | None) -> str:
+    if name is not None:
+        return name
+    names = getattr(variable, "names", None)
+    if callable(names):
+        return names()[0]
+    return str(getattr(variable, "id", None) or getattr(variable, "name", ""))
+
+
+def _table_id(variable: Any, table_id: str | None) -> str:
+    if table_id is not None:
+        return str(table_id)
+    return str(getattr(variable, "table_id", "") or "")
+
+
+def _validate_final_axis(ds: xr.Dataset, axis: Axis) -> None:
+    out_name = str(axis.out_name or axis.name)
+    value_name = str(axis.auxiliary_name or out_name)
+    if out_name not in ds.coords and value_name not in ds.variables:
+        raise ValueError(f"Axis {axis.name!r} was not created.")
+    if axis.bounds is None:
+        return
+    climatology_axis = bool(axis.climatology)
+    bounds_name = str(
+        axis.bounds_name
+        or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
+    )
+    if bounds_name not in ds.data_vars:
+        raise ValueError(
+            f"Bounds variable {bounds_name!r} for axis {axis.name!r} was not created."
+        )
+
+
+def _validate_grid_coords(ds: xr.Dataset, grid: Grid) -> None:
+    """Verify that lat/lon/vertex coords declared by the grid were written."""
+
+    for name in ("latitude", "longitude"):
+        arr = getattr(grid, name)
+        if arr is None:
+            continue
+        if name not in ds.coords:
+            raise ValueError(
+                f"Grid coordinate {name!r} was not created in the dataset."
+            )
+    for field, var_name in (
+        ("latitude_vertices", "vertices_latitude"),
+        ("longitude_vertices", "vertices_longitude"),
+    ):
+        if getattr(grid, field) is None:
+            continue
+        if var_name not in ds.data_vars:
+            raise ValueError(
+                f"Grid vertex variable {var_name!r} was not created in the dataset."
+            )
+
+
+def _validate_final_zfactor(
+    ds: xr.Dataset,
+    zfactor: ZFactor,
+    out_name: str,
+) -> None:
+    if out_name not in ds.variables:
+        raise ValueError(f"Z-factor {out_name!r} was not created.")
+    if zfactor.bounds is None:
+        return
+    bounds_name = str(zfactor.bounds_name or f"{out_name}_bnds")
+    if bounds_name not in ds.data_vars:
+        raise ValueError(
+            f"Bounds variable {bounds_name!r} for z-factor {out_name!r} "
+            "was not created."
+        )
