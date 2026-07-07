@@ -46,16 +46,17 @@ Two potential approaches were considered for implementing incremental writes:
 
 ### Validation Pipeline Refactoring
 
-**Note:** Before implementing `DatasetWriter`, the validation pipeline in `core.py` will be refactored to enable code reuse (see Implementation Order - Phase 0). This refactoring extracts ~60% of validation logic that both `cmorize()` and `DatasetWriter` need to share. See `VALIDATION_REFACTOR_PLAN.md` for detailed analysis of code overlap and refactoring strategy.
+**Status:** ✅ **COMPLETED** - The validation pipeline refactoring (Phase 0) has been completed and merged.
 
-The refactored architecture will have:
-- **`utils/validation.py`**: Reusable validation functions and `ValidationContext`
-- **`utils/construction.py`**: Pure construction functions (no validation mixed in)
-- **Refactored `dataset.py`** (renamed from `core.py`): Orchestrates validation → construction → finalization
+The refactored architecture now has:
+- **`utils/validation.py`**: Reusable validation functions and `ValidationContext` ✅
+- **`utils/construction.py`**: Pure construction functions (no validation mixed in) ✅
+- **Refactored `dataset.py`** (renamed from `core.py`): Orchestrates validation → construction → finalization ✅
+- **Removed files**: `_axis_validation.py` and `_variable_validation.py` have been deleted and replaced by utils modules ✅
 
 ### Key Classes and Modules
 
-Current CMOR4 architecture (from `src/cmor4/dataset.py`, formerly `core.py`):
+Current CMOR4 architecture (from `src/cmor4/dataset.py`):
 
 - **`create_dataset()`** (lines 50-385): Validates metadata, constructs axes, adds grid coords and zfactors, validates data, applies chunking, returns `xr.Dataset`
 - **`write_netcdf()`** (lines 388-449): Renders output path, creates directories, calls `ds.to_netcdf()`
@@ -67,10 +68,12 @@ Dependencies:
 - **`Axis`**: Coordinate axis metadata and values (from `axis.py`)
 - **`ZFactor`**: Formula-term metadata (from `zfactor.py`)
 - **`Grid`**: Grid mapping and spatial coordinate metadata (from `grid.py`)
-- **`validate_and_normalize_axes()`**: Axis validation (from `_axis_validation.py`)
-- **`validate_variable_values()`**: Data range/NaN validation (from `_variable_validation.py`)
-- **Time utilities**: `_time_utils.py` for time range computation, calendar handling
-- **Chunking**: `_chunking.py` for CMIP7 auto-chunking and validation
+- **`validate_metadata()`**: Metadata validation (from `utils/validation.py`)
+- **`validate_data_chunk()`**: Data value validation (from `utils/validation.py`)
+- **`validate_final_dataset()`**: Final dataset validation (from `utils/validation.py`)
+- **`build_axis_mappings()`**: Axis construction (from `utils/construction.py`)
+- **Time utilities**: `utils/time_utils.py` for time range computation, calendar handling
+- **Chunking**: `utils/chunking.py` for CMIP7 auto-chunking and validation
 
 ### New Components
 
@@ -259,23 +262,23 @@ This approach:
 
 ## File Structure
 
-### Phase 0 (Validation Refactoring)
+### Phase 0 (Validation Refactoring) - ✅ COMPLETED
 
-New files:
-- **`src/cmor4/utils/__init__.py`**: Utils package initialization
-- **`src/cmor4/utils/validation.py`**: Validation pipeline with `ValidationContext`, `validate_metadata()`, `validate_data_chunk()`, `validate_final_dataset()`
-- **`src/cmor4/utils/construction.py`**: Pure construction functions - `build_axis_mappings()`, `build_grid_mappings()`, `build_zfactor_mappings()`
-- **`tests/test_validation.py`**: Unit tests for validation functions
-- **`tests/test_construction.py`**: Unit tests for construction functions
+Files created:
+- ✅ **`src/cmor4/utils/__init__.py`**: Utils package initialization
+- ✅ **`src/cmor4/utils/validation.py`**: Validation pipeline with `ValidationContext`, `validate_metadata()`, `validate_data_chunk()`, `validate_final_dataset()`
+- ✅ **`src/cmor4/utils/construction.py`**: Pure construction functions - `build_axis_mappings()`, `build_grid_mappings()`, `build_zfactor_mappings()`
+- ✅ **`tests/test_validation.py`**: Unit tests for validation functions
+- ✅ **`tests/test_construction.py`**: Unit tests for construction functions
 
-Modified/Renamed files:
-- **`src/cmor4/core.py`** → **`src/cmor4/dataset.py`**: Renamed and refactored to use new validation/construction pipeline (internal changes only, API unchanged)
+Files renamed/refactored:
+- ✅ **`src/cmor4/core.py`** → **`src/cmor4/dataset.py`**: Renamed and refactored to use new validation/construction pipeline (internal changes only, API unchanged)
 
-Removed files:
-- **`src/cmor4/_axis_validation.py`**: Replaced by `utils/validation.py`
-- **`src/cmor4/_variable_validation.py`**: Replaced by `utils/validation.py`
+Files removed:
+- ✅ **`src/cmor4/_axis_validation.py`**: Replaced by `utils/validation.py`
+- ✅ **`src/cmor4/_variable_validation.py`**: Replaced by `utils/validation.py`
 
-### Phases 1-4 (DatasetWriter Implementation)
+### Phases 1-4 (DatasetWriter Implementation) - READY TO START
 
 New files:
 - **`src/cmor4/writer.py`**: `DatasetWriter` class and staging/finalization logic
@@ -546,80 +549,19 @@ Update user guide with new "Incremental Writes" section covering:
 
 ## Implementation Order
 
-### Phase 0: Validation Pipeline Refactoring (Prerequisites)
+### Phase 0: Validation Pipeline Refactoring - ✅ COMPLETED AND MERGED
 
-Before implementing `DatasetWriter`, refactor the validation pipeline in `core.py` to enable code reuse. See `VALIDATION_REFACTOR_PLAN.md` for detailed analysis.
+**Status:** All Phase 0 work has been completed and merged into the main branch.
 
-**Motivation:** The current `create_dataset()` function contains ~400 lines of validation logic that `DatasetWriter` must duplicate if we don't refactor. This includes axis validation, data validation, encoding validation, and final dataset validation. Extracting this logic into reusable functions eliminates duplication and ensures consistent validation between `cmorize()` and `DatasetWriter`.
-
-**0.1. Extract validation functions** (`src/cmor4/utils/validation.py`):
-- Create `ValidationContext` dataclass to hold shared validation state
-- Extract `validate_metadata()` - validates all metadata before data processing:
-  - Project-specific transformations (`_dataset_for_variable`, `_dataset_axes`)
-  - Axis metadata validation (`validate_and_normalize_axes`)
-  - Grid axis merging and dimension resolution
-  - Zfactor metadata validation
-  - Encoding validation (CMIP7 chunking rules)
-- Extract `validate_data_chunk()` - validates data values:
-  - Data shape validation
-  - Data value validation (`validate_variable_values`)
-  - Time monotonicity checks
-  - Zfactor value validation
-- Extract `validate_final_dataset()` - validates constructed dataset:
-  - Global attributes validation
-  - Dataset structure validation
-  - Variable/coordinate presence checks
-- Update all imports across the codebase to use `utils/validation.py`
-- Remove `_axis_validation.py` and `_variable_validation.py` (replaced by utils module)
-- Add comprehensive unit tests for validation functions
-
-**0.2. Extract construction functions** (`src/cmor4/utils/construction.py`):
-- Extract `build_axis_mappings()` - builds coords/data_vars/axis_dims from axes
-- Extract `build_grid_mappings()` - adds grid coordinates and mapping variable
-- Extract `build_zfactor_mappings()` - adds zfactor variables and bounds
-- Make these pure functions (no side effects, no validation)
-- Update `dataset.py` to use new construction functions directly
-- Remove old `_add_axis()`, `_add_grid_coords()`, `_add_zfactor()` from `dataset.py` (replaced by utils functions)
-- Add unit tests for construction functions
-
-**0.3. Refactor `dataset.py`** (internal changes only, includes renaming from `core.py`):
-- Rename `src/cmor4/core.py` to `src/cmor4/dataset.py`
-- Rewrite `create_dataset()` to use new validation and construction pipelines:
-  ```python
-  def create_dataset(...):
-      # Phase 1: Validate metadata
-      ctx = validate_metadata(dataset, variable, axes, zfactors, grid)
-      
-      # Phase 2: Validate data
-      validate_data_chunk(ctx, data)
-      
-      # Phase 3: Build dataset
-      coords, data_vars, axis_dims = build_axis_mappings(ctx.axes, grid)
-      ds = build_dataset_from_mappings(...)
-      
-      # Phase 4: Final validation
-      validate_final_dataset(ds, ctx)
-      
-      return ds
-  ```
-- Maintain exact same API and external behavior
-- Run full test suite to verify zero regressions
-- Verify output files are byte-for-byte identical
-
-**0.4. Verification:**
-- All existing tests must pass without modification
-- No changes to public API
-- No performance regression (within 5%)
-- Code coverage maintained or improved
-
-**Estimated effort:** 4-6 days
-
-**Deliverables:**
-- `src/cmor4/utils/validation.py` with reusable validation functions
-- `src/cmor4/utils/construction.py` with reusable construction functions
-- Renamed and refactored `src/cmor4/dataset.py` (formerly `core.py`) using new functions
-- Unit tests for validation and construction functions
-- Regression tests confirming no behavior changes
+**Completed deliverables:**
+- ✅ `src/cmor4/utils/validation.py` with reusable validation functions
+- ✅ `src/cmor4/utils/construction.py` with reusable construction functions
+- ✅ Renamed and refactored `src/cmor4/dataset.py` (formerly `core.py`) using new functions
+- ✅ Unit tests for validation and construction functions
+- ✅ Regression tests confirming no behavior changes
+- ✅ All existing tests pass without modification
+- ✅ No changes to public API
+- ✅ `_axis_validation.py` and `_variable_validation.py` removed and replaced
 
 ---
 
@@ -687,31 +629,31 @@ Before implementing `DatasetWriter`, refactor the validation pipeline in `core.p
 
 ### Total Estimated Effort
 
-- **Phase 0 (Validation refactoring):** 4-6 days
+- **Phase 0 (Validation refactoring):** ~~4-6 days~~ ✅ COMPLETED
 - **Phase 1 (Core DatasetWriter):** 3-4 days
 - **Phase 2 (Append mode):** 2-3 days
 - **Phase 3 (Preserve/Zfactors):** 2-3 days
 - **Phase 4 (Integration/Docs):** 2-3 days
 
-**Total:** 13-19 days
+**Total remaining:** 10-13 days (Phase 0 complete)
 
-**Benefits of Phase 0:**
-- Eliminates ~400 lines of code duplication
-- Ensures validation consistency between APIs
-- Creates reusable validation infrastructure
-- Makes both `cmorize()` and `DatasetWriter` more maintainable
-- Provides better testability and clearer control flow
+**Benefits achieved from Phase 0:**
+- ✅ Eliminated ~400 lines of code duplication
+- ✅ Ensures validation consistency between APIs
+- ✅ Created reusable validation infrastructure
+- ✅ Makes both `cmorize()` and `DatasetWriter` more maintainable
+- ✅ Provides better testability and clearer control flow
 
 ## Success Criteria
 
-### Phase 0 (Validation Refactoring)
-1. All existing tests pass without modification after refactoring
-2. `create_dataset()` output is byte-for-byte identical before and after refactoring
-3. No performance regression (within 5% of baseline)
-4. Validation functions have ≥ 90% test coverage
-5. `ValidationContext` correctly tracks all validation state
+### Phase 0 (Validation Refactoring) - ✅ COMPLETED
+1. ✅ All existing tests pass without modification after refactoring
+2. ✅ `create_dataset()` output is byte-for-byte identical before and after refactoring
+3. ✅ No performance regression (within 5% of baseline)
+4. ✅ Validation functions have ≥ 90% test coverage
+5. ✅ `ValidationContext` correctly tracks all validation state
 
-### Phases 1-4 (DatasetWriter Implementation)
+### Phases 1-4 (DatasetWriter Implementation) - IN PROGRESS
 1. Users can write CMIP7 datasets incrementally without loading full time series into memory
 2. `DatasetWriter` output is byte-for-byte identical (or equivalent) to `cmorize()` output for the same data
 3. `DatasetWriter` and `cmorize()` use identical validation logic (via shared functions)
