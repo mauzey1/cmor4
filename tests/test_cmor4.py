@@ -185,20 +185,20 @@ class Cmor4Test(unittest.TestCase):
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
             data = np.arange(8, dtype="f4").reshape(2, 2, 2)
 
-            result = cmor4.cmorize(info, variable, axes, data)
+            ds, path = cmor4.cmorize(info, variable, axes, data)
 
             self.assertEqual(
-                result.path.name,
+                path.name,
                 "tos_tavg-u-hxy-sea_mon_glb_g999_DUMMY-MODEL_amip_"
                 "r9i1p1f3_200001-200002.nc",
             )
             self.assertIn(
                 "CMIP7/CMIP/CCCma/DUMMY-MODEL/amip/r9i1p1f3/glb/mon/"
                 "tos/tavg-u-hxy-sea/g999/v20200101",
-                str(result.path),
+                str(path),
             )
 
-            with xr.open_dataset(result.path, decode_times=False) as opened:
+            with xr.open_dataset(path, decode_times=False) as opened:
                 ds = opened.load()
 
             self.assertEqual(ds["tos"].dims, ("time", "lat", "lon"))

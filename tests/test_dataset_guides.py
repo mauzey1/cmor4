@@ -165,7 +165,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lon_axis(project=project),
             ]
 
-            result = cmor4.cmorize(
+            ds, path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -173,16 +173,16 @@ class DatasetGuideProjectTest(unittest.TestCase):
             )
 
             self.assertEqual(
-                result.path.name,
+                path.name,
                 "pr_NAM_EPA_EDDE2-0_CMIP6_historical_ACCESS-CM2_"
                 "r1i1p1f1_1hr_200812312330-200901010030.nc",
             )
             self.assertIn(
                 "DRCDP/NAM/EPA/EDDE2-0/CMIP6/CMIP/historical/"
                 "ACCESS-CM2/r1i1p1f1/1hr/pr/v20260512",
-                str(result.path),
+                str(path),
             )
-            with xr.open_dataset(result.path, decode_times=False) as opened:
+            with xr.open_dataset(path, decode_times=False) as opened:
                 ds = opened.load()
             self.assertEqual(ds.attrs["activity_id"], "DRCDP")
             self.assertEqual(ds.attrs["frequency"], "1hr")
@@ -364,7 +364,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lon_axis((90.0, 180.0, 270.0)),
             ]
 
-            result = cmor4.cmorize(
+            ds, path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -372,12 +372,12 @@ class DatasetGuideProjectTest(unittest.TestCase):
             )
 
             self.assertEqual(
-                result.path.name,
+                path.name,
                 "pr_mon_CMAP-V1902_CMORGuide_gn_197901-197902.nc",
             )
             self.assertIn(
                 "obs4MIPs/NOAA-NCEI/CMAP-V1902/mon/pr/gn/v20260512",
-                str(result.path),
+                str(path),
             )
 
     def test_obs4mips_point_site_precipitation_dataset(self):
@@ -409,7 +409,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 project.axis("longitude1", values=[262.515]),
             ]
 
-            result = cmor4.cmorize(
+            ds, path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -417,11 +417,11 @@ class DatasetGuideProjectTest(unittest.TestCase):
             )
 
             self.assertEqual(
-                result.path.name,
+                path.name,
                 "pr_1hr_ARMBE-atm-c1-1-8_CMORGuide_gn_201801010030-201801010130.nc",
             )
-            self.assertEqual(result.dataset.attrs["site_id"], "AR-SLu")
-            self.assertEqual(result.dataset["pr"].dims, ("time", "lat", "lon"))
+            self.assertEqual(ds.attrs["site_id"], "AR-SLu")
+            self.assertEqual(ds["pr"].dims, ("time", "lat", "lon"))
 
     def test_obs4mips_zonal_mean_o3zm_writes_o3_variable(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -456,7 +456,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lat_axis((-60.0, -30.0)),
             ]
 
-            result = cmor4.cmorize(
+            ds, path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -464,15 +464,15 @@ class DatasetGuideProjectTest(unittest.TestCase):
             )
 
             self.assertEqual(
-                result.path.name,
+                path.name,
                 "o3_mon_BSVertOzone-v1-0_CMORGuide_gnz_197901-197902.nc",
             )
             self.assertIn(
                 "obs4MIPs/DLR-BIRA/BSVertOzone-v1-0/mon/o3/gnz/v20260512",
-                str(result.path),
+                str(path),
             )
-            self.assertIn("o3", result.dataset)
-            self.assertNotIn("o3zm", result.dataset)
+            self.assertIn("o3", ds)
+            self.assertNotIn("o3zm", ds)
 
 
 if __name__ == "__main__":

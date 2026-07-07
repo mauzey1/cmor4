@@ -1,7 +1,6 @@
 """CMOR-like NetCDF creation with xarray."""
 
 from .dataset import (
-    Cmor4Result,
     build_output_path,
     cmorize,
     create_dataset,
@@ -26,7 +25,6 @@ from .tables import ProjectTables
 __all__ = [
     "Axis",
     "AxisValidationError",
-    "Cmor4Result",
     "ControlledVocabularyError",
     "build_output_path",
     "cmorize",

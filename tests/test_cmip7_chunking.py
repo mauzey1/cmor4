@@ -277,10 +277,10 @@ class TestCMIP7AutoChunking(unittest.TestCase):
 
         data = np.random.rand(50, 45, 90).astype(np.float32) * 30 + 270
 
-        result = cmor4.cmorize(dataset, variable, axes, data)
+        ds, path = cmor4.cmorize(dataset, variable, axes, data)
 
         # Read back and check chunking
-        ds_read = xr.open_dataset(result.path)
+        ds_read = xr.open_dataset(path)
         self.assertTrue(
             ds_read["bldep"].chunks is not None
             or ds_read["bldep"].encoding.get("chunksizes") is not None
@@ -983,7 +983,7 @@ class TestCheckCMIP7RepackChunking(unittest.TestCase, CMIP7ChunkingCheckAssertio
     def _assert_chunking_compliant_file(self, variable, axes, data, *, encoding=None):
         import cmor4
 
-        result = cmor4.cmorize(
+        ds, path = cmor4.cmorize(
             self._dataset(),
             variable,
             axes,
@@ -991,8 +991,8 @@ class TestCheckCMIP7RepackChunking(unittest.TestCase, CMIP7ChunkingCheckAssertio
             encoding=encoding,
         )
 
-        self.assertCMIP7Chunking(result.path)
-        return result.path
+        self.assertCMIP7Chunking(path)
+        return path
 
     def test_auto_chunked_file_passes_check_cmip7_chunking(self):
         """Auto-chunked time-mean latitude/longitude files pass the chunking checks."""

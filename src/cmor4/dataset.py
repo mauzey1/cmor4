@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 import re
@@ -39,22 +38,6 @@ DEFAULT_OUTPUT_FILE_TEMPLATE = (
     "<branded_variable><frequency><region><grid_label><source_id>"
     "<experiment_id><variant_label><time_range>"
 )
-
-
-@dataclass(frozen=True)
-class Cmor4Result:
-    """Result returned by :func:`cmorize`.
-
-    Parameters
-    ----------
-    dataset
-        In-memory xarray dataset that was written to disk.
-    path
-        Filesystem path where the NetCDF file was written.
-    """
-
-    dataset: xr.Dataset
-    path: Path
 
 
 def create_dataset(
@@ -423,7 +406,7 @@ def cmorize(
     attrs: Mapping[str, Any] | None = None,
     encoding: Mapping[str, Any] | None = None,
     **to_netcdf_kwargs: Any,
-) -> Cmor4Result:
+) -> tuple[xr.Dataset, Path]:
     """Create and write a CMOR-like NetCDF file from metadata objects.
 
     For CMIP7 datasets, CMIP7-compliant chunking is automatically applied unless
@@ -457,7 +440,7 @@ def cmorize(
 
     Returns
     -------
-    Cmor4Result
+    tuple[xr.Dataset, pathlib.Path]
         The in-memory dataset and path to the written NetCDF file.
     """
 
@@ -473,7 +456,7 @@ def cmorize(
         encoding=encoding,
     )
     output_path = write_netcdf(ds, dataset, variable, path=path, **to_netcdf_kwargs)
-    return Cmor4Result(dataset=ds, path=output_path)
+    return ds, output_path
 
 
 def open_dataset(path: str | Path, **kwargs: Any) -> xr.Dataset:
