@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Sequence
 
-from .exceptions import TableValidationError
+from ..exceptions import TableValidationError
 
 
 def table_dimensions(entry: Mapping[str, Any]) -> tuple[str, ...]:

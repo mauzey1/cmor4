@@ -56,9 +56,9 @@ import numpy as np
 import xarray as xr
 
 from cmor4 import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
-from cmor4._axis_validation import _validate_time_interval, _is_time_axis
-from cmor4.core import _collect_external_variables, create_dataset, build_output_path
+from cmor4.dataset import _collect_external_variables, create_dataset, build_output_path
 from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
+from cmor4.utils.validation import _validate_time_interval, _is_time_axis
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -268,7 +268,7 @@ class TestFrequencyRequired(unittest.TestCase):
         A non-empty dataset is needed to trigger the check; an empty dict is
         the structure-only placeholder passed by validate_components(None, …).
         """
-        from cmor4._axis_validation import validate_axes
+        from cmor4.utils.validation import validate_axes
 
         time_axis = Axis(
             name="time",
@@ -282,7 +282,7 @@ class TestFrequencyRequired(unittest.TestCase):
 
     def test_validate_axes_passes_for_lat_without_frequency(self):
         """Non-time axes are not affected by the frequency requirement."""
-        from cmor4._axis_validation import validate_axes
+        from cmor4.utils.validation import validate_axes
 
         lat_axis = Axis(
             name="lat",
@@ -1491,7 +1491,7 @@ class TestHistoryAttribute(unittest.TestCase):
     def _make_dataset(self, tmp: Path, extra: dict | None = None) -> xr.Dataset:
         """Build a minimal dataset and return the resulting xarray Dataset."""
         import numpy as np
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
 
         project = _make_project(
             tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
@@ -1554,7 +1554,7 @@ class TestHistoryAttribute(unittest.TestCase):
             dataset_info = project.dataset_info(_MINIMAL_DATASET)
             variable = project.variable("tas")
             import numpy as np
-            from cmor4.core import create_dataset
+            from cmor4.dataset import create_dataset
 
             time_axis = project.axis(
                 "time", values=[15.0, 45.0], units="days since 2000-01-01"
@@ -1589,7 +1589,7 @@ class TestHistoryAttribute(unittest.TestCase):
             })
             variable = project.variable("tas")
             import numpy as np
-            from cmor4.core import create_dataset
+            from cmor4.dataset import create_dataset
 
             time_axis = project.axis(
                 "time", values=[15.0, 45.0], units="days since 2000-01-01"
@@ -1630,7 +1630,7 @@ class TestHistoryAttribute(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             import numpy as np
-            from cmor4.core import create_dataset
+            from cmor4.dataset import create_dataset
 
             project = _make_project(
                 tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
@@ -1860,7 +1860,7 @@ class TestNestedCVAttributes(unittest.TestCase):
     def test_hierarchical_leaf_attrs_written_to_netcdf_global_attrs(self):
         """Leaf attributes from nested CV entries appear in the output NetCDF attrs."""
         import numpy as np
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -1894,7 +1894,7 @@ class TestNestedCVAttributes(unittest.TestCase):
         """With the real CMIP7 tables, approx_interval must not appear in output."""
         import sys
         import numpy as np
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
 
         # table_helpers.py lives in the tests directory; add it to path if needed
         tests_dir = str(Path(__file__).parent)
@@ -2117,7 +2117,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def _build_minimal_ds(self, tmp: Path) -> tuple:
         """Return (xr.Dataset, DatasetInfo, Variable) for the minimal project."""
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
 
         project = _make_project(
             tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
@@ -2156,7 +2156,7 @@ class TestCreateSubdirectories(unittest.TestCase):
         Mirrors CMOR3 test_python_CMIP6_CV_baddirectory: CMOR3 errors when it
         cannot write to the requested outpath.
         """
-        from cmor4.core import write_netcdf
+        from cmor4.dataset import write_netcdf
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -2172,7 +2172,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_error_message_guides_user(self):
         """Error message tells the user how to fix the problem."""
-        from cmor4.core import write_netcdf
+        from cmor4.dataset import write_netcdf
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -2186,7 +2186,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_deeply_nested_missing_dir_raises(self):
         """The check fires even for deeply nested missing paths."""
-        from cmor4.core import write_netcdf
+        from cmor4.dataset import write_netcdf
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -2203,7 +2203,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_existing_output_dir_passes_when_create_subdirectories_false(self):
         """Pre-existing output dir with create_subdirectories=False succeeds."""
-        from cmor4.core import write_netcdf
+        from cmor4.dataset import write_netcdf
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -2223,7 +2223,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_missing_dir_created_automatically_by_default(self):
         """Default behaviour creates the output directory tree automatically."""
-        from cmor4.core import write_netcdf
+        from cmor4.dataset import write_netcdf
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -2236,7 +2236,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_create_subdirectories_true_creates_dirs(self):
         """Explicit create_subdirectories=True also creates directories."""
-        from cmor4.core import write_netcdf
+        from cmor4.dataset import write_netcdf
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -2253,7 +2253,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_create_subdirectories_not_in_output_global_attrs(self):
         """create_subdirectories must never appear as a NetCDF global attribute."""
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -2279,7 +2279,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_outpath_not_in_output_global_attrs(self):
         """outpath must never appear as a NetCDF global attribute (pre-existing)."""
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
 
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)

@@ -8,7 +8,7 @@ Covers:
 * dimensions derived automatically from axes
 * variable_dimensions() with axes, with strings, fallback
 * Grid.axes are appended directly in create_dataset (no _grid_axes wrapper)
-* _add_grid_coords() writes lat/lon/vertices directly as dataset coords
+* add_grid_coords() writes lat/lon/vertices directly as dataset coords
 * Grid.to_dataset_coords() produces correct coords/data_vars/aux names
 * must_call_cmor_grid: isgridaxis axis in user axes without Grid → error
 * ProjectTables.grid(axes=...) validates axes against grid table
@@ -27,8 +27,8 @@ from typing import Any
 import numpy as np
 
 from cmor4 import Axis, Grid, Variable
-from cmor4.core import _add_grid_coords
 from cmor4.exceptions import TableValidationError
+from cmor4.utils.construction import add_grid_coords
 
 # ---------------------------------------------------------------------------
 # Minimal helpers
@@ -157,7 +157,7 @@ class TestVariableDimensions(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 4. _add_grid_coords() in core
+# 4. add_grid_coords() in utils.construction
 # ---------------------------------------------------------------------------
 # Note: there is no _grid_axes() wrapper. create_dataset() directly appends
 # grid.axes to the axis list (or nothing when grid is None). The round-trip
@@ -165,13 +165,13 @@ class TestVariableDimensions(unittest.TestCase):
 
 
 class TestAddGridCoords(unittest.TestCase):
-    """_add_grid_coords() writes lat/lon/vertices directly as dataset entries."""
+    """add_grid_coords() writes lat/lon/vertices directly as dataset entries."""
 
     def _run(self, grid: Grid, spatial_dims: list[str]) -> tuple[dict, dict, list]:
         coords: dict = {}
         data_vars: dict = {}
         aux_names: list = []
-        _add_grid_coords(grid, tuple(spatial_dims), None, coords, data_vars, aux_names)
+        add_grid_coords(grid, tuple(spatial_dims), None, coords, data_vars, aux_names)
         return coords, data_vars, aux_names
 
     def test_lat_lon_written_as_coords(self) -> None:
@@ -238,13 +238,11 @@ class TestAddGridCoords(unittest.TestCase):
 
     def test_spatial_dims_fallback_to_variable_dims(self) -> None:
         lat2d, lon2d = _latlon(3, 5)
-        # Grid has no dimensions set — falls back to variable_dimensions arg
         grid = Grid(latitude=lat2d, longitude=lon2d)
         coords: dict = {}
         data_vars: dict = {}
         aux_names: list = []
-        _add_grid_coords(grid, ("time", "ny", "nx"), None, coords, data_vars, aux_names)
-        # time must be filtered out
+        add_grid_coords(grid, ("time", "ny", "nx"), None, coords, data_vars, aux_names)
         self.assertEqual(coords["latitude"][0], ("ny", "nx"))
 
 
@@ -584,7 +582,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         return time_axis, j_axis, i_axis, grid, lat2d, lon2d
 
     def test_curvilinear_grid_dataset(self) -> None:
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
         from cmor4.datasetinfo import DatasetInfo
 
         nj, ni = 4, 8
@@ -619,7 +617,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         self.assertIn("longitude", coord_attr)
 
     def test_curvilinear_grid_with_vertices(self) -> None:
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
         from cmor4.datasetinfo import DatasetInfo
 
         nj, ni, nv = 3, 5, 4
@@ -663,7 +661,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         """When grid axes are also passed in the caller's axes list they must
         not be processed twice — no duplicate coords or doubled coordinates
         attribute entries."""
-        from cmor4.core import create_dataset
+        from cmor4.dataset import create_dataset
         from cmor4.datasetinfo import DatasetInfo
 
         nj, ni = 4, 8

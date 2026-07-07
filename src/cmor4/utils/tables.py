@@ -23,7 +23,7 @@ from typing import Any, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from ._table_utils import (
+from .table_utils import (
     entry_bounds,
     entry_values,
     is_table_value,
@@ -32,9 +32,9 @@ from ._table_utils import (
     table_dimensions,
     validate_table_metadata,
 )
-from ._unit_conversion import units_are_convertible as _units_convertible
-from .exceptions import TableValidationError
-from .variable import Variable
+from .unit_conversion import units_are_convertible as _units_convertible
+from ..exceptions import TableValidationError
+from ..variable import Variable
 
 # ---------------------------------------------------------------------------
 # Entry classes

@@ -99,7 +99,8 @@ class MetadataModel(BaseModel):
 
     Subclasses (Axis, Variable, ZFactor, Grid) are pure data holders: they
     declare typed fields and provide NetCDF output helpers.  All project-table
-    resolution and merge logic lives on the table classes in :mod:`cmor4._tables`.
+    resolution and merge logic lives on the table classes in
+    :mod:`cmor4.utils.tables`.
 
     Design notes
     ------------

@@ -9,11 +9,11 @@ from typing import Any, Mapping, Sequence
 import uuid
 import warnings
 
-from ._table_utils import (
+from .utils.table_utils import (
     is_table_value as _is_table_value,
     metadata_value_matches as _metadata_value_matches,
 )
-from ._templates import (
+from .utils.templates import (
     is_unresolved_template as _is_unresolved_template,
     render_template as _render_template,
 )

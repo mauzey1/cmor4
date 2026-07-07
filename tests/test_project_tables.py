@@ -801,25 +801,25 @@ class ProjectTablesTest(unittest.TestCase):
             info = project.dataset_info(dataset)
             axes = lat_lon_axes(project)
 
-            result = cmor4.cmorize(
+            ds, path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
                 np.ones((2, 2, 2), dtype="f4"),
             )
 
-            self.assertEqual(result.dataset["tos"].attrs["units"], "degC")
-            self.assertEqual(result.dataset["lat"].attrs["standard_name"], "latitude")
-            self.assertEqual(result.dataset["lat"].attrs["axis"], "Y")
+            self.assertEqual(ds["tos"].attrs["units"], "degC")
+            self.assertEqual(ds["lat"].attrs["standard_name"], "latitude")
+            self.assertEqual(ds["lat"].attrs["axis"], "Y")
             self.assertEqual(
-                result.dataset["tos"].attrs["standard_name"],
+                ds["tos"].attrs["standard_name"],
                 "sea_surface_temperature",
             )
             self.assertEqual(
-                result.dataset["tos"].attrs["cell_methods"],
+                ds["tos"].attrs["cell_methods"],
                 "area: mean where sea time: mean",
             )
-            self.assertEqual(result.dataset.attrs["source_id"], "DUMMY-MODEL")
+            self.assertEqual(ds.attrs["source_id"], "DUMMY-MODEL")
 
     def test_cmip7_global_attrs_follow_upstream_cmor_cmip7(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -1177,19 +1177,19 @@ class ProjectTablesTest(unittest.TestCase):
             variable = project.variable("o3zm")
             info = project.dataset_info(dataset)
 
-            result = cmor4.cmorize(
+            ds, path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
                 np.ones((2, 2, 2), dtype="f4"),
             )
 
-            self.assertIn("o3", result.dataset)
-            self.assertNotIn("o3zm", result.dataset)
-            self.assertEqual(result.dataset["o3"].attrs["units"], "mol mol-1")
-            self.assertEqual(result.dataset.attrs["variable_id"], "o3")
+            self.assertIn("o3", ds)
+            self.assertNotIn("o3zm", ds)
+            self.assertEqual(ds["o3"].attrs["units"], "mol mol-1")
+            self.assertEqual(ds.attrs["variable_id"], "o3")
             self.assertEqual(
-                result.path.name,
+                path.name,
                 "o3_mon_BSVertOzone-v1-0_CMORGuide_gnz_200001-200002.nc",
             )
 
@@ -3627,7 +3627,7 @@ class StoredDirectionTest(unittest.TestCase):
 
     def test_raw_axis_with_wrong_direction_raises_on_early_validation(self):
         """An unprepared Axis with stored_direction set is also validated."""
-        from cmor4._axis_validation import validate_axis_values_early
+        from cmor4.utils.validation import validate_axis_values_early
 
         raw = Axis(
             name="plev",
@@ -3639,7 +3639,7 @@ class StoredDirectionTest(unittest.TestCase):
             validate_axis_values_early(raw)
 
     def test_raw_axis_correct_direction_passes_early_validation(self):
-        from cmor4._axis_validation import validate_axis_values_early
+        from cmor4.utils.validation import validate_axis_values_early
 
         raw = Axis(
             name="plev",

@@ -7,7 +7,6 @@ CMOR4 provides several classes for managing metadata and validation:
    :maxdepth: 1
 
    ProjectTables
-   Cmor4Result
    DatasetInfo
    Variable
    Axis
