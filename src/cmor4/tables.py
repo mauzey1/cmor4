@@ -732,6 +732,7 @@ class ProjectTables:
         *,
         grid: Grid | None = None,
         zfactors: Sequence[ZFactor] = (),
+        include_time_checks: bool = True,
     ) -> None:
         """Validate metadata records and dataset configuration comprehensively.
 
@@ -863,7 +864,12 @@ class ProjectTables:
         # Run unconditionally so that must_have_bounds and the variable's
         # table-declared frequency are enforced even when no dataset is
         # provided.
-        _validate_axes(dataset_info, variable, axes)
+        _validate_axes(
+            dataset_info,
+            variable,
+            axes,
+            include_time_checks=include_time_checks,
+        )
 
         # Calendar validation: warn if the dataset specifies a calendar that
         # is technically valid per CF but inappropriate for MIP data.

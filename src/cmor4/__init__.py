@@ -19,6 +19,7 @@ from .exceptions import (
 )
 from .grid import Grid
 from .variable import Variable
+from .writer import DatasetWriter
 from .zfactor import ZFactor
 from .tables import ProjectTables
 
@@ -31,6 +32,7 @@ __all__ = [
     "create_dataset",
     "ControlledVocabulary",
     "DatasetInfo",
+    "DatasetWriter",
     "Grid",
     "open_dataset",
     "ProjectTables",

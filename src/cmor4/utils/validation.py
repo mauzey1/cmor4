@@ -74,12 +74,19 @@ def validate_metadata(
     axes: Sequence[Axis],
     zfactors: Sequence[ZFactor] | None = None,
     grid: Grid | None = None,
+    *,
+    include_time_checks: bool = True,
 ) -> ValidationContext:
     """Validate project metadata and resolve dimensions without data values."""
 
     dataset, variable = _dataset_for_variable(dataset, variable)
     axes = _dataset_axes(dataset, axes, variable)
-    axes = validate_and_normalize_axes(dataset, variable, axes)
+    axes = validate_and_normalize_axes(
+        dataset,
+        variable,
+        axes,
+        include_time_checks=include_time_checks,
+    )
     axes = _merge_grid_axes(axes, grid)
     axis_dims = build_axis_dimension_map(axes)
 
@@ -161,6 +168,8 @@ def validate_final_dataset(
     ds: xr.Dataset,
     ctx: ValidationContext,
     zfactor_names: Sequence[str],
+    *,
+    include_time_checks: bool = True,
 ) -> None:
     """Validate final xarray dataset structure and project-level requirements."""
 
@@ -173,6 +182,7 @@ def validate_final_dataset(
             ctx.axes,
             grid=ctx.grid,
             zfactors=ctx.zfactors,
+            include_time_checks=include_time_checks,
         )
 
     var_name = ctx.variable.names()[0]
@@ -304,13 +314,27 @@ def validate_and_normalize_axes(
     dataset: DatasetInfo,
     variable: Variable,
     axes: Sequence[Axis],
+    *,
+    include_time_checks: bool = True,
 ) -> tuple[Axis, ...]:
     """Return axes after CMOR-style coordinate validation."""
-    return tuple(_validate_and_normalize_axis(dataset, variable, axis) for axis in axes)
+    return tuple(
+        _validate_and_normalize_axis(
+            dataset,
+            variable,
+            axis,
+            include_time_checks=include_time_checks,
+        )
+        for axis in axes
+    )
 
 
 def validate_axes(
-    dataset: DatasetInfo | None, variable: Variable, axes: Sequence[Axis]
+    dataset: DatasetInfo | None,
+    variable: Variable,
+    axes: Sequence[Axis],
+    *,
+    include_time_checks: bool = True,
 ) -> None:
     """Validate axis values with dataset and frequency-dependent checks."""
     for axis in axes:
@@ -318,7 +342,7 @@ def validate_axes(
             dataset,
             variable,
             axis,
-            include_time_checks=True,
+            include_time_checks=include_time_checks,
             enforce_required_bounds=True,
             normalize=False,
         )
