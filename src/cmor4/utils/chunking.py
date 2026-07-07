@@ -6,7 +6,7 @@ from typing import Sequence
 
 import numpy as np
 
-from .datasetinfo import DatasetInfo
+from ..datasetinfo import DatasetInfo
 
 
 # CMIP7 minimum chunk size in bytes (4 MiB)

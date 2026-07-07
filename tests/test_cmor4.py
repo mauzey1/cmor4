@@ -10,8 +10,8 @@ import numpy as np
 import xarray as xr
 
 import cmor4
-import cmor4._time_utils as time_utils
 import cmor4.exceptions
+import cmor4.utils.time_utils as time_utils
 import cmor4.utils.validation as axis_validation
 from table_helpers import cmip7_project
 

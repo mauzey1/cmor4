@@ -6,12 +6,12 @@ import numpy as np
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from ._table_utils import (
+from .utils.table_utils import (
     is_table_value as _is_table_value,
     validate_table_metadata as _validate_table_metadata,
 )
-from ._templates import is_unresolved_template as _is_unresolved_template
-from ._tables import (
+from .utils.templates import is_unresolved_template as _is_unresolved_template
+from .utils.tables import (
     CoordinateTable,
     FormulaTable,
     GridTable,
@@ -23,13 +23,13 @@ from .cv import ControlledVocabulary
 from .datasetinfo import DatasetInfo
 from .exceptions import TableValidationError
 from .grid import Grid
+from .utils.unit_conversion import units_are_convertible as _units_are_convertible
 from .utils.validation import (
     _validate_calendar,
     validate_axes as _validate_axes,
     validate_axis_values_early as _validate_axis_values_early,
 )
 from .variable import Variable
-from ._unit_conversion import units_are_convertible as _units_are_convertible
 from .zfactor import ZFactor
 
 

@@ -218,7 +218,7 @@ class Grid(MetadataModel):
             ``["j", "i"]``).  These become the dimension tuple for the
             lat/lon coordinate arrays.
         coord_table:
-            Optional :class:`~cmor4._tables.CoordinateTable` used to pull
+            Optional :class:`~cmor4.utils.tables.CoordinateTable` used to pull
             CF metadata (``standard_name``, ``long_name``, ``units``) for
             latitude and longitude from the project tables.  When ``None``,
             hard-coded CF defaults are used.

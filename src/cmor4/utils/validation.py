@@ -10,7 +10,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 import xarray as xr
 
-from .._time_utils import cftime_interval_days
+from .time_utils import cftime_interval_days
 from ..axis import Axis
 from ..datasetinfo import DatasetInfo
 from ..exceptions import AxisValidationError, VariableValidationError

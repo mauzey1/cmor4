@@ -9,8 +9,8 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import xarray as xr
 
-from ._templates import render_template
-from ._time_utils import decode_time_value, add_time_delta, date_part
+from .utils.templates import render_template
+from .utils.time_utils import decode_time_value, add_time_delta, date_part
 from .axis import Axis
 from .datasetinfo import DatasetInfo, INTERNAL_DATASET_KEYS
 from .grid import Grid
@@ -214,7 +214,7 @@ def create_dataset(
         ds[var_name].encoding["_FillValue"] = missing_value
 
     # Handle chunking with CMIP7 compliance
-    from ._chunking import (
+    from .utils.chunking import (
         calculate_cmip7_chunks,
         is_cmip7_dataset,
         validate_cmip7_chunksizes,
