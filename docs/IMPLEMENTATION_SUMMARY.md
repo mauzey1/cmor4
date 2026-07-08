@@ -14,12 +14,14 @@ Complete implementation plan for adding incremental write capability to CMOR4.
 
 **Implementation Status:**
 - **Phase 0:** Validation pipeline refactoring - ✅ **COMPLETED AND MERGED**
-- **Phase 1:** Core DatasetWriter with Zarr staging (3-4 days) - READY TO START
-- **Phase 2:** Append mode (2-3 days)
-- **Phase 3:** Preserve mode and zfactors (2-3 days)
+- **Phase 1:** Core DatasetWriter with Zarr staging - ✅ **COMPLETED**
+- **Phase 2:** Append mode (2-3 days) - READY TO START
+- **Phase 3:** Per-chunk zfactor writes (2-3 days) - READY TO START
 - **Phase 4:** Integration and documentation (2-3 days)
 
-**Remaining Effort:** 10-13 days (Phase 0 complete)
+**Remaining Effort:** 6-9 days (Phases 0-1 complete)
+
+**Note:** `preserve_definition=True` was implemented in Phase 1, so Phase 3 now only covers per-chunk zfactor writes.
 
 ## 2. VALIDATION_REFACTOR_PLAN.md
 
@@ -66,7 +68,8 @@ DATASETWRITER_PLAN.md - Phases 1-4
 1. Read `VALIDATION_REFACTOR_PLAN.md` to understand the validation architecture (already implemented)
 2. Read `DATASETWRITER_PLAN.md` for the complete implementation plan
 3. ~~Start with Phase 0 (validation refactoring)~~ ✅ Phase 0 complete
-4. Proceed to Phases 1-4 (DatasetWriter implementation) - **START HERE**
+4. ~~Proceed to Phase 1 (Core DatasetWriter)~~ ✅ Phase 1 complete
+5. Proceed to Phases 2-4 (Remaining features) - **START HERE**
 
 ## Key Decisions
 
@@ -88,8 +91,15 @@ DATASETWRITER_PLAN.md - Phases 1-4
 - ✅ Removed: `src/cmor4/_axis_validation.py` (replaced by utils)
 - ✅ Removed: `src/cmor4/_variable_validation.py` (replaced by utils)
 
-**Phases 1-4:** READY TO START
-- New: `src/cmor4/writer.py`
-- New: `src/cmor4/utils/writer_helpers.py`
-- Modify: `src/cmor4/__init__.py`
-- Modify: `pyproject.toml`
+**Phase 1:** ✅ COMPLETED
+- ✅ Created: `src/cmor4/writer.py` (886 lines - DatasetWriter implementation)
+- ✅ Created: `src/cmor4/utils/writer_helpers.py` (34 lines - find_time_axis helper)
+- ✅ Created: `tests/test_incremental_writes.py` (318 lines - core tests)
+- ✅ Created: `tests/test_datasetwriter_expanded.py` (707 lines - expanded tests)
+- ✅ Modified: `src/cmor4/__init__.py` (exported DatasetWriter)
+- ✅ Modified: `pyproject.toml` (added zarr>=2.18 and dask[array] dependencies)
+
+**Phases 2-4:** READY TO START
+- Append mode implementation (Phase 2)
+- Per-chunk zfactor writes (Phase 3)
+- Integration tests and documentation (Phase 4)
