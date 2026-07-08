@@ -61,9 +61,16 @@ Press `Ctrl+C` to stop the server.
 ```
 docs/
 ├── source/
+│   ├── usage/                  # User guide
+│   │   ├── index.rst          # Usage guide index
+│   │   ├── quickstart.rst     # Quick start guide
+│   │   ├── basic_usage.rst    # Basic cmorize() examples
+│   │   ├── incremental_writing.rst  # DatasetWriter guide
+│   │   └── advanced_features.rst    # Advanced topics
 │   ├── api/                    # API reference pages
 │   │   ├── Axis.rst           # Individual class pages
 │   │   ├── DatasetInfo.rst
+│   │   ├── DatasetWriter.rst  # DatasetWriter API
 │   │   ├── ProjectTables.rst
 │   │   ├── Variable.rst
 │   │   ├── ...
@@ -76,6 +83,17 @@ docs/
 └── build/                      # Generated documentation (gitignored)
     └── html/                   # HTML output
 ```
+
+## Content Overview
+
+### User Guide (`source/usage/`)
+
+The user guide provides practical examples for common CMOR4 tasks:
+
+- **Quick Start** - Get started in minutes with a minimal example
+- **Basic Usage** - Common patterns using `cmorize()` for one-shot writes
+- **Incremental Writing** - Complete guide to `DatasetWriter` for large datasets
+- **Advanced Features** - Custom grids, formula terms, parallel processing, etc.
 
 ## Adding New Documentation
 
