@@ -126,7 +126,6 @@ def create_dataset_from_validated_data(
     *,
     attrs: Mapping[str, Any] | None = None,
     encoding: Mapping[str, Any] | None = None,
-    include_time_checks: bool = True,
 ) -> xr.Dataset:
     """Create a dataset from metadata and data that was already validated.
 
@@ -350,12 +349,7 @@ def create_dataset_from_validated_data(
                 # Set chunk size to full array shape (single chunk)
                 array.encoding["chunksizes"] = tuple(int(size) for size in array.shape)
 
-    validate_final_dataset(
-        ds,
-        ctx,
-        zfactor_names,
-        include_time_checks=include_time_checks,
-    )
+    validate_final_dataset(ds, ctx, zfactor_names)
 
     return ds
 

@@ -313,37 +313,41 @@ class DatasetWriterValidationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.project = cmip7_project()
 
-    def test_time_gaps_allowed_when_flag_set(self) -> None:
-        """Test that allow_time_gaps=True permits non-contiguous time."""
+    def test_time_gaps_allowed_after_preserving_definition(self) -> None:
+        """Test that preserve_definition permits gaps between output files."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             info = self.project.dataset_info(dataset_info(tmp_path))
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
 
-            # This should succeed with allow_time_gaps=True
-            with cmor4.DatasetWriter(
+            writer = cmor4.DatasetWriter(
                 info,
                 variable,
                 axes,
-                path=tmp_path / "writer.nc",
-                allow_time_gaps=True,
-            ) as writer:
-                writer.write(
-                    np.ones((1, 2, 2), dtype="f4"),
-                    time_values=[15.0],
-                    time_bounds=[[0.0, 30.0]],
-                )
-                # Gap: next time starts at 100 instead of 30
-                writer.write(
-                    np.ones((1, 2, 2), dtype="f4"),
-                    time_values=[115.0],
-                    time_bounds=[[100.0, 130.0]],
-                )
-                ds, _ = writer.close()
+                path=tmp_path / "writer-1.nc",
+            )
+            writer.write(
+                np.ones((1, 2, 2), dtype="f4"),
+                time_values=[15.0],
+                time_bounds=[[0.0, 30.0]],
+            )
+            first, first_path = writer.close(preserve_definition=True)
+            first.close()
 
-            self.assertEqual(len(ds["time"]), 2)
-            np.testing.assert_array_equal(ds["time"].values, [15.0, 115.0])
+            writer.path = tmp_path / "writer-2.nc"
+            writer.write(
+                np.ones((1, 2, 2), dtype="f4"),
+                time_values=[115.0],
+                time_bounds=[[100.0, 130.0]],
+            )
+            second, second_path = writer.close()
+
+            self.assertTrue(first_path.exists())
+            self.assertTrue(second_path.exists())
+            self.assertEqual(len(second["time"]), 1)
+            np.testing.assert_array_equal(second["time"].values, [115.0])
+            second.close()
 
     def test_time_bounds_must_be_contiguous_by_default(self) -> None:
         """Test that non-contiguous time bounds raise error by default."""
@@ -358,7 +362,6 @@ class DatasetWriterValidationTests(unittest.TestCase):
                 variable,
                 axes,
                 path=tmp_path / "writer.nc",
-                allow_time_gaps=False,
             )
             writer.write(
                 np.ones((1, 2, 2), dtype="f4"),

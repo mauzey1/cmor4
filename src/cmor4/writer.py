@@ -95,8 +95,6 @@ class DatasetWriter:
     **Phase 1 Limitations:**
 
     - ``append`` mode (extending existing files) is not yet implemented
-    - ``preserve_definition`` (reusing metadata across files) is not yet
-      implemented
     - Per-chunk zfactor writes are not yet implemented
     - Only time dimension supports incremental writes; spatial axes must have
       complete values at initialization
@@ -139,10 +137,6 @@ class DatasetWriter:
         Name of the time axis. Used to identify which axis is the write
         dimension. Normally detected automatically from ``axis="T"`` or
         name starting with "time".
-    allow_time_gaps : bool, default False
-        Whether to allow non-contiguous time values. If ``False``, time bounds
-        must be edge-to-edge contiguous across writes. If ``True``, gaps are
-        permitted.
     **to_netcdf_kwargs
         Additional keyword arguments passed to :meth:`xarray.Dataset.to_netcdf`.
 
@@ -224,16 +218,16 @@ class DatasetWriter:
     >>> writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
     >>> ds, path = writer.close()
 
-    **Allowing time gaps:**
+    **Writing multiple file segments:**
 
-    >>> # Write non-contiguous time records
     >>> writer = cmor4.DatasetWriter(
-    ...     dataset, variable, axes, allow_time_gaps=True
+    ...     dataset, variable, axes, path="segment-1.nc"
     ... )
     >>> writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
-    >>> # Gap: next time starts at 100 instead of 30
+    >>> ds1, path1 = writer.close(preserve_definition=True)
+    >>> writer.path = Path("segment-2.nc")
     >>> writer.write(data2, time_values=[115.0], time_bounds=[[100.0, 130.0]])
-    >>> ds, path = writer.close()
+    >>> ds2, path2 = writer.close()
     """
 
     def __init__(
@@ -250,13 +244,10 @@ class DatasetWriter:
         attrs: Mapping[str, Any] | None = None,
         staging_dir: str | Path | None = None,
         time_axis_name: str = "time",
-        allow_time_gaps: bool = False,
         **to_netcdf_kwargs: Any,
     ) -> None:
         if existing not in {"error", "replace", "append"}:
-            raise ValueError(
-                "existing must be one of 'error', 'replace', or 'append'."
-            )
+            raise ValueError("existing must be one of 'error', 'replace', or 'append'.")
         if existing == "append":
             raise NotImplementedError(
                 "DatasetWriter append mode is planned for Phase 2."
@@ -267,13 +258,14 @@ class DatasetWriter:
         self.encoding = dict(encoding or {})
         self.attrs = dict(attrs or {})
         self.to_netcdf_kwargs = dict(to_netcdf_kwargs)
-        self.allow_time_gaps = allow_time_gaps
         self._closed = False
         self._write_count = 0
         self._time_offset = 0
         self._time_values: list[np.ndarray] = []
         self._time_bounds: list[np.ndarray] = []
         self._saw_time_bounds = False
+        self._first_write_after_preserve = False
+        self._last_closed_time_value: Any | None = None
 
         input_axes = tuple(axes)
         input_time_index, input_time_axis = find_time_axis(input_axes, time_axis_name)
@@ -352,8 +344,8 @@ class DatasetWriter:
             - Shape ``(N, >=2)``: Climatology or multi-bound format
 
             If ``None`` and bounds exist in the pre-initialized time axis, those
-            bounds are used. If bounds are provided in any write, they must be
-            provided in all writes (unless ``allow_time_gaps=True``).
+            bounds are used. If bounds are provided in any write for a given
+            output file, they must be provided in every write for that file.
         zfactors : Mapping[str, array-like], optional
             Per-chunk zfactor data. Not yet implemented in Phase 1.
 
@@ -366,7 +358,7 @@ class DatasetWriter:
         ValueError
             If time_values are not monotonically increasing.
         ValueError
-            If time_bounds are not contiguous (unless ``allow_time_gaps=True``).
+            If time_bounds are not contiguous within one output file.
         ValueError
             If time_values length doesn't match data time dimension.
         ValueError
@@ -418,9 +410,10 @@ class DatasetWriter:
         For example, if the first write has ``time_values=[15.0]``, the second
         write must have ``time_values[0] > 15.0``.
 
-        By default, time bounds must be contiguous (edge-to-edge) across writes.
-        The tolerance for contiguity checking is 1e-12 absolute. Use
-        ``allow_time_gaps=True`` at initialization to disable this check.
+        Time bounds must be contiguous (edge-to-edge) across writes within a
+        single output file. The first write after
+        ``close(preserve_definition=True)`` starts a new file segment, so it
+        is not checked for contiguity against the previous file.
 
         The data chunk is validated for NaN values, valid_min/valid_max ranges,
         and other variable-specific constraints before being written to the
@@ -453,7 +446,6 @@ class DatasetWriter:
             chunk_axes,
             self._ctx.zfactors,
             self._ctx.grid,
-            include_time_checks=not self.allow_time_gaps,
         )
         validated_data = validate_data_chunk(chunk_ctx, data_array)
         self._validate_chunk_shape(validated_data, len(chunk_time_values))
@@ -466,6 +458,7 @@ class DatasetWriter:
             self._time_bounds.append(chunk_time_bounds)
         self._time_offset += len(chunk_time_values)
         self._write_count += 1
+        self._first_write_after_preserve = False
 
     def close(
         self,
@@ -482,8 +475,8 @@ class DatasetWriter:
         ----------
         preserve_definition : bool, default False
             If ``True``, keep metadata definition for writing another output
-            file with the same variable/axis definitions. Not yet implemented
-            in Phase 1.
+            file with the same variable/axis definitions. Staged data and
+            per-file time state are cleared after the current file is written.
 
         Returns
         -------
@@ -505,9 +498,6 @@ class DatasetWriter:
             If output file exists and ``existing="error"``.
         AxisValidationError
             If final time axis fails validation.
-        NotImplementedError
-            If ``preserve_definition=True`` (Phase 3 feature).
-
         Notes
         -----
         The close operation:
@@ -554,10 +544,6 @@ class DatasetWriter:
         """
 
         self._ensure_open()
-        if preserve_definition:
-            raise NotImplementedError(
-                "DatasetWriter preserve_definition is planned for Phase 3."
-            )
         if self._zarr_array is None or self._write_count == 0:
             raise ValueError("Cannot close DatasetWriter before any data is written.")
 
@@ -569,7 +555,6 @@ class DatasetWriter:
                 final_axes,
                 self._ctx.zfactors,
                 self._ctx.grid,
-                include_time_checks=not self.allow_time_gaps,
             )
             data = _lazy_zarr_array(self._zarr_array)
             ds = create_dataset_from_validated_data(
@@ -577,7 +562,6 @@ class DatasetWriter:
                 data,
                 attrs=self.attrs,
                 encoding=self.encoding,
-                include_time_checks=not self.allow_time_gaps,
             )
             output_path = self.path or build_output_path(
                 self._ctx.dataset,
@@ -604,8 +588,11 @@ class DatasetWriter:
         except Exception:
             raise
         else:
-            self._closed = True
-            shutil.rmtree(self.staging_root, ignore_errors=True)
+            if preserve_definition:
+                self._prepare_next_segment()
+            else:
+                self._closed = True
+                shutil.rmtree(self.staging_root, ignore_errors=True)
             return result, output_path
 
     def __enter__(self) -> DatasetWriter:
@@ -618,12 +605,36 @@ class DatasetWriter:
         traceback: Any,
     ) -> bool:
         if exc_type is None and not self._closed:
-            self.close()
+            if self._write_count > 0:
+                self.close()
+            elif self._first_write_after_preserve:
+                self._closed = True
+                shutil.rmtree(self.staging_root, ignore_errors=True)
+            else:
+                self.close()
         return False
 
     def _ensure_open(self) -> None:
         if self._closed:
             raise ValueError("DatasetWriter is already closed.")
+
+    def _prepare_next_segment(self) -> None:
+        if self._time_values and self._time_values[-1].size:
+            value = self._time_values[-1][-1]
+            self._last_closed_time_value = (
+                value.item() if hasattr(value, "item") else value
+            )
+        else:
+            self._last_closed_time_value = None
+        self._time_values = []
+        self._time_bounds = []
+        self._saw_time_bounds = False
+        self._time_offset = 0
+        self._write_count = 0
+        self._first_write_after_preserve = True
+        shutil.rmtree(self.staging_path, ignore_errors=True)
+        self._zarr_group = _open_zarr_group(self.staging_path)
+        self._zarr_array = None
 
     def _time_chunk(
         self,
@@ -726,11 +737,18 @@ class DatasetWriter:
         time_bounds: np.ndarray | None,
     ) -> None:
         if not self._time_values:
+            if (
+                self._first_write_after_preserve
+                and self._last_closed_time_value is not None
+                and time_values.size
+                and time_values[0] <= self._last_closed_time_value
+            ):
+                raise ValueError("Time values must be strictly monotonic across files.")
             return
         previous = self._time_values[-1]
         if previous.size and time_values.size and time_values[0] <= previous[-1]:
             raise ValueError("Time values must be strictly monotonic across writes.")
-        if self.allow_time_gaps or time_bounds is None or not self._time_bounds:
+        if time_bounds is None or not self._time_bounds:
             return
         previous_bounds = self._time_bounds[-1]
         if previous_bounds.size == 0:
@@ -744,8 +762,8 @@ class DatasetWriter:
             atol=1.0e-12,
         ):
             raise ValueError(
-                "Time bounds must be contiguous across writes unless "
-                "allow_time_gaps=True."
+                "Time bounds must be contiguous across writes within a single "
+                "output file."
             )
 
     def _append_to_zarr(self, data: np.ndarray) -> None:
