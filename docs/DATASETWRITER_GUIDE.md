@@ -145,24 +145,29 @@ time_bounds = [[0.0, 30.0]]  # Shape (1, 2)
 writer.write(data, time_values=[15.0, 45.0], time_bounds=time_bounds)
 ```
 
-### Allowing Time Gaps
+### Segmented Files With Time Gaps
 
-By default, `DatasetWriter` requires time bounds to be contiguous (edge-to-edge). To allow gaps:
+`DatasetWriter` requires time bounds to be contiguous within one output file.
+To write separate file segments with a gap between them, close the first file
+with `preserve_definition=True` and then write the next segment:
 
 ```python
+from pathlib import Path
+
 writer = cmor4.DatasetWriter(
     dataset,
     variable,
     axes,
-    allow_time_gaps=True,  # Disable contiguity checking
+    path="segment-1.nc",
 )
 
-# Write non-contiguous time records
 writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
-# Gap: next time starts at 100 instead of 30
+ds1, path1 = writer.close(preserve_definition=True)
+
+writer.path = Path("segment-2.nc")
 writer.write(data2, time_values=[115.0], time_bounds=[[100.0, 130.0]])
 
-ds, path = writer.close()  # Succeeds despite gap
+ds2, path2 = writer.close()
 ```
 
 ### Custom Output Path
@@ -335,7 +340,7 @@ writer.write(data2, time_values=[15.0])  # Goes backward!
 ```python
 writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
 writer.write(data2, time_values=[45.0], time_bounds=[[35.0, 60.0]])  # Gap from 30 to 35
-# ValueError: Time bounds must be contiguous across writes unless allow_time_gaps=True
+# ValueError: Time bounds must be contiguous across writes within a single output file
 ```
 
 **Inconsistent bounds:**
@@ -505,14 +510,12 @@ AxisValidationError: Time interval mismatch detected for frequency: 'mon'.
 Expected interval: 30 days. Actual interval: 28 days (6.7% difference).
 ```
 
-**Solution:** Use `allow_time_gaps=True` or adjust time values to match expected frequency:
+**Solution:** adjust time values to match the declared frequency, or use a
+dataset frequency that represents the data:
 
 ```python
 # Monthly data with varying month lengths
 time_values = [15.0, 43.5, 74.0, ...]  # Day-of-year for each month
-
-# Use allow_time_gaps for non-standard intervals
-writer = cmor4.DatasetWriter(dataset, variable, axes, allow_time_gaps=True)
 ```
 
 ## Examples
