@@ -667,6 +667,41 @@ class DatasetWriterEdgeCaseTests(unittest.TestCase):
             self.assertEqual(len(ds["time"]), 1)
             self.assertTrue(path.exists())
 
+    def test_time_range_appears_in_output_filename(self) -> None:
+        """Verify that output filename includes the time range from written data."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            axes = [time_axis(self.project), *horizontal_axes(self.project)]
+
+            # Write January and February 2000 (days since 2000-01-01)
+            # time_values=[15.0, 45.0] corresponds to Jan 16 and Feb 15, 2000
+            with cmor4.DatasetWriter(info, variable, axes) as writer:
+                writer.write(
+                    np.ones((2, 2, 2), dtype="f4"),
+                    time_values=[15.0, 45.0],
+                    time_bounds=[[0.0, 30.0], [30.0, 60.0]],
+                )
+                ds, path = writer.close()
+
+            # Check that the path exists
+            self.assertTrue(path.exists(), f"Output file not found: {path}")
+
+            # Filename should include time range for monthly data spanning Jan-Feb 2000
+            filename = path.name
+
+            # CMIP7 DRS typically formats monthly data as YYYYMM-YYYYMM
+            # For Jan-Feb 2000, we expect 200001-200002 in the filename
+            self.assertIn("200001", filename,
+                         f"January 2000 (200001) not found in filename: {filename}")
+            self.assertIn("200002", filename,
+                         f"February 2000 (200002) not found in filename: {filename}")
+
+            # Verify the dataset actually contains the expected time range
+            self.assertEqual(len(ds["time"]), 2)
+            ds.close()
+
 
 if __name__ == "__main__":
     unittest.main()
