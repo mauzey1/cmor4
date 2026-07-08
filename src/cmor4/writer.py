@@ -133,10 +133,6 @@ class DatasetWriter:
     staging_dir : str or Path, optional
         Directory for temporary Zarr store. If ``None``, uses system temp
         directory. Useful for directing staging to high-performance storage.
-    time_axis_name : str, default "time"
-        Name of the time axis. Used to identify which axis is the write
-        dimension. Normally detected automatically from ``axis="T"`` or
-        name starting with "time".
     **to_netcdf_kwargs
         Additional keyword arguments passed to :meth:`xarray.Dataset.to_netcdf`.
 
@@ -243,7 +239,6 @@ class DatasetWriter:
         encoding: Mapping[str, Any] | None = None,
         attrs: Mapping[str, Any] | None = None,
         staging_dir: str | Path | None = None,
-        time_axis_name: str = "time",
         **to_netcdf_kwargs: Any,
     ) -> None:
         if existing not in {"error", "replace", "append"}:
@@ -268,7 +263,7 @@ class DatasetWriter:
         self._last_closed_time_value: Any | None = None
 
         input_axes = tuple(axes)
-        input_time_index, input_time_axis = find_time_axis(input_axes, time_axis_name)
+        input_time_index, input_time_axis = find_time_axis(input_axes)
         metadata_axes = list(input_axes)
         metadata_axes[input_time_index] = _metadata_time_axis(input_time_axis)
 
@@ -281,7 +276,6 @@ class DatasetWriter:
         )
         self._time_axis_index, self._time_axis = find_time_axis(
             self._ctx.axes,
-            time_axis_name,
         )
         time_dims = self._ctx.axis_dims.get(self._time_axis.name, ())
         if len(time_dims) != 1 or time_dims[0] not in self._ctx.dims:
