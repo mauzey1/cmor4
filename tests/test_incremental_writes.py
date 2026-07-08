@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
+import warnings
 
 import numpy as np
 import xarray as xr
@@ -282,3 +283,36 @@ class DatasetWriterTest(unittest.TestCase):
 
             self.assertTrue(path.exists())
             self.assertEqual(full_reads, [])
+
+    def test_close_does_not_warn_about_endian_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            axes = [time_axis(self.project), *horizontal_axes(self.project)]
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                axes,
+                path=tmp_path / "writer.nc",
+            )
+            writer.write(
+                np.ones((1, 2, 2), dtype="f4"),
+                time_values=[15.0],
+                time_bounds=[[0.0, 30.0]],
+            )
+            writer.write(
+                np.ones((1, 2, 2), dtype="f4"),
+                time_values=[45.0],
+                time_bounds=[[30.0, 60.0]],
+            )
+
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                ds, _ = writer.close()
+                ds.close()
+
+            messages = [str(warning.message) for warning in caught]
+            self.assertFalse(
+                any("endian-ness of dtype and endian kwarg" in msg for msg in messages)
+            )

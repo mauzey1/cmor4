@@ -470,7 +470,15 @@ def _lazy_zarr_array(array: Any) -> Any:
             "DatasetWriter requires the runtime dependency 'dask[array]' "
             "to finalize staged Zarr data without loading it into memory."
         ) from exc
-    return da.from_zarr(array)
+    data = da.from_zarr(array)
+    byteorder = getattr(data.dtype, "byteorder", None)
+    if byteorder not in (None, "=", "|"):
+        dtype = data.dtype.newbyteorder("=")
+        data = data.map_blocks(
+            lambda block: block.astype(dtype, copy=False),
+            meta=np.array([], dtype=dtype),
+        )
+    return data
 
 
 def _create_zarr_array(
