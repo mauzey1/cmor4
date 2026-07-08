@@ -104,6 +104,49 @@ ds, path = cmor4.cmorize(dataset, variable, axes, data)
 print(f"Created: {path}")
 ```
 
+## Incremental Writes
+
+For large datasets or data produced incrementally (e.g., as a model runs), use `DatasetWriter` to write time slices one at a time without loading the complete time series into memory:
+
+```python
+import cmor4
+import numpy as np
+
+project = cmor4.ProjectTables.from_directory(...)
+dataset = project.dataset_info({...})
+variable = project.variable("tas")
+
+# Define axes - time axis can be empty (values provided per write)
+axes = [
+    project.axis("time", units="days since 2000-01-01"),
+    project.axis("latitude", values=np.linspace(-90, 90, 180)),
+    project.axis("longitude", values=np.linspace(0, 360, 360)),
+]
+
+# Write data incrementally (memory-bounded - never loads full time series)
+with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+    for year in range(1850, 2015):
+        # Load one year at a time
+        time_vals, data = load_year(year)  # Your function: returns (12,) and (12, 180, 360)
+        time_bnds = compute_bounds(time_vals)  # Your function: returns (12, 2)
+        
+        # Write this year's data
+        writer.write(data, time_values=time_vals, time_bounds=time_bnds)
+        print(f"Wrote year {year}")
+
+# File is automatically finalized and closed
+print(f"Complete dataset written to: {writer.path}")
+```
+
+**Key benefits of DatasetWriter:**
+
+- **Memory-efficient**: Only loads one chunk at a time; total memory usage independent of dataset size
+- **Flexible**: Write data as it becomes available (e.g., monthly output from a running model)
+- **Validated**: Applies same CMOR table validation as `cmorize()`
+- **Automatic cleanup**: Temporary staging files are automatically removed
+
+See the [DatasetWriter API documentation](src/cmor4/writer.py) for complete details.
+
 ## Example notebooks
 
 Jupyter notebook examples with visualizations are available in [notebooks](./notebooks/)

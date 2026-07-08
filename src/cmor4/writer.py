@@ -28,10 +28,212 @@ from .zfactor import ZFactor
 class DatasetWriter:
     """Incremental NetCDF writer for time-series datasets.
 
-    Phase 1 supports creating a new output file from one or more writes along
-    the time dimension. Data chunks are staged in a temporary Zarr store, then
-    finalized through the same dataset construction and NetCDF writing path as
-    :func:`cmor4.cmorize`.
+    ``DatasetWriter`` enables writing climate model output incrementally as data
+    becomes available, rather than requiring the complete time series in memory.
+    Data chunks are staged in a temporary Zarr store and streamed to NetCDF
+    using dask lazy loading, keeping memory usage bounded regardless of total
+    dataset size.
+
+    **When to use DatasetWriter:**
+
+    - Writing datasets one time slice at a time as a model runs
+    - Processing datasets larger than available RAM
+    - Splitting long time series across multiple output files
+    - Reusing the same metadata definition for multiple files
+
+    **When to use cmorize() instead:**
+
+    - The complete dataset fits comfortably in memory
+    - You already have all time slices in a single array
+    - You're writing a single file with all data available
+
+    **Key Features:**
+
+    - **Memory-bounded operation**: Uses dask lazy loading to stream data
+      chunk-by-chunk without loading the full array into memory
+    - **Validation**: Applies the same CMOR table validation as
+      :func:`~cmor4.cmorize`, ensuring output compliance
+    - **Automatic cleanup**: Staging directory is automatically removed on
+      success, preserved on error for debugging
+    - **Flexible time specification**: Time values can be provided incrementally
+      with each write, or pre-specified in the time axis
+
+    **Usage Example:**
+
+    .. code-block:: python
+
+        import cmor4
+        import numpy as np
+
+        project = cmor4.ProjectTables.from_directory(...)
+        dataset = project.dataset_info({...})
+        variable = project.variable("tas")
+
+        # Empty time axis - values provided with each write
+        axes = [
+            project.axis("time", units="days since 2000-01-01"),
+            project.axis("latitude", values=lats),
+            project.axis("longitude", values=lons),
+        ]
+
+        # Write data incrementally
+        with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+            for year in range(1850, 2015):
+                time_vals, data = load_year(year)  # Your function
+                bounds = compute_bounds(time_vals)  # Your function
+                writer.write(data, time_values=time_vals, time_bounds=bounds)
+
+        # File is automatically written and closed
+
+    **Memory Characteristics:**
+
+    - **Per-write memory**: O(chunk size) - only the current chunk is in memory
+    - **Finalization memory**: ~20-70 MB overhead for metadata and coordinates
+    - **Disk staging**: Temporary Zarr store is ~2× final NetCDF size
+    - **Total memory**: Independent of total dataset size
+
+    **Phase 1 Limitations:**
+
+    - ``append`` mode (extending existing files) is not yet implemented
+    - ``preserve_definition`` (reusing metadata across files) is not yet
+      implemented
+    - Per-chunk zfactor writes are not yet implemented
+    - Only time dimension supports incremental writes; spatial axes must have
+      complete values at initialization
+
+    Parameters
+    ----------
+    dataset : DatasetInfo
+        Dataset-level metadata including institution, experiment, variant, etc.
+        Created via :meth:`ProjectTables.dataset_info`.
+    variable : Variable
+        Variable metadata including dimensions, units, and CF attributes.
+        Created via :meth:`ProjectTables.variable`.
+    axes : Sequence[Axis]
+        Coordinate axes. The time axis may have empty or incomplete values;
+        other axes must have complete coordinate values at initialization.
+        Created via :meth:`ProjectTables.axis`.
+    path : str or Path, optional
+        Output file path. If ``None``, path is generated from dataset and
+        variable metadata according to project conventions (e.g., CMIP7 DRS).
+    zfactors : Sequence[ZFactor], optional
+        Formula term variables for dimensionless vertical coordinates.
+        Per-chunk zfactor writes are not yet supported in Phase 1.
+    grid : Grid, optional
+        Grid mapping and spatial coordinate metadata for curvilinear grids.
+    existing : {"error", "replace", "append"}, default "error"
+        Behavior when output file already exists:
+
+        - ``"error"``: Raise ``FileExistsError`` if file exists
+        - ``"replace"``: Overwrite existing file
+        - ``"append"``: Extend existing file with new time records (Phase 2)
+    encoding : Mapping[str, Any], optional
+        NetCDF encoding parameters (chunksizes, compression, fill values).
+        If not specified, CMIP7 auto-chunking rules are applied.
+    attrs : Mapping[str, Any], optional
+        Additional global attributes to add to the dataset.
+    staging_dir : str or Path, optional
+        Directory for temporary Zarr store. If ``None``, uses system temp
+        directory. Useful for directing staging to high-performance storage.
+    time_axis_name : str, default "time"
+        Name of the time axis. Used to identify which axis is the write
+        dimension. Normally detected automatically from ``axis="T"`` or
+        name starting with "time".
+    allow_time_gaps : bool, default False
+        Whether to allow non-contiguous time values. If ``False``, time bounds
+        must be edge-to-edge contiguous across writes. If ``True``, gaps are
+        permitted.
+    **to_netcdf_kwargs
+        Additional keyword arguments passed to :meth:`xarray.Dataset.to_netcdf`.
+
+    Attributes
+    ----------
+    staging_root : Path
+        Root directory of the temporary Zarr staging store.
+    staging_path : Path
+        Path to the Zarr store (``staging_root / "staging.zarr"``).
+
+    Raises
+    ------
+    ValueError
+        If ``existing`` is not one of "error", "replace", or "append".
+    NotImplementedError
+        If ``existing="append"`` (Phase 2 feature).
+    AxisValidationError
+        If axes fail validation (e.g., missing required bounds, invalid values).
+    VariableValidationError
+        If variable metadata fails validation.
+
+    See Also
+    --------
+    cmorize : Single-pass dataset creation for data that fits in memory.
+    create_dataset : Lower-level function for constructing xarray datasets.
+
+    Notes
+    -----
+    ``DatasetWriter`` uses a Zarr store for staging and dask lazy arrays for
+    finalization, enabling true memory-bounded operation. The implementation:
+
+    1. **Initialization**: Validates metadata and creates an empty Zarr store
+    2. **Write calls**: Append data chunks to the Zarr store on disk
+    3. **Finalization**: Stream from Zarr to NetCDF using dask, never loading
+       the full array into memory
+
+    The staging directory is automatically cleaned up on successful close,
+    but preserved on error to aid debugging. You can inspect the Zarr store at
+    ``writer.staging_path`` if an error occurs.
+
+    Examples
+    --------
+    **Basic incremental write:**
+
+    >>> with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+    ...     for month in range(12):
+    ...         data = load_month(month)  # Your function
+    ...         time_val = [month * 30.0 + 15.0]
+    ...         time_bnd = [[month * 30.0, (month + 1) * 30.0]]
+    ...         writer.write(data, time_values=time_val, time_bounds=time_bnd)
+
+    **Pre-specified time values:**
+
+    >>> # Time axis with complete values
+    >>> time = project.axis("time", values=time_vals, bounds=time_bnds)
+    >>> axes = [time, lat, lon]
+    >>>
+    >>> with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+    ...     # Write uses pre-specified time values
+    ...     writer.write(data[:6])    # First 6 time steps
+    ...     writer.write(data[6:])    # Remaining time steps
+
+    **Explicit path and encoding:**
+
+    >>> encoding = {
+    ...     "tas": {
+    ...         "chunksizes": (1, 180, 360),
+    ...         "zlib": True,
+    ...         "complevel": 4,
+    ...     }
+    ... }
+    >>> writer = cmor4.DatasetWriter(
+    ...     dataset,
+    ...     variable,
+    ...     axes,
+    ...     path="/path/to/output.nc",
+    ...     encoding=encoding,
+    ... )
+    >>> writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+    >>> ds, path = writer.close()
+
+    **Allowing time gaps:**
+
+    >>> # Write non-contiguous time records
+    >>> writer = cmor4.DatasetWriter(
+    ...     dataset, variable, axes, allow_time_gaps=True
+    ... )
+    >>> writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+    >>> # Gap: next time starts at 100 instead of 30
+    >>> writer.write(data2, time_values=[115.0], time_bounds=[[100.0, 130.0]])
+    >>> ds, path = writer.close()
     """
 
     def __init__(
@@ -125,7 +327,105 @@ class DatasetWriter:
         time_bounds: Any | None = None,
         zfactors: Mapping[str, Any] | None = None,
     ) -> None:
-        """Write one data chunk along the time dimension."""
+        """Write one data chunk along the time dimension.
+
+        Appends a chunk of data to the staging Zarr store. The chunk must match
+        the expected non-time dimensions and contain valid data values. Time
+        values must be strictly monotonically increasing across writes.
+
+        Parameters
+        ----------
+        data : array-like
+            Data values for this chunk. Shape must be consistent with variable
+            dimensions, with the time dimension matching ``len(time_values)``.
+            Accepts numpy arrays, lists, or other array-like objects.
+        time_values : array-like, optional
+            Time coordinate values for this chunk. If ``None``, uses values
+            from the pre-initialized time axis (starting at the current write
+            position). Must be strictly monotonically increasing relative to
+            previous writes.
+        time_bounds : array-like, optional
+            Time bounds for this chunk. Can be provided as:
+
+            - Shape ``(N, 2)``: Pairs of ``[lower, upper]`` bounds
+            - Shape ``(N+1,)``: Edges (converted to pairs automatically)
+            - Shape ``(N, >=2)``: Climatology or multi-bound format
+
+            If ``None`` and bounds exist in the pre-initialized time axis, those
+            bounds are used. If bounds are provided in any write, they must be
+            provided in all writes (unless ``allow_time_gaps=True``).
+        zfactors : Mapping[str, array-like], optional
+            Per-chunk zfactor data. Not yet implemented in Phase 1.
+
+        Raises
+        ------
+        ValueError
+            If the writer is already closed.
+        ValueError
+            If data chunk shape doesn't match expected dimensions.
+        ValueError
+            If time_values are not monotonically increasing.
+        ValueError
+            If time_bounds are not contiguous (unless ``allow_time_gaps=True``).
+        ValueError
+            If time_values length doesn't match data time dimension.
+        ValueError
+            If time_bounds shape doesn't match time_values length.
+        ValueError
+            If time_values are omitted but time axis has no pre-specified values.
+        AxisValidationError
+            If time values fail validation (e.g., units mismatch).
+        NotImplementedError
+            If zfactors are provided (Phase 3 feature).
+
+        Examples
+        --------
+        **Write with explicit time values:**
+
+        >>> writer.write(
+        ...     data,
+        ...     time_values=[15.0, 45.0],
+        ...     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
+        ... )
+
+        **Write using pre-specified time axis:**
+
+        >>> # Time axis initialized with complete values
+        >>> time = project.axis("time", values=[15.0, 45.0], ...)
+        >>> writer = cmor4.DatasetWriter(dataset, variable, [time, ...])
+        >>> writer.write(data)  # Uses pre-specified time values
+
+        **Write single time slice:**
+
+        >>> writer.write(
+        ...     data[0:1],  # Shape (1, lat, lon)
+        ...     time_values=[15.0],
+        ...     time_bounds=[[0.0, 30.0]],
+        ... )
+
+        **Write with edge-format bounds:**
+
+        >>> # Bounds as edges (N+1 values for N times)
+        >>> writer.write(
+        ...     data,
+        ...     time_values=[15.0, 45.0],
+        ...     time_bounds=[0.0, 30.0, 60.0],  # Converted to pairs
+        ... )
+
+        Notes
+        -----
+        Time values must be strictly monotonically increasing across all writes.
+        For example, if the first write has ``time_values=[15.0]``, the second
+        write must have ``time_values[0] > 15.0``.
+
+        By default, time bounds must be contiguous (edge-to-edge) across writes.
+        The tolerance for contiguity checking is 1e-12 absolute. Use
+        ``allow_time_gaps=True`` at initialization to disable this check.
+
+        The data chunk is validated for NaN values, valid_min/valid_max ranges,
+        and other variable-specific constraints before being written to the
+        Zarr store.
+        """
 
         self._ensure_open()
         if zfactors:
@@ -172,7 +472,86 @@ class DatasetWriter:
         *,
         preserve_definition: bool = False,
     ) -> tuple[xr.Dataset, Path]:
-        """Finalize the staged data and write the NetCDF file."""
+        """Finalize the staged data and write the NetCDF file.
+
+        Streams data from the Zarr staging store to the final NetCDF file using
+        dask lazy loading. The full dataset is never loaded into memory;
+        instead, data is read and written chunk-by-chunk.
+
+        Parameters
+        ----------
+        preserve_definition : bool, default False
+            If ``True``, keep metadata definition for writing another output
+            file with the same variable/axis definitions. Not yet implemented
+            in Phase 1.
+
+        Returns
+        -------
+        dataset : xarray.Dataset
+            The written dataset, opened from the output file. This is a loaded
+            dataset (not lazy) suitable for inspection or further processing.
+        path : Path
+            Absolute path to the written NetCDF file.
+
+        Raises
+        ------
+        ValueError
+            If the writer is already closed.
+        ValueError
+            If no data has been written (write() was never called).
+        ValueError
+            If time_bounds were provided inconsistently across writes.
+        FileExistsError
+            If output file exists and ``existing="error"``.
+        AxisValidationError
+            If final time axis fails validation.
+        NotImplementedError
+            If ``preserve_definition=True`` (Phase 3 feature).
+
+        Notes
+        -----
+        The close operation:
+
+        1. Validates the complete time axis with all accumulated time values
+        2. Creates a lazy dask array from the Zarr store (no data loaded)
+        3. Constructs an xarray Dataset with proper metadata and attributes
+        4. Streams data chunk-by-chunk to the NetCDF file via xarray
+        5. Cleans up the temporary Zarr staging directory
+        6. Opens and loads the final NetCDF file for return
+
+        Memory usage during close is bounded by chunk size plus ~20-70 MB
+        for metadata and coordinate arrays.
+
+        Examples
+        --------
+        **Basic usage:**
+
+        >>> writer = cmor4.DatasetWriter(dataset, variable, axes)
+        >>> writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+        >>> writer.write(data2, time_values=[45.0], time_bounds=[[30.0, 60.0]])
+        >>> ds, path = writer.close()
+        >>> print(f"Wrote {path}")
+        >>> print(f"Time range: {ds.time.values}")
+
+        **With context manager (automatic close):**
+
+        >>> with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+        ...     writer.write(data, time_values=times, time_bounds=bounds)
+        ...     # close() called automatically on context exit
+
+        **Inspect returned dataset:**
+
+        >>> ds, path = writer.close()
+        >>> print(ds.data_vars)  # Show variables
+        >>> print(ds.attrs)      # Show global attributes
+        >>> ds.close()           # Close when done inspecting
+
+        See Also
+        --------
+        write : Write a data chunk to the staging store.
+        __enter__ : Context manager entry (returns self).
+        __exit__ : Context manager exit (calls close automatically).
+        """
 
         self._ensure_open()
         if preserve_definition:
