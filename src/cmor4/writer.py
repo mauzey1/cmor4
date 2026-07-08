@@ -802,13 +802,36 @@ class DatasetWriter:
             )
 
         temp_path: Path | None = None
+        check_path: Path | None = None
         existing_ds = xr.open_dataset(
             output_path,
             decode_times=False,
             mask_and_scale=False,
         )
+        existing_check_ds = xr.open_dataset(
+            output_path,
+            decode_times=False,
+            mask_and_scale=False,
+            decode_coords=False,
+        )
+        new_check_ds: xr.Dataset | None = None
         try:
-            self._validate_append_compatible(existing_ds, new_ds)
+            check_path = _temporary_netcdf_path(output_path)
+            write_netcdf(
+                new_ds,
+                self._ctx.dataset,
+                self._ctx.variable,
+                path=check_path,
+                **self.to_netcdf_kwargs,
+            )
+            _ensure_nonempty_file(check_path, "Append compatibility check")
+            new_check_ds = xr.open_dataset(
+                check_path,
+                decode_times=False,
+                mask_and_scale=False,
+                decode_coords=False,
+            )
+            self._validate_append_compatible(existing_check_ds, new_check_ds)
             merged_ds = xr.concat(
                 [existing_ds, new_ds],
                 dim=self._time_dim,
@@ -819,6 +842,7 @@ class DatasetWriter:
             )
             self._validate_merged_time(merged_ds)
             _prepare_append_encoding(merged_ds, new_ds)
+            _prepare_append_attrs(merged_ds, existing_ds, new_ds)
             temp_path = _temporary_netcdf_path(output_path)
             write_netcdf(
                 merged_ds,
@@ -827,11 +851,17 @@ class DatasetWriter:
                 path=temp_path,
                 **self.to_netcdf_kwargs,
             )
+            _ensure_nonempty_file(temp_path, "Append write")
         except Exception:
             if temp_path is not None:
                 temp_path.unlink(missing_ok=True)
             raise
         finally:
+            if new_check_ds is not None:
+                new_check_ds.close()
+            if check_path is not None:
+                check_path.unlink(missing_ok=True)
+            existing_check_ds.close()
             existing_ds.close()
 
         os.replace(temp_path, output_path)
@@ -879,7 +909,13 @@ class DatasetWriter:
             ignored=_APPEND_IGNORED_GLOBAL_ATTRS,
         )
         if existing_attrs != new_attrs:
-            issues.append("global attributes differ")
+            issues.extend(
+                _attribute_diff_messages(
+                    "global attribute",
+                    existing_attrs,
+                    new_attrs,
+                )
+            )
 
         for name in sorted(existing_variables & new_variables):
             existing_var = existing_ds[name]
@@ -904,7 +940,13 @@ class DatasetWriter:
                 ignored=_APPEND_IGNORED_VARIABLE_ATTRS,
             )
             if existing_var_attrs != new_var_attrs:
-                issues.append(f"variable {name!r} attributes differ")
+                issues.extend(
+                    _attribute_diff_messages(
+                        f"variable {name!r} attribute",
+                        existing_var_attrs,
+                        new_var_attrs,
+                    )
+                )
 
             if self._time_dim in existing_var.dims:
                 for dim, existing_size in existing_var.sizes.items():
@@ -995,6 +1037,13 @@ def _temporary_netcdf_path(output_path: Path) -> Path:
         return Path(handle.name)
 
 
+def _ensure_nonempty_file(path: Path, operation: str) -> None:
+    if not path.exists() or path.stat().st_size == 0:
+        raise OSError(
+            f"{operation} did not create a valid temporary file {str(path)!r}."
+        )
+
+
 def _prepare_append_encoding(merged_ds: xr.Dataset, new_ds: xr.Dataset) -> None:
     for name in merged_ds.variables:
         name_str = str(name)
@@ -1019,6 +1068,20 @@ def _prepare_append_encoding(merged_ds: xr.Dataset, new_ds: xr.Dataset) -> None:
         array.encoding.update(encoding)
         if "_FillValue" in array.attrs and "_FillValue" in array.encoding:
             array.attrs.pop("_FillValue", None)
+
+
+def _prepare_append_attrs(
+    merged_ds: xr.Dataset,
+    existing_ds: xr.Dataset,
+    new_ds: xr.Dataset,
+) -> None:
+    attrs = dict(merged_ds.attrs)
+    if "history" in existing_ds.attrs:
+        attrs["history"] = existing_ds.attrs["history"]
+    for name in ("creation_date", "tracking_id"):
+        if name in new_ds.attrs:
+            attrs[name] = new_ds.attrs[name]
+    merged_ds.attrs = attrs
 
 
 def _is_time_metadata_variable(
@@ -1064,6 +1127,30 @@ def _normalize_attr_value(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return tuple(_normalize_attr_value(item) for item in value)
     return value
+
+
+def _attribute_diff_messages(
+    label: str,
+    existing_attrs: Mapping[str, Any],
+    new_attrs: Mapping[str, Any],
+) -> list[str]:
+    messages: list[str] = []
+    keys = sorted(set(existing_attrs) | set(new_attrs))
+    for key in keys:
+        if key not in existing_attrs:
+            messages.append(
+                f"{label} {key!r} is missing from the existing file"
+            )
+        elif key not in new_attrs:
+            messages.append(
+                f"{label} {key!r} is missing from the new dataset"
+            )
+        elif existing_attrs[key] != new_attrs[key]:
+            messages.append(
+                f"{label} {key!r} differs: existing={existing_attrs[key]!r}, "
+                f"new={new_attrs[key]!r}"
+            )
+    return messages
 
 
 def _array_values_equal(left: Any, right: Any) -> bool:
