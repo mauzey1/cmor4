@@ -216,15 +216,21 @@ class Cmor4Test(unittest.TestCase):
                 table_id="ocean",
             )
             info = self.project.dataset_info(dataset_info(Path(tmp_dir)))
-            axes = [
-                self.project.axis(
-                    "time",
-                    values=[15.0, 45.0],
-                    bounds=[[0.0, 31.0], [31.0, 60.0]],
-                    units="days since 2000-01-01",
-                ),
-                *horizontal_axes(self.project),
-            ]
+            with warnings.catch_warnings(record=True) as early_warnings:
+                warnings.simplefilter("always")
+                axes = [
+                    self.project.axis(
+                        "time",
+                        values=[15.0, 45.0],
+                        bounds=[[0.0, 31.0], [31.0, 60.0]],
+                        units="days since 2000-01-01",
+                    ),
+                    *horizontal_axes(self.project),
+                ]
+            early_messages = [str(item.message) for item in early_warnings]
+            self.assertFalse(
+                any("bound midpoints" in message for message in early_messages)
+            )
 
             with self.assertWarnsRegex(RuntimeWarning, "bound midpoints"):
                 ds = cmor4.create_dataset(

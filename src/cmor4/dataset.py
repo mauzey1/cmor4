@@ -20,6 +20,7 @@ from .utils.construction import (
     set_formula_terms,
 )
 from .utils.validation import (
+    ValidationContext,
     _dataset_for_variable,
     validate_data_chunk,
     validate_final_dataset,
@@ -110,10 +111,33 @@ def create_dataset(
     """
 
     ctx = validate_metadata(dataset, variable, axes, zfactors, grid)
+    data_array = validate_data_chunk(ctx, data)
+    return create_dataset_from_validated_data(
+        ctx,
+        data_array,
+        attrs=attrs,
+        encoding=encoding,
+    )
+
+
+def create_dataset_from_validated_data(
+    ctx: ValidationContext,
+    data_array: Any,
+    *,
+    attrs: Mapping[str, Any] | None = None,
+    encoding: Mapping[str, Any] | None = None,
+) -> xr.Dataset:
+    """Create a dataset from metadata and data that was already validated.
+
+    This internal helper keeps final DatasetWriter construction on the same
+    path as :func:`create_dataset` without forcing a lazy staged array into
+    memory for a second validation pass.
+    """
+
     dataset = ctx.dataset
     variable = ctx.variable
     axes = ctx.axes
-    data_array = validate_data_chunk(ctx, data)
+    grid = ctx.grid
     var_name, var_labels = variable.names()
 
     (

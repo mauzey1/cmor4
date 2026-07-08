@@ -8,6 +8,7 @@ CMOR4 provides several classes for managing metadata and validation:
 
    ProjectTables
    DatasetInfo
+   DatasetWriter
    Variable
    Axis
    Grid
