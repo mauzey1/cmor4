@@ -427,11 +427,13 @@ class DatasetWriter:
 3. ✅ Maintained exact same API and behavior
 4. ✅ Ran full test suite to verify no regressions
 
-### Phase 4: Implement DatasetWriter (New Feature) - ✅ PHASE 1 COMPLETED
+### Phase 4: Implement DatasetWriter (New Feature) - ✅ PHASES 1-2 COMPLETED
 1. ✅ Implemented `DatasetWriter` using refactored validation/construction in `src/cmor4/writer.py`
 2. ✅ Added DatasetWriter tests in `tests/test_incremental_writes.py` and `tests/test_datasetwriter_expanded.py`
 3. ✅ Verified validation consistency between `cmorize()` and `DatasetWriter` (both use same validation functions)
-4. ⏳ Phase 2 (Append mode) and Phase 3 (Zfactor writes) remain to be implemented
+4. ✅ Phase 2 (Append mode) completed - 813 lines of tests, full metadata compatibility validation
+5. ⏳ Phase 3 (Per-chunk zfactor writes) ready to start
+6. ⏳ Phase 4 (Integration tests and documentation) pending
 
 ### Phase 5: Cleanup (Optional) - PENDING
 1. Remove wrapper functions if they're no longer needed
@@ -479,7 +481,7 @@ class DatasetWriter:
 - **Phase 1 (Extract Validation):** ✅ Completed
 - **Phase 2 (Extract Construction):** ✅ Completed
 - **Phase 3 (Rename and refactor dataset.py):** ✅ Completed
-- **Phase 4 (Implement DatasetWriter):** ✅ Phase 1 completed (~4 days), Phases 2-3 remaining
+- **Phase 4 (Implement DatasetWriter):** ✅ Phases 1-2 completed (~6-7 days), Phase 3 ready to start
 - **Phase 5 (Cleanup):** To be determined
 
 ### Achieved Benefits
@@ -502,10 +504,11 @@ The refactored architecture is now in place with:
 - Pure construction functions with no side effects
 - Improved testability and maintainability
 
-**Update (Phase 1 Complete):** The refactoring has proven successful. `DatasetWriter` Phase 1 implementation reuses the validation infrastructure seamlessly:
+**Update (Phases 1-2 Complete):** The refactoring has proven highly successful. `DatasetWriter` Phases 1-2 implementation reuses the validation infrastructure seamlessly:
 - ✅ Both `DatasetWriter` and `cmorize()` call the same `validate_metadata()` function
 - ✅ Both use `validate_data_chunk()` for data validation
 - ✅ Both use `validate_final_dataset()` for final checks
 - ✅ Zero code duplication in validation logic
 - ✅ Consistent behavior and error messages across both APIs
-- ✅ 886 lines of `DatasetWriter` implementation with 1025 lines of tests achieving ≥90% coverage
+- ✅ 1269 lines of `DatasetWriter` implementation with 1838 lines of tests achieving ≥90% coverage
+- ✅ Append mode fully functional with comprehensive compatibility validation

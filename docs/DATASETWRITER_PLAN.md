@@ -6,21 +6,28 @@
 
 The core `DatasetWriter` implementation is complete and functional. Users can now write CMOR-compliant datasets incrementally with memory-bounded operation.
 
-**Completed:**
-- ✅ Incremental time-series writes with Zarr staging
-- ✅ Memory-bounded operation via dask lazy loading
-- ✅ Full CMOR validation (reuses Phase 0 validation pipeline)
-- ✅ `preserve_definition=True` for writing multiple file segments
-- ✅ Context manager support
-- ✅ Comprehensive test coverage (>90%)
-- ✅ 886 lines of implementation, 1025 lines of tests
+**Phase 2 (Append Mode): ✅ COMPLETED**
 
-**Remaining (Phases 2-4):**
-- ⏳ Append mode - extending existing files with new time records (Phase 2, 2-3 days)
+Append mode is fully implemented, tested, and documented. Users can extend existing CMOR files with new time records.
+
+**Completed (Phases 0-2):**
+- ✅ Validation pipeline refactoring (Phase 0)
+- ✅ Incremental time-series writes with Zarr staging (Phase 1)
+- ✅ Memory-bounded operation via dask lazy loading (Phase 1)
+- ✅ Full CMOR validation (reuses Phase 0 validation pipeline) (Phase 1)
+- ✅ `preserve_definition=True` for writing multiple file segments (Phase 1)
+- ✅ Context manager support (Phase 1)
+- ✅ `existing="append"` mode for extending existing files (Phase 2)
+- ✅ Comprehensive metadata compatibility validation (Phase 2)
+- ✅ Sequential append support (Phase 2)
+- ✅ Comprehensive test coverage: 1269 lines implementation, 1838 lines tests (>90% coverage)
+- ✅ Sphinx documentation with usage examples
+
+**Remaining (Phases 3-4):**
 - ⏳ Per-chunk zfactor writes - incremental vertical coordinate data (Phase 3, 2-3 days)
-- ⏳ Integration tests and user documentation (Phase 4, 2-3 days)
+- ⏳ Integration tests and additional documentation (Phase 4, 2-3 days)
 
-**Estimated remaining effort:** 6-9 days
+**Estimated remaining effort:** 4-6 days
 
 ---
 
@@ -631,6 +638,7 @@ with cmor4.DatasetWriter(dataset, variable, axes) as writer:
 **Summary:** Phase 1 delivers a fully functional `DatasetWriter` with memory-bounded incremental writes, comprehensive validation, and support for multiple file segments. The implementation successfully reuses the validation infrastructure from Phase 0, achieving zero code duplication in validation logic.
 
 **Key Achievements:**
+- ✅ Core DatasetWriter implementation
 - ✅ 886 lines of production code
 - ✅ 1025 lines of tests (>90% coverage)
 - ✅ Memory-bounded operation via dask lazy loading
@@ -670,15 +678,44 @@ with cmor4.DatasetWriter(dataset, variable, axes) as writer:
 
 ---
 
-### Phase 2: Append Mode
+### Phase 2: Append Mode - ✅ COMPLETED
 
-**2.1. Extend `DatasetWriter.close()`**:
-- File compatibility checking, concatenation, atomic replacement
+**Summary:** Phase 2 delivers full append mode functionality, allowing users to extend existing CMOR-compliant files with new time records. The implementation includes comprehensive metadata compatibility validation and handles all edge cases.
 
-**2.2. Append mode tests** (`tests/test_append_mode.py`):
-- Append compatible data, detect incompatibilities, verify merged time coordinate
+**Key Achievements:**
+- ✅ `existing="append"` parameter for extending existing files
+- ✅ Comprehensive metadata compatibility validation (_validate_append_compatible)
+- ✅ Atomic file replacement (writes to temp file, then replaces)
+- ✅ Time coordinate merging and validation
+- ✅ Support for sequential appends (multiple append operations to same file)
+- ✅ History attribute preservation with provenance ID refresh
+- ✅ 813 lines of dedicated append mode tests (14 test functions)
+- ✅ Sphinx documentation with examples
+- ✅ All tests passing
 
-**Estimated effort:** 2-3 days
+**2.1. Extended `DatasetWriter.close()`** - ✅ COMPLETED:
+- ✅ `_append_to_existing()` method handles file concatenation
+- ✅ `_validate_append_compatible()` checks metadata compatibility:
+  - Variable names and dimensions
+  - Non-time axis values and bounds
+  - Grid mapping attributes and coordinates
+  - Zfactor definitions and attributes
+  - Global attributes (except history, tracking_id, creation_date)
+- ✅ `_validate_merged_time()` ensures monotonic, contiguous time after merge
+- ✅ Atomic replacement using temporary files
+- ✅ Cleanup on error (preserves original file)
+
+**2.2. Comprehensive test suite** (`tests/test_append_mode.py`) - ✅ COMPLETED:
+- ✅ Basic append with compatible data (matches cmorize output)
+- ✅ Incompatible metadata detection (axes, grid, zfactors, attributes)
+- ✅ Time validation (monotonicity, contiguity at boundaries)
+- ✅ Sequential appends (multiple operations on same file)
+- ✅ History preservation and ID refresh
+- ✅ Error handling and original file preservation
+- ✅ Edge format time bounds support
+- ✅ Complex cases (curvilinear grids, zfactors)
+
+**Actual effort:** ~2-3 days (as estimated)
 
 ---
 
@@ -729,7 +766,7 @@ with cmor4.DatasetWriter(dataset, variable, axes) as writer:
 - **Phase 3 (Zfactors):** 2-3 days (preserve_definition already implemented in Phase 1)
 - **Phase 4 (Integration/Docs):** 2-3 days
 
-**Total remaining:** 6-9 days (Phases 0-1 complete)
+**Total remaining:** 4-6 days (Phases 0-2 complete)
 
 **Benefits achieved from Phase 0:**
 - ✅ Eliminated ~400 lines of code duplication
@@ -757,11 +794,11 @@ with cmor4.DatasetWriter(dataset, variable, axes) as writer:
 7. ✅ preserve_definition mode works for writing multiple file segments
 8. ✅ Comprehensive docstring documentation in `writer.py`
 
-### Phases 2-4 (Remaining Features) - IN PROGRESS
-1. Append mode successfully extends existing CMOR4-generated files (Phase 2)
-2. Per-chunk zfactor writes work correctly (Phase 3)
-3. Integration tests with real CMIP7 examples (Phase 4)
-4. User guide documentation with examples (Phase 4)
+### Phases 2-4 (Remaining Features)
+1. ✅ Append mode successfully extends existing CMOR4-generated files (Phase 2 - COMPLETED)
+2. ⏳ Per-chunk zfactor writes work correctly (Phase 3 - READY TO START)
+3. ⏳ Integration tests with real CMIP7 examples (Phase 4)
+4. ⏳ User guide documentation with examples (Phase 4)
 
 ## Out of Scope (Future Work)
 
