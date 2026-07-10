@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -92,9 +93,8 @@ class DatasetWriter:
     - **Disk staging**: Temporary Zarr store is ~2× final NetCDF size
     - **Total memory**: Independent of total dataset size
 
-    **Phase 1 Limitations:**
+    **Limitations:**
 
-    - ``append`` mode (extending existing files) is not yet implemented
     - Per-chunk zfactor writes are not yet implemented
     - Only time dimension supports incremental writes; spatial axes must have
       complete values at initialization
@@ -124,7 +124,7 @@ class DatasetWriter:
 
         - ``"error"``: Raise ``FileExistsError`` if file exists
         - ``"replace"``: Overwrite existing file
-        - ``"append"``: Extend existing file with new time records (Phase 2)
+        - ``"append"``: Extend existing file with new time records
     encoding : Mapping[str, Any], optional
         NetCDF encoding parameters (chunksizes, compression, fill values).
         If not specified, CMIP7 auto-chunking rules are applied.
@@ -147,8 +147,6 @@ class DatasetWriter:
     ------
     ValueError
         If ``existing`` is not one of "error", "replace", or "append".
-    NotImplementedError
-        If ``existing="append"`` (Phase 2 feature).
     AxisValidationError
         If axes fail validation (e.g., missing required bounds, invalid values).
     VariableValidationError
@@ -243,10 +241,6 @@ class DatasetWriter:
     ) -> None:
         if existing not in {"error", "replace", "append"}:
             raise ValueError("existing must be one of 'error', 'replace', or 'append'.")
-        if existing == "append":
-            raise NotImplementedError(
-                "DatasetWriter append mode is planned for Phase 2."
-            )
 
         self.path = Path(path) if path is not None else None
         self.existing = existing
@@ -562,18 +556,21 @@ class DatasetWriter:
                 self._ctx.variable,
                 ds,
             )
-            if self.existing == "error" and output_path.exists():
+            if self.existing == "append":
+                output_path = self._append_to_existing(output_path, ds)
+            elif self.existing == "error" and output_path.exists():
                 raise FileExistsError(
                     f"Output file {str(output_path)!r} already exists. "
                     "Use existing='replace' to overwrite it."
                 )
-            output_path = write_netcdf(
-                ds,
-                self._ctx.dataset,
-                self._ctx.variable,
-                path=output_path,
-                **self.to_netcdf_kwargs,
-            )
+            else:
+                output_path = write_netcdf(
+                    ds,
+                    self._ctx.dataset,
+                    self._ctx.variable,
+                    path=output_path,
+                    **self.to_netcdf_kwargs,
+                )
             result = xr.open_dataset(
                 output_path,
                 decode_times=False,
@@ -796,6 +793,393 @@ class DatasetWriter:
             updates["bounds"] = None
         axes[self._time_axis_index] = self._time_axis.updated(**updates)
         return tuple(axes)
+
+    def _append_to_existing(self, output_path: Path, new_ds: xr.Dataset) -> Path:
+        if not output_path.exists():
+            raise FileNotFoundError(
+                f"Cannot append because output file {str(output_path)!r} "
+                "does not exist."
+            )
+
+        temp_path: Path | None = None
+        check_path: Path | None = None
+        existing_ds = xr.open_dataset(
+            output_path,
+            decode_times=False,
+            mask_and_scale=False,
+        )
+        existing_check_ds = xr.open_dataset(
+            output_path,
+            decode_times=False,
+            mask_and_scale=False,
+            decode_coords=False,
+        )
+        new_check_ds: xr.Dataset | None = None
+        try:
+            check_path = _temporary_netcdf_path(output_path)
+            write_netcdf(
+                new_ds,
+                self._ctx.dataset,
+                self._ctx.variable,
+                path=check_path,
+                **self.to_netcdf_kwargs,
+            )
+            _ensure_nonempty_file(check_path, "Append compatibility check")
+            new_check_ds = xr.open_dataset(
+                check_path,
+                decode_times=False,
+                mask_and_scale=False,
+                decode_coords=False,
+            )
+            self._validate_append_compatible(existing_check_ds, new_check_ds)
+            merged_ds = xr.concat(
+                [existing_ds, new_ds],
+                dim=self._time_dim,
+                data_vars="minimal",
+                coords="minimal",
+                compat="override",
+                combine_attrs="override",
+            )
+            self._validate_merged_time(merged_ds)
+            _prepare_append_encoding(merged_ds, new_ds)
+            _prepare_append_attrs(merged_ds, existing_ds, new_ds)
+            temp_path = _temporary_netcdf_path(output_path)
+            write_netcdf(
+                merged_ds,
+                self._ctx.dataset,
+                self._ctx.variable,
+                path=temp_path,
+                **self.to_netcdf_kwargs,
+            )
+            _ensure_nonempty_file(temp_path, "Append write")
+        except Exception:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+            raise
+        finally:
+            if new_check_ds is not None:
+                new_check_ds.close()
+            if check_path is not None:
+                check_path.unlink(missing_ok=True)
+            existing_check_ds.close()
+            existing_ds.close()
+
+        os.replace(temp_path, output_path)
+        return output_path
+
+    def _validate_append_compatible(
+        self,
+        existing_ds: xr.Dataset,
+        new_ds: xr.Dataset,
+    ) -> None:
+        issues: list[str] = []
+        var_name = self._ctx.variable.names()[0]
+
+        if var_name not in existing_ds:
+            issues.append(f"existing file is missing data variable {var_name!r}")
+        if var_name not in new_ds:
+            issues.append(f"new dataset is missing data variable {var_name!r}")
+
+        existing_variables = {str(name) for name in existing_ds.variables}
+        new_variables = {str(name) for name in new_ds.variables}
+        if existing_variables != new_variables:
+            missing = sorted(new_variables - existing_variables)
+            extra = sorted(existing_variables - new_variables)
+            if missing:
+                issues.append(f"existing file is missing variables {missing!r}")
+            if extra:
+                issues.append(f"existing file has unexpected variables {extra!r}")
+
+        for dim, size in new_ds.sizes.items():
+            if dim == self._time_dim:
+                continue
+            existing_size = existing_ds.sizes.get(dim)
+            if existing_size != size:
+                issues.append(
+                    f"dimension {dim!r} has size {existing_size!r} in the "
+                    f"existing file and {size!r} in the new dataset"
+                )
+
+        existing_attrs = _normalize_attrs(
+            existing_ds.attrs,
+            ignored=_APPEND_IGNORED_GLOBAL_ATTRS,
+        )
+        new_attrs = _normalize_attrs(
+            new_ds.attrs,
+            ignored=_APPEND_IGNORED_GLOBAL_ATTRS,
+        )
+        if existing_attrs != new_attrs:
+            issues.extend(
+                _attribute_diff_messages(
+                    "global attribute",
+                    existing_attrs,
+                    new_attrs,
+                )
+            )
+
+        for name in sorted(existing_variables & new_variables):
+            existing_var = existing_ds[name]
+            new_var = new_ds[name]
+            if existing_var.dims != new_var.dims:
+                issues.append(
+                    f"variable {name!r} has dimensions {existing_var.dims!r} "
+                    f"in the existing file and {new_var.dims!r} in the new dataset"
+                )
+                continue
+            if np.dtype(existing_var.dtype) != np.dtype(new_var.dtype):
+                issues.append(
+                    f"variable {name!r} has dtype {existing_var.dtype!r} in "
+                    f"the existing file and {new_var.dtype!r} in the new dataset"
+                )
+            existing_var_attrs = _normalize_attrs(
+                existing_var.attrs,
+                ignored=_APPEND_IGNORED_VARIABLE_ATTRS,
+            )
+            new_var_attrs = _normalize_attrs(
+                new_var.attrs,
+                ignored=_APPEND_IGNORED_VARIABLE_ATTRS,
+            )
+            if existing_var_attrs != new_var_attrs:
+                issues.extend(
+                    _attribute_diff_messages(
+                        f"variable {name!r} attribute",
+                        existing_var_attrs,
+                        new_var_attrs,
+                    )
+                )
+
+            if self._time_dim in existing_var.dims:
+                for dim, existing_size in existing_var.sizes.items():
+                    if dim == self._time_dim:
+                        continue
+                    new_size = new_var.sizes[dim]
+                    if existing_size != new_size:
+                        issues.append(
+                            f"variable {name!r} dimension {dim!r} has size "
+                            f"{existing_size!r} in the existing file and "
+                            f"{new_size!r} in the new dataset"
+                        )
+                continue
+
+            if existing_var.shape != new_var.shape:
+                issues.append(
+                    f"variable {name!r} has shape {existing_var.shape!r} "
+                    f"in the existing file and {new_var.shape!r} in the new dataset"
+                )
+                continue
+            if not _array_values_equal(existing_var.values, new_var.values):
+                issues.append(f"variable {name!r} values differ")
+
+        if issues:
+            details = "\n".join(f"- {issue}" for issue in issues)
+            raise ValueError(
+                "Existing file is not compatible with append mode:\n" + details
+            )
+
+    def _validate_merged_time(self, merged_ds: xr.Dataset) -> None:
+        time_name = _time_coord_name(merged_ds, self._time_dim, self._time_axis)
+        values = np.asarray(merged_ds[time_name].values)
+        if values.ndim != 1:
+            raise ValueError(
+                f"Time coordinate {time_name!r} must be one-dimensional after append."
+            )
+        if values.size > 1 and np.any(values[1:] <= values[:-1]):
+            raise ValueError(
+                "Appended time values must be strictly monotonic with the "
+                "existing file."
+            )
+
+        bounds_name = (
+            merged_ds[time_name].attrs.get("bounds")
+            or merged_ds[time_name].attrs.get("climatology")
+        )
+        if not bounds_name or str(bounds_name) not in merged_ds:
+            return
+
+        bounds = _bounds_as_pairs(
+            np.asarray(merged_ds[str(bounds_name)].values),
+            int(values.size),
+        )
+        if bounds.shape[0] <= 1:
+            return
+        previous_ends = bounds[:-1, 1]
+        next_starts = bounds[1:, 0]
+        numeric_bounds = np.issubdtype(np.asarray(previous_ends).dtype, np.number)
+        if numeric_bounds and not np.allclose(
+            previous_ends,
+            next_starts,
+            rtol=0.0,
+            atol=1.0e-12,
+        ):
+            raise ValueError(
+                "Appended time bounds must be contiguous with the existing file."
+            )
+
+
+_APPEND_IGNORED_GLOBAL_ATTRS = frozenset(
+    {
+        "creation_date",
+        "history",
+        "tracking_id",
+    }
+)
+_APPEND_IGNORED_VARIABLE_ATTRS = frozenset({"_FillValue"})
+
+
+def _temporary_netcdf_path(output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        dir=output_path.parent,
+        prefix=f".{output_path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        return Path(handle.name)
+
+
+def _ensure_nonempty_file(path: Path, operation: str) -> None:
+    if not path.exists() or path.stat().st_size == 0:
+        raise OSError(
+            f"{operation} did not create a valid temporary file {str(path)!r}."
+        )
+
+
+def _prepare_append_encoding(merged_ds: xr.Dataset, new_ds: xr.Dataset) -> None:
+    for name in merged_ds.variables:
+        name_str = str(name)
+        encoding = (
+            dict(new_ds[name_str].encoding) if name_str in new_ds.variables else {}
+        )
+        for transient_key in ("preferred_chunks", "source", "original_shape"):
+            encoding.pop(transient_key, None)
+
+        array = merged_ds[name_str]
+        chunksizes = encoding.get("chunksizes")
+        if chunksizes is not None:
+            normalized_chunksizes = tuple(
+                min(int(chunk), int(size))
+                for chunk, size in zip(tuple(chunksizes), array.shape, strict=False)
+            )
+            if _is_time_metadata_variable(name_str, array, merged_ds):
+                normalized_chunksizes = tuple(int(size) for size in array.shape)
+            encoding["chunksizes"] = normalized_chunksizes
+
+        array.encoding.clear()
+        array.encoding.update(encoding)
+        if "_FillValue" in array.attrs and "_FillValue" in array.encoding:
+            array.attrs.pop("_FillValue", None)
+
+
+def _prepare_append_attrs(
+    merged_ds: xr.Dataset,
+    existing_ds: xr.Dataset,
+    new_ds: xr.Dataset,
+) -> None:
+    attrs = dict(merged_ds.attrs)
+    if "history" in existing_ds.attrs:
+        attrs["history"] = existing_ds.attrs["history"]
+    for name in ("creation_date", "tracking_id"):
+        if name in new_ds.attrs:
+            attrs[name] = new_ds.attrs[name]
+    merged_ds.attrs = attrs
+
+
+def _is_time_metadata_variable(
+    name: str,
+    array: xr.DataArray,
+    ds: xr.Dataset,
+) -> bool:
+    lower_name = name.lower()
+    if lower_name == "time" or lower_name.startswith("time"):
+        return True
+    for coord_name in ds.coords:
+        coord = ds[str(coord_name)]
+        if name in {
+            str(coord.attrs.get("bounds", "")),
+            str(coord.attrs.get("climatology", "")),
+        }:
+            return True
+    return array.ndim > 0 and all(
+        str(dim).lower() in {"time", "bnds"} or str(dim).lower().startswith("time")
+        for dim in array.dims
+    )
+
+
+def _normalize_attrs(
+    attrs: Mapping[Any, Any],
+    *,
+    ignored: frozenset[str],
+) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in attrs.items():
+        key_str = str(key)
+        if key_str in ignored:
+            continue
+        normalized[key_str] = _normalize_attr_value(value)
+    return normalized
+
+
+def _normalize_attr_value(value: Any) -> Any:
+    if isinstance(value, np.ndarray):
+        return tuple(_normalize_attr_value(item) for item in value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, (list, tuple)):
+        return tuple(_normalize_attr_value(item) for item in value)
+    return value
+
+
+def _attribute_diff_messages(
+    label: str,
+    existing_attrs: Mapping[str, Any],
+    new_attrs: Mapping[str, Any],
+) -> list[str]:
+    messages: list[str] = []
+    keys = sorted(set(existing_attrs) | set(new_attrs))
+    for key in keys:
+        if key not in existing_attrs:
+            messages.append(
+                f"{label} {key!r} is missing from the existing file"
+            )
+        elif key not in new_attrs:
+            messages.append(
+                f"{label} {key!r} is missing from the new dataset"
+            )
+        elif existing_attrs[key] != new_attrs[key]:
+            messages.append(
+                f"{label} {key!r} differs: existing={existing_attrs[key]!r}, "
+                f"new={new_attrs[key]!r}"
+            )
+    return messages
+
+
+def _array_values_equal(left: Any, right: Any) -> bool:
+    left_array = np.asarray(left)
+    right_array = np.asarray(right)
+    if left_array.shape != right_array.shape:
+        return False
+    try:
+        return bool(np.array_equal(left_array, right_array, equal_nan=True))
+    except TypeError:
+        return bool(np.array_equal(left_array, right_array))
+
+
+def _time_coord_name(ds: xr.Dataset, time_dim: str, axis: Axis) -> str:
+    candidates = [
+        time_dim,
+        str(axis.out_name or ""),
+        str(axis.name or ""),
+    ]
+    for candidate in candidates:
+        if candidate and candidate in ds:
+            return candidate
+    for name in ds.coords:
+        coord = ds[str(name)]
+        if time_dim in coord.dims:
+            return str(name)
+    raise ValueError(
+        f"No coordinate variable was found for time dimension {time_dim!r}."
+    )
 
 
 def _metadata_time_axis(axis: Axis) -> Axis:

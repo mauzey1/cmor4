@@ -265,6 +265,8 @@ Additional Global Attributes
 Handling Existing Files
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
+Control what happens when the output file already exists:
+
 .. code-block:: python
 
    # Default: raise error if exists
@@ -272,6 +274,9 @@ Handling Existing Files
 
    # Overwrite existing
    writer = cmor4.DatasetWriter(dataset, variable, axes, existing="replace")
+
+   # Append new time records to existing file
+   writer = cmor4.DatasetWriter(dataset, variable, axes, existing="append")
 
 Best Practices
 --------------
@@ -414,6 +419,25 @@ Common Errors
    writer.write(data2, time_values=[45.0])  # Forgot bounds
    # ValueError: time_bounds must be supplied for every write or omitted
 
+**Append to non-existent file:**
+
+.. code-block:: python
+
+   writer = cmor4.DatasetWriter(dataset, variable, axes,
+                                 path="missing.nc", existing="append")
+   writer.write(data, time_values=[15.0])
+   # FileNotFoundError: Cannot append because output file 'missing.nc' does not exist
+
+**Incompatible append:**
+
+.. code-block:: python
+
+   # Original file has different grid
+   writer = cmor4.DatasetWriter(dataset, variable, axes,
+                                 path="output.nc", existing="append")
+   writer.write(data, time_values=[75.0])
+   # ValueError: dimension 'lat' has size 180 in existing file and 91 in new dataset
+
 Troubleshooting
 ---------------
 
@@ -501,20 +525,175 @@ Performance Comparison
 
 **Rule of thumb:** If your dataset fits comfortably in memory (<50% of RAM), use :func:`cmorize`. If larger or arrives incrementally, use :class:`DatasetWriter`.
 
+Append Mode: Extending Existing Files
+--------------------------------------
+
+Use ``existing="append"`` to add new time records to an existing CMOR file:
+
+.. code-block:: python
+
+   # Initial write
+   with cmor4.DatasetWriter(
+       dataset,
+       variable,
+       axes,
+       path="output.nc",
+   ) as writer:
+       writer.write(data_2000, time_values=[15.0, 45.0],
+                    time_bounds=[[0.0, 30.0], [30.0, 60.0]])
+
+   # Later, append more data
+   with cmor4.DatasetWriter(
+       dataset,
+       variable,
+       axes,
+       path="output.nc",
+       existing="append",
+   ) as writer:
+       writer.write(data_2001, time_values=[75.0],
+                    time_bounds=[[60.0, 90.0]])
+
+Append Mode Validation
+~~~~~~~~~~~~~~~~~~~~~~~
+
+When appending, DatasetWriter validates compatibility:
+
+✓ **Checks that pass:**
+
+- All non-time dimensions match exactly (size and values)
+- All variables present in both files
+- Coordinate attributes are identical
+- Grid mappings match (for curvilinear grids)
+- Formula terms match (for hybrid coordinates)
+- Time values and bounds are strictly monotonic and contiguous
+
+✗ **Errors raised:**
+
+.. code-block:: python
+
+   # Different spatial grid
+   # ValueError: dimension 'lat' has size 90 in existing file and 91 in new dataset
+
+   # Non-monotonic time
+   # ValueError: Time values must be strictly monotonic
+
+   # Gap in time bounds
+   # ValueError: Time bounds must be contiguous across append boundary
+
+   # Attribute mismatch
+   # ValueError: global attribute 'experiment_id' differs
+
+Sequential Appends
+~~~~~~~~~~~~~~~~~~
+
+You can append multiple times to the same file:
+
+.. code-block:: python
+
+   output_path = Path("accumulated.nc")
+
+   # Initial write
+   with cmor4.DatasetWriter(dataset, variable, axes, path=output_path) as writer:
+       writer.write(chunk1, time_values=times1, time_bounds=bounds1)
+
+   # First append
+   with cmor4.DatasetWriter(
+       dataset, variable, axes, path=output_path, existing="append"
+   ) as writer:
+       writer.write(chunk2, time_values=times2, time_bounds=bounds2)
+
+   # Second append
+   with cmor4.DatasetWriter(
+       dataset, variable, axes, path=output_path, existing="append"
+   ) as writer:
+       writer.write(chunk3, time_values=times3, time_bounds=bounds3)
+
+   # Result: all three chunks in one file
+
+Append with Formula Terms (Hybrid Coordinates)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Append mode works with time-varying formula terms:
+
+.. code-block:: python
+
+   # Initial write with surface pressure
+   ps_2000 = np.full((12, 2, 2), 99000.0, dtype="f4")
+   zfactors_2000 = [
+       project.zfactor("a", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+       project.zfactor("b", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+       project.zfactor("p0", values=100000.0),
+       project.zfactor("ps", values=ps_2000),
+   ]
+
+   with cmor4.DatasetWriter(
+       dataset, variable, axes, path="hybrid.nc", zfactors=zfactors_2000
+   ) as writer:
+       writer.write(data_2000, time_values=times_2000, time_bounds=bounds_2000)
+
+   # Append next year with new surface pressure
+   ps_2001 = np.full((12, 2, 2), 99100.0, dtype="f4")
+   zfactors_2001 = [
+       project.zfactor("a", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+       project.zfactor("b", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+       project.zfactor("p0", values=100000.0),
+       project.zfactor("ps", values=ps_2001),
+   ]
+
+   with cmor4.DatasetWriter(
+       dataset, variable, axes, path="hybrid.nc",
+       zfactors=zfactors_2001, existing="append"
+   ) as writer:
+       writer.write(data_2001, time_values=times_2001, time_bounds=bounds_2001)
+
+   # Result: ps variable has 24 time slices (2000 + 2001)
+
+Provenance Tracking in Append Mode
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When appending:
+
+- ``tracking_id`` is regenerated (new UUID)
+- ``creation_date`` is updated to current timestamp
+- ``history`` attribute is preserved from the original file
+- All other metadata attributes must match exactly
+
+.. code-block:: python
+
+   # After append, the file has:
+   # - New tracking_id
+   # - New creation_date
+   # - Original history entry preserved
+   # - All other attributes unchanged
+
+Error Recovery
+~~~~~~~~~~~~~~
+
+Append operations are atomic - if validation fails, the original file is unchanged:
+
+.. code-block:: python
+
+   try:
+       with cmor4.DatasetWriter(
+           dataset, variable, axes,
+           path="output.nc", existing="append"
+       ) as writer:
+           writer.write(incompatible_data, time_values=[75.0])
+   except ValueError as e:
+       print(f"Append failed: {e}")
+       # output.nc is unchanged - original data is intact
+
 Future Features
 ---------------
 
 The following features are planned for upcoming releases:
 
-- **Append mode** - Extend existing NetCDF files with new time records
 - **Enhanced preserve mode** - Full support for reusing metadata definitions across multiple files
-- **Incremental formula terms** - Write zfactor variables (like surface pressure) incrementally alongside data
 - **Multi-dimensional incremental writes** - Support incremental writes along spatial dimensions, not just time
 
 Current workarounds:
 
 - **For multiple files with gaps**: Use ``preserve_definition=True`` when closing (see Segmented Files example above)
-- **For formula terms**: Write all zfactor data upfront when the complete time series is known
 
 Complete Example
 ----------------
