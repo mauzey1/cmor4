@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import os
 from pathlib import Path
 import shutil
@@ -18,8 +19,10 @@ from .dataset import (
 from .datasetinfo import DatasetInfo
 from .grid import Grid
 from .utils.validation import (
+    named_dimensions,
     validate_data_chunk,
     validate_metadata,
+    validate_variable_values,
 )
 from .utils.writer_helpers import find_time_axis
 from .variable import Variable
@@ -95,7 +98,6 @@ class DatasetWriter:
 
     **Limitations:**
 
-    - Per-chunk zfactor writes are not yet implemented
     - Only time dimension supports incremental writes; spatial axes must have
       complete values at initialization
 
@@ -115,8 +117,9 @@ class DatasetWriter:
         Output file path. If ``None``, path is generated from dataset and
         variable metadata according to project conventions (e.g., CMIP7 DRS).
     zfactors : Sequence[ZFactor], optional
-        Formula term variables for dimensionless vertical coordinates.
-        Per-chunk zfactor writes are not yet supported in Phase 1.
+        Formula term variables for dimensionless vertical coordinates. Static
+        zfactors can include complete values here. Time-varying zfactors may
+        omit values and provide them per chunk via :meth:`write`.
     grid : Grid, optional
         Grid mapping and spatial coordinate metadata for curvilinear grids.
     existing : {"error", "replace", "append"}, default "error"
@@ -298,6 +301,7 @@ class DatasetWriter:
         self.staging_path = self.staging_root / "staging.zarr"
         self._zarr_group = _open_zarr_group(self.staging_path)
         self._zarr_array: Any | None = None
+        self._zarr_zfactor_arrays: dict[str, Any] = {}
 
     def write(
         self,
@@ -335,7 +339,8 @@ class DatasetWriter:
             bounds are used. If bounds are provided in any write for a given
             output file, they must be provided in every write for that file.
         zfactors : Mapping[str, array-like], optional
-            Per-chunk zfactor data. Not yet implemented in Phase 1.
+            Per-chunk zfactor data. Keys may be zfactor names or output names;
+            values must match the zfactor dimensions for this write chunk.
 
         Raises
         ------
@@ -355,8 +360,9 @@ class DatasetWriter:
             If time_values are omitted but time axis has no pre-specified values.
         AxisValidationError
             If time values fail validation (e.g., units mismatch).
-        NotImplementedError
-            If zfactors are provided (Phase 3 feature).
+        ValueError
+            If a per-chunk zfactor is unknown, missing for a chunk that requires
+            it, or has a shape that does not match resolved zfactor dimensions.
 
         Examples
         --------
@@ -409,11 +415,6 @@ class DatasetWriter:
         """
 
         self._ensure_open()
-        if zfactors:
-            raise NotImplementedError(
-                "Per-chunk zfactor writes are planned for DatasetWriter Phase 3."
-            )
-
         data_array = np.asarray(data)
         chunk_time_values, chunk_time_bounds = self._time_chunk(
             data_array,
@@ -437,8 +438,14 @@ class DatasetWriter:
         )
         validated_data = validate_data_chunk(chunk_ctx, data_array)
         self._validate_chunk_shape(validated_data, len(chunk_time_values))
+        zfactor_chunks = self._validate_zfactor_chunks(
+            zfactors,
+            chunk_ctx,
+            len(chunk_time_values),
+        )
         self._validate_time_order(chunk_time_values, chunk_time_bounds)
         self._append_to_zarr(validated_data)
+        self._append_zfactors_to_zarr(zfactor_chunks)
 
         self._time_values.append(chunk_time_values)
         if chunk_time_bounds is not None:
@@ -544,6 +551,7 @@ class DatasetWriter:
                 self._ctx.zfactors,
                 self._ctx.grid,
             )
+            final_ctx = replace(final_ctx, zfactors=self._final_zfactors(final_ctx))
             data = _lazy_zarr_array(self._zarr_array)
             ds = create_dataset_from_validated_data(
                 final_ctx,
@@ -626,6 +634,7 @@ class DatasetWriter:
         shutil.rmtree(self.staging_path, ignore_errors=True)
         self._zarr_group = _open_zarr_group(self.staging_path)
         self._zarr_array = None
+        self._zarr_zfactor_arrays = {}
 
     def _time_chunk(
         self,
@@ -758,25 +767,148 @@ class DatasetWriter:
             )
 
     def _append_to_zarr(self, data: np.ndarray) -> None:
-        if self._zarr_array is None:
-            shape = list(data.shape)
-            shape[self._time_dim_index] = 0
-            chunks = tuple(max(1, int(size)) for size in data.shape)
-            self._zarr_array = _create_zarr_array(
-                self._zarr_group,
-                self._ctx.variable.names()[0],
-                shape=tuple(shape),
-                chunks=chunks,
-                dtype=data.dtype,
+        self._zarr_array = _append_array_to_zarr(
+            self._zarr_group,
+            self._zarr_array,
+            self._ctx.variable.names()[0],
+            data,
+            self._time_dim_index,
+        )
+
+    def _validate_zfactor_chunks(
+        self,
+        zfactors: Mapping[str, Any] | None,
+        chunk_ctx: Any,
+        chunk_time_len: int,
+    ) -> dict[str, np.ndarray]:
+        zfactor_values = {str(name): value for name, value in (zfactors or {}).items()}
+        lookup = self._zfactor_lookup()
+        unknown = sorted(str(name) for name in zfactor_values if str(name) not in lookup)
+        if unknown:
+            raise ValueError(f"Unknown zfactor chunk(s): {unknown!r}.")
+
+        chunks: dict[str, np.ndarray] = {}
+        for zfactor in self._ctx.zfactors:
+            out_name = str(zfactor.out_name or zfactor.name)
+            dims = self._zfactor_dims(zfactor)
+            if self._time_dim not in dims:
+                if zfactor.name in zfactor_values or out_name in zfactor_values:
+                    raise ValueError(
+                        f"Zfactor {out_name!r} does not include time and "
+                        "cannot be supplied per write."
+                    )
+                continue
+
+            value = _pop_zfactor_value(zfactor_values, zfactor)
+            must_supply = out_name in self._zarr_zfactor_arrays or _empty_zfactor(
+                zfactor
             )
-        new_shape = list(self._zarr_array.shape)
-        start = int(new_shape[self._time_dim_index])
-        stop = start + int(data.shape[self._time_dim_index])
-        new_shape[self._time_dim_index] = stop
-        self._zarr_array.resize(tuple(new_shape))
-        index = [slice(None)] * data.ndim
-        index[self._time_dim_index] = slice(start, stop)
-        self._zarr_array[tuple(index)] = data
+            if value is None:
+                if must_supply:
+                    raise ValueError(
+                        f"Time-varying zfactor {out_name!r} must be supplied "
+                        "for every write."
+                    )
+                continue
+            if self._write_count > 0 and out_name not in self._zarr_zfactor_arrays:
+                raise ValueError(
+                    f"Time-varying zfactor {out_name!r} cannot start being "
+                    "supplied after earlier writes omitted it."
+                )
+
+            data = np.asarray(value)
+            self._validate_zfactor_chunk_shape(
+                out_name,
+                data,
+                dims,
+                chunk_time_len,
+            )
+            validate_variable_values(
+                zfactor,
+                chunk_ctx.axes,
+                data,
+                dims,
+                chunk_ctx.axis_dims,
+                name=out_name,
+                table_id=str(zfactor.table_entry or "formula_terms"),
+            )
+            chunks[out_name] = data
+
+        if zfactor_values:
+            unknown = sorted(str(name) for name in zfactor_values)
+            raise ValueError(f"Unknown zfactor chunk(s): {unknown!r}.")
+        return chunks
+
+    def _validate_zfactor_chunk_shape(
+        self,
+        name: str,
+        data: np.ndarray,
+        dims: tuple[str, ...],
+        chunk_time_len: int,
+    ) -> None:
+        expected_shape = []
+        for dim in dims:
+            if dim == self._time_dim:
+                expected_shape.append(chunk_time_len)
+            else:
+                expected_shape.append(self._dimension_size(dim))
+        expected = tuple(expected_shape)
+        actual = tuple(int(size) for size in data.shape)
+        if actual != expected:
+            raise ValueError(
+                f"Zfactor {name!r} chunk shape {actual!r} does not match "
+                f"expected shape {expected!r} for dimensions {dims!r}."
+            )
+
+    def _append_zfactors_to_zarr(self, zfactors: Mapping[str, np.ndarray]) -> None:
+        for name, data in zfactors.items():
+            zfactor = self._zfactor_by_output_name(name)
+            dims = self._zfactor_dims(zfactor)
+            time_dim_index = dims.index(self._time_dim)
+            self._zarr_zfactor_arrays[name] = _append_array_to_zarr(
+                self._zarr_group,
+                self._zarr_zfactor_arrays.get(name),
+                name,
+                data,
+                time_dim_index,
+            )
+
+    def _final_zfactors(self, ctx: Any) -> tuple[ZFactor, ...]:
+        if not self._zarr_zfactor_arrays:
+            return ctx.zfactors
+
+        final_zfactors: list[ZFactor] = []
+        final_time_len = sum(int(values.shape[0]) for values in self._time_values)
+        for zfactor in ctx.zfactors:
+            out_name = str(zfactor.out_name or zfactor.name)
+            array = self._zarr_zfactor_arrays.get(out_name)
+            if array is None:
+                final_zfactors.append(zfactor)
+                continue
+            dims = self._zfactor_dims(zfactor)
+            if int(array.shape[dims.index(self._time_dim)]) != final_time_len:
+                raise ValueError(
+                    f"Time-varying zfactor {out_name!r} was not supplied "
+                    "for every write."
+                )
+            final_zfactors.append(zfactor.updated(values=_lazy_zarr_array(array)))
+        return tuple(final_zfactors)
+
+    def _zfactor_lookup(self) -> dict[str, ZFactor]:
+        lookup: dict[str, ZFactor] = {}
+        for zfactor in self._ctx.zfactors:
+            lookup[str(zfactor.name)] = zfactor
+            lookup[str(zfactor.out_name or zfactor.name)] = zfactor
+        return lookup
+
+    def _zfactor_by_output_name(self, out_name: str) -> ZFactor:
+        for zfactor in self._ctx.zfactors:
+            if str(zfactor.out_name or zfactor.name) == out_name:
+                return zfactor
+        raise ValueError(f"Unknown zfactor {out_name!r}.")
+
+    def _zfactor_dims(self, zfactor: ZFactor) -> tuple[str, ...]:
+        return named_dimensions(zfactor.dimensions or (), self._ctx.axis_dims)
 
     def _final_axes(self) -> tuple[Axis, ...]:
         axes = list(self._ctx.axes)
@@ -1224,6 +1356,53 @@ def _bounds_as_pairs(bounds: np.ndarray, time_len: int) -> np.ndarray:
         f"time_bounds shape {bounds.shape!r} does not match time_values length "
         f"{time_len}."
     )
+
+
+def _pop_zfactor_value(
+    values: dict[str, Any],
+    zfactor: ZFactor,
+) -> Any | None:
+    if zfactor.name in values:
+        return values.pop(zfactor.name)
+    out_name = str(zfactor.out_name or zfactor.name)
+    if out_name in values:
+        return values.pop(out_name)
+    return None
+
+
+def _empty_zfactor(zfactor: ZFactor) -> bool:
+    if zfactor.values is None:
+        return True
+    return np.asarray(zfactor.values).size == 0
+
+
+def _append_array_to_zarr(
+    group: Any,
+    array: Any | None,
+    name: str,
+    data: np.ndarray,
+    time_dim_index: int,
+) -> Any:
+    if array is None:
+        shape = list(data.shape)
+        shape[time_dim_index] = 0
+        chunks = tuple(max(1, int(size)) for size in data.shape)
+        array = _create_zarr_array(
+            group,
+            name,
+            shape=tuple(shape),
+            chunks=chunks,
+            dtype=data.dtype,
+        )
+    new_shape = list(array.shape)
+    start = int(new_shape[time_dim_index])
+    stop = start + int(data.shape[time_dim_index])
+    new_shape[time_dim_index] = stop
+    array.resize(tuple(new_shape))
+    index = [slice(None)] * data.ndim
+    index[time_dim_index] = slice(start, stop)
+    array[tuple(index)] = data
+    return array
 
 
 def _open_zarr_group(path: Path) -> Any:
