@@ -10,13 +10,11 @@ import xarray as xr
 from ..axis import Axis
 
 
-APPEND_IGNORED_GLOBAL_ATTRS = frozenset(
-    {
-        "creation_date",
-        "history",
-        "tracking_id",
-    }
-)
+APPEND_IGNORED_GLOBAL_ATTRS = frozenset({
+    "creation_date",
+    "history",
+    "tracking_id",
+})
 APPEND_IGNORED_VARIABLE_ATTRS = frozenset({"_FillValue"})
 
 
@@ -43,8 +41,7 @@ def find_time_axis(axes: Sequence[Axis]) -> tuple[int, Axis]:
         ):
             return index, axis
     raise ValueError(
-        "No time axis was found. Pass an axis with axis='T' or time-like "
-        "axis metadata."
+        "No time axis was found. Pass an axis with axis='T' or time-like axis metadata."
     )
 
 

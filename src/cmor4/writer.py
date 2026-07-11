@@ -1157,10 +1157,9 @@ class DatasetWriter:
                 "existing file."
             )
 
-        bounds_name = (
-            merged_ds[time_name].attrs.get("bounds")
-            or merged_ds[time_name].attrs.get("climatology")
-        )
+        bounds_name = merged_ds[time_name].attrs.get("bounds") or merged_ds[
+            time_name
+        ].attrs.get("climatology")
         if not bounds_name or str(bounds_name) not in merged_ds:
             return
 
