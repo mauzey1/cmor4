@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 import os
 from pathlib import Path
-import shutil
 import tempfile
 from typing import Any, Literal, Mapping, Sequence
 
@@ -25,6 +24,7 @@ from .utils.validation import (
     validate_variable_values,
 )
 from .utils.writer_helpers import find_time_axis
+from .utils.zarr_staging import ZarrStagingStore
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -292,16 +292,9 @@ class DatasetWriter:
             else None
         )
 
-        self.staging_root = Path(
-            tempfile.mkdtemp(
-                prefix="cmor4-datasetwriter-",
-                dir=str(staging_dir) if staging_dir is not None else None,
-            )
-        )
-        self.staging_path = self.staging_root / "staging.zarr"
-        self._zarr_group = _open_zarr_group(self.staging_path)
-        self._zarr_array: Any | None = None
-        self._zarr_zfactor_arrays: dict[str, Any] = {}
+        self._staging = ZarrStagingStore.create(staging_dir)
+        self.staging_root = self._staging.root
+        self.staging_path = self._staging.path
 
     def write(
         self,
@@ -539,7 +532,8 @@ class DatasetWriter:
         """
 
         self._ensure_open()
-        if self._zarr_array is None or self._write_count == 0:
+        var_name = self._ctx.variable.names()[0]
+        if self._staging.array(var_name) is None or self._write_count == 0:
             raise ValueError("Cannot close DatasetWriter before any data is written.")
 
         try:
@@ -552,7 +546,7 @@ class DatasetWriter:
                 self._ctx.grid,
             )
             final_ctx = replace(final_ctx, zfactors=self._final_zfactors(final_ctx))
-            data = _lazy_zarr_array(self._zarr_array)
+            data = self._staging.lazy_array(var_name)
             ds = create_dataset_from_validated_data(
                 final_ctx,
                 data,
@@ -591,7 +585,7 @@ class DatasetWriter:
                 self._prepare_next_segment()
             else:
                 self._closed = True
-                shutil.rmtree(self.staging_root, ignore_errors=True)
+                self._staging.cleanup()
             return result, output_path
 
     def __enter__(self) -> DatasetWriter:
@@ -608,7 +602,7 @@ class DatasetWriter:
                 self.close()
             elif self._first_write_after_preserve:
                 self._closed = True
-                shutil.rmtree(self.staging_root, ignore_errors=True)
+                self._staging.cleanup()
             else:
                 self.close()
         return False
@@ -616,6 +610,10 @@ class DatasetWriter:
     def _ensure_open(self) -> None:
         if self._closed:
             raise ValueError("DatasetWriter is already closed.")
+
+    @property
+    def _zarr_array(self) -> Any | None:
+        return self._staging.array(self._ctx.variable.names()[0])
 
     def _prepare_next_segment(self) -> None:
         if self._time_values and self._time_values[-1].size:
@@ -631,10 +629,7 @@ class DatasetWriter:
         self._time_offset = 0
         self._write_count = 0
         self._first_write_after_preserve = True
-        shutil.rmtree(self.staging_path, ignore_errors=True)
-        self._zarr_group = _open_zarr_group(self.staging_path)
-        self._zarr_array = None
-        self._zarr_zfactor_arrays = {}
+        self._staging.reset()
 
     def _time_chunk(
         self,
@@ -767,9 +762,7 @@ class DatasetWriter:
             )
 
     def _append_to_zarr(self, data: np.ndarray) -> None:
-        self._zarr_array = _append_array_to_zarr(
-            self._zarr_group,
-            self._zarr_array,
+        self._staging.append(
             self._ctx.variable.names()[0],
             data,
             self._time_dim_index,
@@ -783,7 +776,9 @@ class DatasetWriter:
     ) -> dict[str, np.ndarray]:
         zfactor_values = {str(name): value for name, value in (zfactors or {}).items()}
         lookup = self._zfactor_lookup()
-        unknown = sorted(str(name) for name in zfactor_values if str(name) not in lookup)
+        unknown = sorted(
+            str(name) for name in zfactor_values if str(name) not in lookup
+        )
         if unknown:
             raise ValueError(f"Unknown zfactor chunk(s): {unknown!r}.")
 
@@ -800,9 +795,7 @@ class DatasetWriter:
                 continue
 
             value = _pop_zfactor_value(zfactor_values, zfactor)
-            must_supply = out_name in self._zarr_zfactor_arrays or _empty_zfactor(
-                zfactor
-            )
+            must_supply = self._staging.has_array(out_name) or _empty_zfactor(zfactor)
             if value is None:
                 if must_supply:
                     raise ValueError(
@@ -810,7 +803,7 @@ class DatasetWriter:
                         "for every write."
                     )
                 continue
-            if self._write_count > 0 and out_name not in self._zarr_zfactor_arrays:
+            if self._write_count > 0 and not self._staging.has_array(out_name):
                 raise ValueError(
                     f"Time-varying zfactor {out_name!r} cannot start being "
                     "supplied after earlier writes omitted it."
@@ -865,23 +858,24 @@ class DatasetWriter:
             zfactor = self._zfactor_by_output_name(name)
             dims = self._zfactor_dims(zfactor)
             time_dim_index = dims.index(self._time_dim)
-            self._zarr_zfactor_arrays[name] = _append_array_to_zarr(
-                self._zarr_group,
-                self._zarr_zfactor_arrays.get(name),
+            self._staging.append(
                 name,
                 data,
                 time_dim_index,
             )
 
     def _final_zfactors(self, ctx: Any) -> tuple[ZFactor, ...]:
-        if not self._zarr_zfactor_arrays:
+        if not any(
+            self._staging.has_array(str(zfactor.out_name or zfactor.name))
+            for zfactor in ctx.zfactors
+        ):
             return ctx.zfactors
 
         final_zfactors: list[ZFactor] = []
         final_time_len = sum(int(values.shape[0]) for values in self._time_values)
         for zfactor in ctx.zfactors:
             out_name = str(zfactor.out_name or zfactor.name)
-            array = self._zarr_zfactor_arrays.get(out_name)
+            array = self._staging.array(out_name)
             if array is None:
                 final_zfactors.append(zfactor)
                 continue
@@ -891,7 +885,9 @@ class DatasetWriter:
                     f"Time-varying zfactor {out_name!r} was not supplied "
                     "for every write."
                 )
-            final_zfactors.append(zfactor.updated(values=_lazy_zarr_array(array)))
+            final_zfactors.append(
+                zfactor.updated(values=self._staging.lazy_array(out_name))
+            )
         return tuple(final_zfactors)
 
     def _zfactor_lookup(self) -> dict[str, ZFactor]:
@@ -1374,75 +1370,3 @@ def _empty_zfactor(zfactor: ZFactor) -> bool:
     if zfactor.values is None:
         return True
     return np.asarray(zfactor.values).size == 0
-
-
-def _append_array_to_zarr(
-    group: Any,
-    array: Any | None,
-    name: str,
-    data: np.ndarray,
-    time_dim_index: int,
-) -> Any:
-    if array is None:
-        shape = list(data.shape)
-        shape[time_dim_index] = 0
-        chunks = tuple(max(1, int(size)) for size in data.shape)
-        array = _create_zarr_array(
-            group,
-            name,
-            shape=tuple(shape),
-            chunks=chunks,
-            dtype=data.dtype,
-        )
-    new_shape = list(array.shape)
-    start = int(new_shape[time_dim_index])
-    stop = start + int(data.shape[time_dim_index])
-    new_shape[time_dim_index] = stop
-    array.resize(tuple(new_shape))
-    index = [slice(None)] * data.ndim
-    index[time_dim_index] = slice(start, stop)
-    array[tuple(index)] = data
-    return array
-
-
-def _open_zarr_group(path: Path) -> Any:
-    try:
-        import zarr
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(
-            "DatasetWriter requires the optional runtime dependency 'zarr'. "
-            "Install cmor4 with current project dependencies before using it."
-        ) from exc
-    return zarr.open_group(str(path), mode="w")
-
-
-def _lazy_zarr_array(array: Any) -> Any:
-    try:
-        import dask.array as da
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(
-            "DatasetWriter requires the runtime dependency 'dask[array]' "
-            "to finalize staged Zarr data without loading it into memory."
-        ) from exc
-    data = da.from_zarr(array)
-    byteorder = getattr(data.dtype, "byteorder", None)
-    if byteorder not in (None, "=", "|"):
-        dtype = data.dtype.newbyteorder("=")
-        data = data.map_blocks(
-            lambda block: block.astype(dtype, copy=False),
-            meta=np.array([], dtype=dtype),
-        )
-    return data
-
-
-def _create_zarr_array(
-    group: Any,
-    name: str,
-    *,
-    shape: tuple[int, ...],
-    chunks: tuple[int, ...],
-    dtype: np.dtype[Any],
-) -> Any:
-    if hasattr(group, "create_array"):
-        return group.create_array(name, shape=shape, chunks=chunks, dtype=dtype)
-    return group.create_dataset(name, shape=shape, chunks=chunks, dtype=dtype)
