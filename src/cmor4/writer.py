@@ -237,6 +237,22 @@ class DatasetWriter:
     >>> writer.path = Path("segment-2.nc")
     >>> writer.write(data2, time_values=[115.0], time_bounds=[[100.0, 130.0]])
     >>> ds2, path2 = writer.close()
+
+    **Incremental zfactor writes (hybrid coordinates):**
+
+    >>> # Define zfactors without values for time-varying terms
+    >>> zfactors = [
+    ...     project.zfactor("a", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+    ...     project.zfactor("b", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+    ...     project.zfactor("p0", values=100000.0),
+    ...     project.zfactor("ps"),  # Time-varying - no values
+    ... ]
+    >>> with cmor4.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
+    ...     # Provide ps values per chunk
+    ...     ps_chunk1 = np.full((12, 180, 360), 99000.0, dtype="f4")
+    ...     writer.write(data[:12], time_values=times[:12], zfactors={"ps": ps_chunk1})
+    ...     ps_chunk2 = np.full((12, 180, 360), 99100.0, dtype="f4")
+    ...     writer.write(data[12:], time_values=times[12:], zfactors={"ps": ps_chunk2})
     """
 
     def __init__(
