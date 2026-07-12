@@ -669,3 +669,101 @@ class DatasetWriterTest(unittest.TestCase):
 
             # Files should be different
             self.assertNotEqual(path1, path2)
+
+
+class TestDatasetWriterEncoding(unittest.TestCase):
+    """Tests for NetCDF encoding with DatasetWriter."""
+
+    def setUp(self):
+        self.project = cmip7_project("tables/CMIP7_ocean.json")
+
+    def test_compression(self):
+        """Test that compression is applied correctly."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            axes = [time_axis(self.project), *horizontal_axes(self.project)]
+
+            # Specify compression (DatasetWriter applies auto-chunking for CMIP7)
+            encoding = {
+                "tos": {
+                    "zlib": True,
+                    "complevel": 4,
+                    "shuffle": True,
+                }
+            }
+
+            with cmor4.DatasetWriter(info, variable, axes, encoding=encoding) as writer:
+                data = np.arange(4, dtype="f4").reshape(1, 2, 2)
+                writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+
+            # Verify compression was applied
+            files = list(tmp_path.rglob("*.nc"))
+            self.assertEqual(len(files), 1)
+
+            with xr.open_dataset(files[0], decode_times=False) as ds:
+                # Check compression encoding
+                enc = ds["tos"].encoding
+                self.assertTrue(enc.get("zlib", False))
+                self.assertGreater(enc.get("complevel", 0), 0)
+                self.assertTrue(enc.get("shuffle", False))
+
+    def test_encoding_with_incremental_writes(self):
+        """Test encoding is maintained across incremental writes."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            axes = [time_axis(self.project), *horizontal_axes(self.project)]
+
+            encoding = {
+                "tos": {
+                    "zlib": True,
+                    "complevel": 4,
+                }
+            }
+
+            with cmor4.DatasetWriter(info, variable, axes, encoding=encoding) as writer:
+                # First write
+                data1 = np.arange(4, dtype="f4").reshape(1, 2, 2)
+                writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+
+                # Second write
+                data2 = np.arange(4, 8, dtype="f4").reshape(1, 2, 2)
+                writer.write(data2, time_values=[45.0], time_bounds=[[30.0, 60.0]])
+
+            # Verify encoding was maintained
+            files = list(tmp_path.rglob("*.nc"))
+            self.assertEqual(len(files), 1)
+
+            with xr.open_dataset(files[0], decode_times=False) as ds:
+                enc = ds["tos"].encoding
+                self.assertTrue(enc.get("zlib", False))
+                self.assertEqual(enc.get("complevel"), 4)
+                # Verify both time slices are present
+                self.assertEqual(ds["tos"].shape, (2, 2, 2))
+
+    def test_auto_chunking_applied(self):
+        """Test that CMIP7 auto-chunking is applied when not explicitly specified."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            axes = [time_axis(self.project), *horizontal_axes(self.project)]
+
+            # No encoding specified - should get auto-chunking
+            with cmor4.DatasetWriter(info, variable, axes) as writer:
+                data = np.arange(4, dtype="f4").reshape(1, 2, 2)
+                writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+
+            # Verify chunking was applied (CMIP7 auto-chunking)
+            files = list(tmp_path.rglob("*.nc"))
+            self.assertEqual(len(files), 1)
+
+            with xr.open_dataset(files[0], decode_times=False) as ds:
+                # Check that variable has chunking
+                self.assertIsNotNone(ds["tos"].encoding.get("chunksizes"))
+                # Should have time-unlimited chunking
+                chunks = ds["tos"].encoding["chunksizes"]
+                self.assertEqual(chunks[0], 1)  # time dimension
