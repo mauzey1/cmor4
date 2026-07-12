@@ -1465,14 +1465,12 @@ class TestDatasetWriterIntegration01(unittest.TestCase):
             ],
             dtype="f4",
         ).reshape(2, 3, 4)
-        np.testing.assert_array_almost_equal(
-            self.ds["tos"].values, data_ref, decimal=4
-        )
+        np.testing.assert_array_almost_equal(self.ds["tos"].values, data_ref, decimal=4)
 
 
 @_requires_tables
 class TestDatasetWriterIntegration05(unittest.TestCase):
-    """Example 5 rewritten with DatasetWriter: hybrid sigma with incremental zfactors."""
+    """Example 5 rewritten with DatasetWriter: incremental zfactors."""
 
     _LEV_VALS = np.array([0.92, 0.72, 0.50, 0.30, 0.10], dtype="d")
     _LEV_BNDS = np.array(
