@@ -693,10 +693,16 @@ class DatasetWriterEdgeCaseTests(unittest.TestCase):
 
             # CMIP7 DRS typically formats monthly data as YYYYMM-YYYYMM
             # For Jan-Feb 2000, we expect 200001-200002 in the filename
-            self.assertIn("200001", filename,
-                         f"January 2000 (200001) not found in filename: {filename}")
-            self.assertIn("200002", filename,
-                         f"February 2000 (200002) not found in filename: {filename}")
+            self.assertIn(
+                "200001",
+                filename,
+                f"January 2000 (200001) not found in filename: {filename}",
+            )
+            self.assertIn(
+                "200002",
+                filename,
+                f"February 2000 (200002) not found in filename: {filename}",
+            )
 
             # Verify the dataset actually contains the expected time range
             self.assertEqual(len(ds["time"]), 2)

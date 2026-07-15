@@ -667,13 +667,11 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 mask_and_scale=False,
             ) as opened:
                 rewritten = opened.load()
-            rewritten.attrs.update(
-                {
-                    "history": old_history,
-                    "creation_date": old_creation_date,
-                    "tracking_id": old_tracking_id,
-                }
-            )
+            rewritten.attrs.update({
+                "history": old_history,
+                "creation_date": old_creation_date,
+                "tracking_id": old_tracking_id,
+            })
             rewritten.to_netcdf(output_path)
             rewritten.close()
 

@@ -142,8 +142,8 @@ def add_zfactor(
 ) -> str:
     name = zfactor.name
     out_name = str(zfactor.out_name or name)
-    values = zfactor.values_array()
     dims = named_dimensions(zfactor.dimensions or (), axis_dims)
+    values = _zfactor_values(zfactor)
     if not dims and values.size == 1:
         values = values.reshape(())
     attrs = zfactor.attributes()
@@ -161,6 +161,13 @@ def add_zfactor(
         attrs["bounds"] = bounds_name
         data_vars[out_name] = (dims, values, attrs)
     return out_name
+
+
+def _zfactor_values(zfactor: ZFactor) -> Any:
+    values = zfactor.values
+    if values is not None and hasattr(values, "__dask_graph__"):
+        return values
+    return zfactor.values_array()
 
 
 def set_formula_terms(

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import os
 from pathlib import Path
-import shutil
-import tempfile
 from typing import Any, Literal, Mapping, Sequence
 
 import numpy as np
@@ -18,10 +17,26 @@ from .dataset import (
 from .datasetinfo import DatasetInfo
 from .grid import Grid
 from .utils.validation import (
+    named_dimensions,
     validate_data_chunk,
     validate_metadata,
+    validate_variable_values,
 )
-from .utils.writer_helpers import find_time_axis
+from .utils.writer_helpers import (
+    APPEND_IGNORED_GLOBAL_ATTRS,
+    APPEND_IGNORED_VARIABLE_ATTRS,
+    array_values_equal,
+    attribute_diff_messages,
+    bounds_as_pairs,
+    find_time_axis,
+    metadata_time_axis,
+    normalize_attrs,
+    prepare_append_attrs,
+    prepare_append_encoding,
+    temporary_netcdf_path,
+    time_coord_name,
+)
+from .utils.zarr_staging import ZarrStagingStore
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -95,7 +110,6 @@ class DatasetWriter:
 
     **Limitations:**
 
-    - Per-chunk zfactor writes are not yet implemented
     - Only time dimension supports incremental writes; spatial axes must have
       complete values at initialization
 
@@ -115,8 +129,9 @@ class DatasetWriter:
         Output file path. If ``None``, path is generated from dataset and
         variable metadata according to project conventions (e.g., CMIP7 DRS).
     zfactors : Sequence[ZFactor], optional
-        Formula term variables for dimensionless vertical coordinates.
-        Per-chunk zfactor writes are not yet supported in Phase 1.
+        Formula term variables for dimensionless vertical coordinates. Static
+        zfactors can include complete values here. Time-varying zfactors may
+        omit values and provide them per chunk via :meth:`write`.
     grid : Grid, optional
         Grid mapping and spatial coordinate metadata for curvilinear grids.
     existing : {"error", "replace", "append"}, default "error"
@@ -222,6 +237,22 @@ class DatasetWriter:
     >>> writer.path = Path("segment-2.nc")
     >>> writer.write(data2, time_values=[115.0], time_bounds=[[100.0, 130.0]])
     >>> ds2, path2 = writer.close()
+
+    **Incremental zfactor writes (hybrid coordinates):**
+
+    >>> # Define zfactors without values for time-varying terms
+    >>> zfactors = [
+    ...     project.zfactor("a", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+    ...     project.zfactor("b", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+    ...     project.zfactor("p0", values=100000.0),
+    ...     project.zfactor("ps"),  # Time-varying - no values
+    ... ]
+    >>> with cmor4.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
+    ...     # Provide ps values per chunk
+    ...     ps_chunk1 = np.full((12, 180, 360), 99000.0, dtype="f4")
+    ...     writer.write(data[:12], time_values=times[:12], zfactors={"ps": ps_chunk1})
+    ...     ps_chunk2 = np.full((12, 180, 360), 99100.0, dtype="f4")
+    ...     writer.write(data[12:], time_values=times[12:], zfactors={"ps": ps_chunk2})
     """
 
     def __init__(
@@ -259,7 +290,7 @@ class DatasetWriter:
         input_axes = tuple(axes)
         input_time_index, input_time_axis = find_time_axis(input_axes)
         metadata_axes = list(input_axes)
-        metadata_axes[input_time_index] = _metadata_time_axis(input_time_axis)
+        metadata_axes[input_time_index] = metadata_time_axis(input_time_axis)
 
         self._ctx = validate_metadata(
             dataset,
@@ -281,7 +312,7 @@ class DatasetWriter:
         self._time_dim_index = self._ctx.dims.index(self._time_dim)
         self._initial_time_values = input_time_axis.values_array()
         self._initial_time_bounds = (
-            _bounds_as_pairs(
+            bounds_as_pairs(
                 input_time_axis.bounds_array(),
                 len(self._initial_time_values),
             )
@@ -289,15 +320,9 @@ class DatasetWriter:
             else None
         )
 
-        self.staging_root = Path(
-            tempfile.mkdtemp(
-                prefix="cmor4-datasetwriter-",
-                dir=str(staging_dir) if staging_dir is not None else None,
-            )
-        )
-        self.staging_path = self.staging_root / "staging.zarr"
-        self._zarr_group = _open_zarr_group(self.staging_path)
-        self._zarr_array: Any | None = None
+        self._staging = ZarrStagingStore.create(staging_dir)
+        self.staging_root = self._staging.root
+        self.staging_path = self._staging.path
 
     def write(
         self,
@@ -335,7 +360,8 @@ class DatasetWriter:
             bounds are used. If bounds are provided in any write for a given
             output file, they must be provided in every write for that file.
         zfactors : Mapping[str, array-like], optional
-            Per-chunk zfactor data. Not yet implemented in Phase 1.
+            Per-chunk zfactor data. Keys may be zfactor names or output names;
+            values must match the zfactor dimensions for this write chunk.
 
         Raises
         ------
@@ -355,8 +381,9 @@ class DatasetWriter:
             If time_values are omitted but time axis has no pre-specified values.
         AxisValidationError
             If time values fail validation (e.g., units mismatch).
-        NotImplementedError
-            If zfactors are provided (Phase 3 feature).
+        ValueError
+            If a per-chunk zfactor is unknown, missing for a chunk that requires
+            it, or has a shape that does not match resolved zfactor dimensions.
 
         Examples
         --------
@@ -409,11 +436,6 @@ class DatasetWriter:
         """
 
         self._ensure_open()
-        if zfactors:
-            raise NotImplementedError(
-                "Per-chunk zfactor writes are planned for DatasetWriter Phase 3."
-            )
-
         data_array = np.asarray(data)
         chunk_time_values, chunk_time_bounds = self._time_chunk(
             data_array,
@@ -437,8 +459,14 @@ class DatasetWriter:
         )
         validated_data = validate_data_chunk(chunk_ctx, data_array)
         self._validate_chunk_shape(validated_data, len(chunk_time_values))
+        zfactor_chunks = self._validate_zfactor_chunks(
+            zfactors,
+            chunk_ctx,
+            len(chunk_time_values),
+        )
         self._validate_time_order(chunk_time_values, chunk_time_bounds)
         self._append_to_zarr(validated_data)
+        self._append_zfactors_to_zarr(zfactor_chunks)
 
         self._time_values.append(chunk_time_values)
         if chunk_time_bounds is not None:
@@ -532,7 +560,8 @@ class DatasetWriter:
         """
 
         self._ensure_open()
-        if self._zarr_array is None or self._write_count == 0:
+        var_name = self._ctx.variable.names()[0]
+        if self._staging.array(var_name) is None or self._write_count == 0:
             raise ValueError("Cannot close DatasetWriter before any data is written.")
 
         try:
@@ -544,7 +573,8 @@ class DatasetWriter:
                 self._ctx.zfactors,
                 self._ctx.grid,
             )
-            data = _lazy_zarr_array(self._zarr_array)
+            final_ctx = replace(final_ctx, zfactors=self._final_zfactors(final_ctx))
+            data = self._staging.lazy_array(var_name)
             ds = create_dataset_from_validated_data(
                 final_ctx,
                 data,
@@ -583,7 +613,7 @@ class DatasetWriter:
                 self._prepare_next_segment()
             else:
                 self._closed = True
-                shutil.rmtree(self.staging_root, ignore_errors=True)
+                self._staging.cleanup()
             return result, output_path
 
     def __enter__(self) -> DatasetWriter:
@@ -600,7 +630,7 @@ class DatasetWriter:
                 self.close()
             elif self._first_write_after_preserve:
                 self._closed = True
-                shutil.rmtree(self.staging_root, ignore_errors=True)
+                self._staging.cleanup()
             else:
                 self.close()
         return False
@@ -608,6 +638,10 @@ class DatasetWriter:
     def _ensure_open(self) -> None:
         if self._closed:
             raise ValueError("DatasetWriter is already closed.")
+
+    @property
+    def _zarr_array(self) -> Any | None:
+        return self._staging.array(self._ctx.variable.names()[0])
 
     def _prepare_next_segment(self) -> None:
         if self._time_values and self._time_values[-1].size:
@@ -623,9 +657,7 @@ class DatasetWriter:
         self._time_offset = 0
         self._write_count = 0
         self._first_write_after_preserve = True
-        shutil.rmtree(self.staging_path, ignore_errors=True)
-        self._zarr_group = _open_zarr_group(self.staging_path)
-        self._zarr_array = None
+        self._staging.reset()
 
     def _time_chunk(
         self,
@@ -655,16 +687,26 @@ class DatasetWriter:
             values = np.asarray(self._initial_time_values[self._time_offset : end])
             if time_bounds is None and self._initial_time_bounds is not None:
                 bounds = np.asarray(self._initial_time_bounds[self._time_offset : end])
+            elif time_bounds is None:
+                bounds = None
             else:
-                bounds = _coerce_time_bounds(time_bounds, chunk_len)
+                bounds = bounds_as_pairs(np.asarray(time_bounds), chunk_len)
         else:
-            values = _coerce_time_values(time_values)
+            values = np.asarray(time_values)
+            if values.ndim == 0:
+                values = values.reshape(1)
+            elif values.ndim != 1:
+                raise ValueError("time_values must be a one-dimensional array.")
             if values.shape[0] != chunk_len:
                 raise ValueError(
                     f"time_values length {values.shape[0]} does not match "
                     f"the data chunk time length {chunk_len}."
                 )
-            bounds = _coerce_time_bounds(time_bounds, chunk_len)
+            bounds = (
+                None
+                if time_bounds is None
+                else bounds_as_pairs(np.asarray(time_bounds), chunk_len)
+            )
         return values, bounds
 
     def _axes_with_time(
@@ -758,25 +800,159 @@ class DatasetWriter:
             )
 
     def _append_to_zarr(self, data: np.ndarray) -> None:
-        if self._zarr_array is None:
-            shape = list(data.shape)
-            shape[self._time_dim_index] = 0
-            chunks = tuple(max(1, int(size)) for size in data.shape)
-            self._zarr_array = _create_zarr_array(
-                self._zarr_group,
-                self._ctx.variable.names()[0],
-                shape=tuple(shape),
-                chunks=chunks,
-                dtype=data.dtype,
+        self._staging.append(
+            self._ctx.variable.names()[0],
+            data,
+            self._time_dim_index,
+        )
+
+    def _validate_zfactor_chunks(
+        self,
+        zfactors: Mapping[str, Any] | None,
+        chunk_ctx: Any,
+        chunk_time_len: int,
+    ) -> dict[str, np.ndarray]:
+        zfactor_values = {str(name): value for name, value in (zfactors or {}).items()}
+        lookup = self._zfactor_lookup()
+        unknown = sorted(
+            str(name) for name in zfactor_values if str(name) not in lookup
+        )
+        if unknown:
+            raise ValueError(f"Unknown zfactor chunk(s): {unknown!r}.")
+
+        chunks: dict[str, np.ndarray] = {}
+        for zfactor in self._ctx.zfactors:
+            out_name = str(zfactor.out_name or zfactor.name)
+            dims = self._zfactor_dims(zfactor)
+            if self._time_dim not in dims:
+                if zfactor.name in zfactor_values or out_name in zfactor_values:
+                    raise ValueError(
+                        f"Zfactor {out_name!r} does not include time and "
+                        "cannot be supplied per write."
+                    )
+                continue
+
+            name = str(zfactor.name)
+            if name in zfactor_values:
+                value = zfactor_values.pop(name)
+            elif out_name in zfactor_values:
+                value = zfactor_values.pop(out_name)
+            else:
+                value = None
+            must_supply = (
+                self._staging.has_array(out_name)
+                or zfactor.values is None
+                or np.asarray(zfactor.values).size == 0
             )
-        new_shape = list(self._zarr_array.shape)
-        start = int(new_shape[self._time_dim_index])
-        stop = start + int(data.shape[self._time_dim_index])
-        new_shape[self._time_dim_index] = stop
-        self._zarr_array.resize(tuple(new_shape))
-        index = [slice(None)] * data.ndim
-        index[self._time_dim_index] = slice(start, stop)
-        self._zarr_array[tuple(index)] = data
+            if value is None:
+                if must_supply:
+                    raise ValueError(
+                        f"Time-varying zfactor {out_name!r} must be supplied "
+                        "for every write."
+                    )
+                continue
+            if self._write_count > 0 and not self._staging.has_array(out_name):
+                raise ValueError(
+                    f"Time-varying zfactor {out_name!r} cannot start being "
+                    "supplied after earlier writes omitted it."
+                )
+
+            data = np.asarray(value)
+            self._validate_zfactor_chunk_shape(
+                out_name,
+                data,
+                dims,
+                chunk_time_len,
+            )
+            validate_variable_values(
+                zfactor,
+                chunk_ctx.axes,
+                data,
+                dims,
+                chunk_ctx.axis_dims,
+                name=out_name,
+                table_id=str(zfactor.table_entry or "formula_terms"),
+            )
+            chunks[out_name] = data
+
+        if zfactor_values:
+            unknown = sorted(str(name) for name in zfactor_values)
+            raise ValueError(f"Unknown zfactor chunk(s): {unknown!r}.")
+        return chunks
+
+    def _validate_zfactor_chunk_shape(
+        self,
+        name: str,
+        data: np.ndarray,
+        dims: tuple[str, ...],
+        chunk_time_len: int,
+    ) -> None:
+        expected_shape = []
+        for dim in dims:
+            if dim == self._time_dim:
+                expected_shape.append(chunk_time_len)
+            else:
+                expected_shape.append(self._dimension_size(dim))
+        expected = tuple(expected_shape)
+        actual = tuple(int(size) for size in data.shape)
+        if actual != expected:
+            raise ValueError(
+                f"Zfactor {name!r} chunk shape {actual!r} does not match "
+                f"expected shape {expected!r} for dimensions {dims!r}."
+            )
+
+    def _append_zfactors_to_zarr(self, zfactors: Mapping[str, np.ndarray]) -> None:
+        for name, data in zfactors.items():
+            zfactor = self._zfactor_by_output_name(name)
+            dims = self._zfactor_dims(zfactor)
+            time_dim_index = dims.index(self._time_dim)
+            self._staging.append(
+                name,
+                data,
+                time_dim_index,
+            )
+
+    def _final_zfactors(self, ctx: Any) -> tuple[ZFactor, ...]:
+        if not any(
+            self._staging.has_array(str(zfactor.out_name or zfactor.name))
+            for zfactor in ctx.zfactors
+        ):
+            return ctx.zfactors
+
+        final_zfactors: list[ZFactor] = []
+        final_time_len = sum(int(values.shape[0]) for values in self._time_values)
+        for zfactor in ctx.zfactors:
+            out_name = str(zfactor.out_name or zfactor.name)
+            array = self._staging.array(out_name)
+            if array is None:
+                final_zfactors.append(zfactor)
+                continue
+            dims = self._zfactor_dims(zfactor)
+            if int(array.shape[dims.index(self._time_dim)]) != final_time_len:
+                raise ValueError(
+                    f"Time-varying zfactor {out_name!r} was not supplied "
+                    "for every write."
+                )
+            final_zfactors.append(
+                zfactor.updated(values=self._staging.lazy_array(out_name))
+            )
+        return tuple(final_zfactors)
+
+    def _zfactor_lookup(self) -> dict[str, ZFactor]:
+        lookup: dict[str, ZFactor] = {}
+        for zfactor in self._ctx.zfactors:
+            lookup[str(zfactor.name)] = zfactor
+            lookup[str(zfactor.out_name or zfactor.name)] = zfactor
+        return lookup
+
+    def _zfactor_by_output_name(self, out_name: str) -> ZFactor:
+        for zfactor in self._ctx.zfactors:
+            if str(zfactor.out_name or zfactor.name) == out_name:
+                return zfactor
+        raise ValueError(f"Unknown zfactor {out_name!r}.")
+
+    def _zfactor_dims(self, zfactor: ZFactor) -> tuple[str, ...]:
+        return named_dimensions(zfactor.dimensions or (), self._ctx.axis_dims)
 
     def _final_axes(self) -> tuple[Axis, ...]:
         axes = list(self._ctx.axes)
@@ -816,7 +992,7 @@ class DatasetWriter:
         )
         new_check_ds: xr.Dataset | None = None
         try:
-            check_path = _temporary_netcdf_path(output_path)
+            check_path = temporary_netcdf_path(output_path)
             write_netcdf(
                 new_ds,
                 self._ctx.dataset,
@@ -824,7 +1000,11 @@ class DatasetWriter:
                 path=check_path,
                 **self.to_netcdf_kwargs,
             )
-            _ensure_nonempty_file(check_path, "Append compatibility check")
+            if not check_path.exists() or check_path.stat().st_size == 0:
+                raise OSError(
+                    "Append compatibility check did not create a valid "
+                    f"temporary file {str(check_path)!r}."
+                )
             new_check_ds = xr.open_dataset(
                 check_path,
                 decode_times=False,
@@ -841,9 +1021,9 @@ class DatasetWriter:
                 combine_attrs="override",
             )
             self._validate_merged_time(merged_ds)
-            _prepare_append_encoding(merged_ds, new_ds)
-            _prepare_append_attrs(merged_ds, existing_ds, new_ds)
-            temp_path = _temporary_netcdf_path(output_path)
+            prepare_append_encoding(merged_ds, new_ds)
+            prepare_append_attrs(merged_ds, existing_ds, new_ds)
+            temp_path = temporary_netcdf_path(output_path)
             write_netcdf(
                 merged_ds,
                 self._ctx.dataset,
@@ -851,7 +1031,11 @@ class DatasetWriter:
                 path=temp_path,
                 **self.to_netcdf_kwargs,
             )
-            _ensure_nonempty_file(temp_path, "Append write")
+            if not temp_path.exists() or temp_path.stat().st_size == 0:
+                raise OSError(
+                    "Append write did not create a valid temporary file "
+                    f"{str(temp_path)!r}."
+                )
         except Exception:
             if temp_path is not None:
                 temp_path.unlink(missing_ok=True)
@@ -900,17 +1084,17 @@ class DatasetWriter:
                     f"existing file and {size!r} in the new dataset"
                 )
 
-        existing_attrs = _normalize_attrs(
+        existing_attrs = normalize_attrs(
             existing_ds.attrs,
-            ignored=_APPEND_IGNORED_GLOBAL_ATTRS,
+            ignored=APPEND_IGNORED_GLOBAL_ATTRS,
         )
-        new_attrs = _normalize_attrs(
+        new_attrs = normalize_attrs(
             new_ds.attrs,
-            ignored=_APPEND_IGNORED_GLOBAL_ATTRS,
+            ignored=APPEND_IGNORED_GLOBAL_ATTRS,
         )
         if existing_attrs != new_attrs:
             issues.extend(
-                _attribute_diff_messages(
+                attribute_diff_messages(
                     "global attribute",
                     existing_attrs,
                     new_attrs,
@@ -931,17 +1115,17 @@ class DatasetWriter:
                     f"variable {name!r} has dtype {existing_var.dtype!r} in "
                     f"the existing file and {new_var.dtype!r} in the new dataset"
                 )
-            existing_var_attrs = _normalize_attrs(
+            existing_var_attrs = normalize_attrs(
                 existing_var.attrs,
-                ignored=_APPEND_IGNORED_VARIABLE_ATTRS,
+                ignored=APPEND_IGNORED_VARIABLE_ATTRS,
             )
-            new_var_attrs = _normalize_attrs(
+            new_var_attrs = normalize_attrs(
                 new_var.attrs,
-                ignored=_APPEND_IGNORED_VARIABLE_ATTRS,
+                ignored=APPEND_IGNORED_VARIABLE_ATTRS,
             )
             if existing_var_attrs != new_var_attrs:
                 issues.extend(
-                    _attribute_diff_messages(
+                    attribute_diff_messages(
                         f"variable {name!r} attribute",
                         existing_var_attrs,
                         new_var_attrs,
@@ -967,7 +1151,7 @@ class DatasetWriter:
                     f"in the existing file and {new_var.shape!r} in the new dataset"
                 )
                 continue
-            if not _array_values_equal(existing_var.values, new_var.values):
+            if not array_values_equal(existing_var.values, new_var.values):
                 issues.append(f"variable {name!r} values differ")
 
         if issues:
@@ -977,7 +1161,7 @@ class DatasetWriter:
             )
 
     def _validate_merged_time(self, merged_ds: xr.Dataset) -> None:
-        time_name = _time_coord_name(merged_ds, self._time_dim, self._time_axis)
+        time_name = time_coord_name(merged_ds, self._time_dim, self._time_axis)
         values = np.asarray(merged_ds[time_name].values)
         if values.ndim != 1:
             raise ValueError(
@@ -989,14 +1173,13 @@ class DatasetWriter:
                 "existing file."
             )
 
-        bounds_name = (
-            merged_ds[time_name].attrs.get("bounds")
-            or merged_ds[time_name].attrs.get("climatology")
-        )
+        bounds_name = merged_ds[time_name].attrs.get("bounds") or merged_ds[
+            time_name
+        ].attrs.get("climatology")
         if not bounds_name or str(bounds_name) not in merged_ds:
             return
 
-        bounds = _bounds_as_pairs(
+        bounds = bounds_as_pairs(
             np.asarray(merged_ds[str(bounds_name)].values),
             int(values.size),
         )
@@ -1014,256 +1197,3 @@ class DatasetWriter:
             raise ValueError(
                 "Appended time bounds must be contiguous with the existing file."
             )
-
-
-_APPEND_IGNORED_GLOBAL_ATTRS = frozenset(
-    {
-        "creation_date",
-        "history",
-        "tracking_id",
-    }
-)
-_APPEND_IGNORED_VARIABLE_ATTRS = frozenset({"_FillValue"})
-
-
-def _temporary_netcdf_path(output_path: Path) -> Path:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        dir=output_path.parent,
-        prefix=f".{output_path.name}.",
-        suffix=".tmp",
-        delete=False,
-    ) as handle:
-        return Path(handle.name)
-
-
-def _ensure_nonempty_file(path: Path, operation: str) -> None:
-    if not path.exists() or path.stat().st_size == 0:
-        raise OSError(
-            f"{operation} did not create a valid temporary file {str(path)!r}."
-        )
-
-
-def _prepare_append_encoding(merged_ds: xr.Dataset, new_ds: xr.Dataset) -> None:
-    for name in merged_ds.variables:
-        name_str = str(name)
-        encoding = (
-            dict(new_ds[name_str].encoding) if name_str in new_ds.variables else {}
-        )
-        for transient_key in ("preferred_chunks", "source", "original_shape"):
-            encoding.pop(transient_key, None)
-
-        array = merged_ds[name_str]
-        chunksizes = encoding.get("chunksizes")
-        if chunksizes is not None:
-            normalized_chunksizes = tuple(
-                min(int(chunk), int(size))
-                for chunk, size in zip(tuple(chunksizes), array.shape, strict=False)
-            )
-            if _is_time_metadata_variable(name_str, array, merged_ds):
-                normalized_chunksizes = tuple(int(size) for size in array.shape)
-            encoding["chunksizes"] = normalized_chunksizes
-
-        array.encoding.clear()
-        array.encoding.update(encoding)
-        if "_FillValue" in array.attrs and "_FillValue" in array.encoding:
-            array.attrs.pop("_FillValue", None)
-
-
-def _prepare_append_attrs(
-    merged_ds: xr.Dataset,
-    existing_ds: xr.Dataset,
-    new_ds: xr.Dataset,
-) -> None:
-    attrs = dict(merged_ds.attrs)
-    if "history" in existing_ds.attrs:
-        attrs["history"] = existing_ds.attrs["history"]
-    for name in ("creation_date", "tracking_id"):
-        if name in new_ds.attrs:
-            attrs[name] = new_ds.attrs[name]
-    merged_ds.attrs = attrs
-
-
-def _is_time_metadata_variable(
-    name: str,
-    array: xr.DataArray,
-    ds: xr.Dataset,
-) -> bool:
-    lower_name = name.lower()
-    if lower_name == "time" or lower_name.startswith("time"):
-        return True
-    for coord_name in ds.coords:
-        coord = ds[str(coord_name)]
-        if name in {
-            str(coord.attrs.get("bounds", "")),
-            str(coord.attrs.get("climatology", "")),
-        }:
-            return True
-    return array.ndim > 0 and all(
-        str(dim).lower() in {"time", "bnds"} or str(dim).lower().startswith("time")
-        for dim in array.dims
-    )
-
-
-def _normalize_attrs(
-    attrs: Mapping[Any, Any],
-    *,
-    ignored: frozenset[str],
-) -> dict[str, Any]:
-    normalized: dict[str, Any] = {}
-    for key, value in attrs.items():
-        key_str = str(key)
-        if key_str in ignored:
-            continue
-        normalized[key_str] = _normalize_attr_value(value)
-    return normalized
-
-
-def _normalize_attr_value(value: Any) -> Any:
-    if isinstance(value, np.ndarray):
-        return tuple(_normalize_attr_value(item) for item in value.tolist())
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, (list, tuple)):
-        return tuple(_normalize_attr_value(item) for item in value)
-    return value
-
-
-def _attribute_diff_messages(
-    label: str,
-    existing_attrs: Mapping[str, Any],
-    new_attrs: Mapping[str, Any],
-) -> list[str]:
-    messages: list[str] = []
-    keys = sorted(set(existing_attrs) | set(new_attrs))
-    for key in keys:
-        if key not in existing_attrs:
-            messages.append(
-                f"{label} {key!r} is missing from the existing file"
-            )
-        elif key not in new_attrs:
-            messages.append(
-                f"{label} {key!r} is missing from the new dataset"
-            )
-        elif existing_attrs[key] != new_attrs[key]:
-            messages.append(
-                f"{label} {key!r} differs: existing={existing_attrs[key]!r}, "
-                f"new={new_attrs[key]!r}"
-            )
-    return messages
-
-
-def _array_values_equal(left: Any, right: Any) -> bool:
-    left_array = np.asarray(left)
-    right_array = np.asarray(right)
-    if left_array.shape != right_array.shape:
-        return False
-    try:
-        return bool(np.array_equal(left_array, right_array, equal_nan=True))
-    except TypeError:
-        return bool(np.array_equal(left_array, right_array))
-
-
-def _time_coord_name(ds: xr.Dataset, time_dim: str, axis: Axis) -> str:
-    candidates = [
-        time_dim,
-        str(axis.out_name or ""),
-        str(axis.name or ""),
-    ]
-    for candidate in candidates:
-        if candidate and candidate in ds:
-            return candidate
-    for name in ds.coords:
-        coord = ds[str(name)]
-        if time_dim in coord.dims:
-            return str(name)
-    raise ValueError(
-        f"No coordinate variable was found for time dimension {time_dim!r}."
-    )
-
-
-def _metadata_time_axis(axis: Axis) -> Axis:
-    values = axis.values_array()
-    value = values.reshape(-1)[0] if values.size else 0.0
-    value_item = value.item() if hasattr(value, "item") else value
-    updates: dict[str, Any] = {"values": [value_item]}
-    if axis.bounds is not None:
-        bounds = _bounds_as_pairs(
-            axis.bounds_array(),
-            len(values) if values.size else 1,
-        )
-        updates["bounds"] = bounds[:1].tolist()
-    else:
-        updates["bounds"] = [[float(value) - 0.5, float(value) + 0.5]]
-    return axis.updated(**updates)
-
-
-def _coerce_time_values(values: Any) -> np.ndarray:
-    array = np.asarray(values)
-    if array.ndim == 0:
-        return array.reshape(1)
-    if array.ndim != 1:
-        raise ValueError("time_values must be a one-dimensional array.")
-    return array
-
-
-def _coerce_time_bounds(bounds: Any | None, time_len: int) -> np.ndarray | None:
-    if bounds is None:
-        return None
-    return _bounds_as_pairs(np.asarray(bounds), time_len)
-
-
-def _bounds_as_pairs(bounds: np.ndarray, time_len: int) -> np.ndarray:
-    if bounds.ndim == 1 and bounds.size == time_len + 1:
-        return np.stack((bounds[:-1], bounds[1:]), axis=-1)
-    if bounds.ndim == 1 and time_len == 1 and bounds.size == 2:
-        return bounds.reshape(1, 2)
-    if bounds.shape[:1] == (time_len,) and bounds.shape[-1] >= 2:
-        return bounds
-    raise ValueError(
-        f"time_bounds shape {bounds.shape!r} does not match time_values length "
-        f"{time_len}."
-    )
-
-
-def _open_zarr_group(path: Path) -> Any:
-    try:
-        import zarr
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(
-            "DatasetWriter requires the optional runtime dependency 'zarr'. "
-            "Install cmor4 with current project dependencies before using it."
-        ) from exc
-    return zarr.open_group(str(path), mode="w")
-
-
-def _lazy_zarr_array(array: Any) -> Any:
-    try:
-        import dask.array as da
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(
-            "DatasetWriter requires the runtime dependency 'dask[array]' "
-            "to finalize staged Zarr data without loading it into memory."
-        ) from exc
-    data = da.from_zarr(array)
-    byteorder = getattr(data.dtype, "byteorder", None)
-    if byteorder not in (None, "=", "|"):
-        dtype = data.dtype.newbyteorder("=")
-        data = data.map_blocks(
-            lambda block: block.astype(dtype, copy=False),
-            meta=np.array([], dtype=dtype),
-        )
-    return data
-
-
-def _create_zarr_array(
-    group: Any,
-    name: str,
-    *,
-    shape: tuple[int, ...],
-    chunks: tuple[int, ...],
-    dtype: np.dtype[Any],
-) -> Any:
-    if hasattr(group, "create_array"):
-        return group.create_array(name, shape=shape, chunks=chunks, dtype=dtype)
-    return group.create_dataset(name, shape=shape, chunks=chunks, dtype=dtype)

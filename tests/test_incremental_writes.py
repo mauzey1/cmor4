@@ -63,6 +63,37 @@ def time_axis(
     return project.axis("time", **kwargs)
 
 
+def hybrid_axis(project: cmor4.ProjectTables) -> cmor4.Axis:
+    return project.axis(
+        "standard_hybrid_sigma",
+        values=[0.9, 0.1],
+        bounds=[[1.0, 0.5], [0.5, 0.0]],
+    )
+
+
+def hybrid_zfactors(
+    project: cmor4.ProjectTables,
+    ps_values: np.ndarray | None = None,
+) -> list[cmor4.ZFactor]:
+    return [
+        project.zfactor(
+            "a",
+            values=[0.9, 0.1],
+            bounds=[[1.0, 0.5], [0.5, 0.0]],
+        ),
+        project.zfactor(
+            "b",
+            values=[0.9, 0.1],
+            bounds=[[1.0, 0.5], [0.5, 0.0]],
+        ),
+        project.zfactor("p0", values=100000.0),
+        project.zfactor(
+            "ps",
+            **({} if ps_values is None else {"values": ps_values}),
+        ),
+    ]
+
+
 def equivalent(ds: xr.Dataset) -> xr.Dataset:
     normalized = ds.load().copy(deep=True)
     normalized.attrs.pop("creation_date", None)
@@ -194,6 +225,170 @@ class DatasetWriterTest(unittest.TestCase):
             xr.testing.assert_identical(equivalent(actual), equivalent(expected))
             assert_files_equivalent(self, tmp_path / "writer.nc", expected_path)
 
+    def test_chunked_zfactor_writes_match_cmorize(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
+            full_time = time_axis(
+                self.project,
+                values=[15.0, 45.0],
+                bounds=[[0.0, 30.0], [30.0, 60.0]],
+            )
+            axes = [
+                full_time,
+                hybrid_axis(self.project),
+                *horizontal_axes(self.project),
+            ]
+            writer_axes = [
+                time_axis(self.project),
+                hybrid_axis(self.project),
+                *horizontal_axes(self.project),
+            ]
+            data = np.arange(16, dtype="f4").reshape(2, 2, 2, 2)
+            ps = np.stack(
+                [
+                    np.full((2, 2), 99000.0, dtype="f4"),
+                    np.full((2, 2), 99100.0, dtype="f4"),
+                ],
+                axis=0,
+            )
+
+            _, expected_path = cmor4.cmorize(
+                info,
+                variable,
+                axes,
+                data,
+                zfactors=hybrid_zfactors(self.project, ps),
+                path=tmp_path / "cmorize-zfactor.nc",
+            )
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                writer_axes,
+                path=tmp_path / "writer-zfactor.nc",
+                zfactors=hybrid_zfactors(self.project),
+            )
+            writer.write(
+                data[:1],
+                time_values=[15.0],
+                time_bounds=[[0.0, 30.0]],
+                zfactors={"ps": ps[:1]},
+            )
+            writer.write(
+                data[1:],
+                time_values=[45.0],
+                time_bounds=[[30.0, 60.0]],
+                zfactors={"ps": ps[1:]},
+            )
+
+            actual, path = writer.close()
+
+            with xr.open_dataset(
+                expected_path,
+                decode_times=False,
+                mask_and_scale=False,
+            ) as expected_open:
+                expected = expected_open.load()
+            xr.testing.assert_identical(equivalent(actual), equivalent(expected))
+            assert_files_equivalent(self, path, expected_path)
+            self.assertEqual(
+                actual["lev"].attrs["formula_terms"],
+                "p0: p0 a: a b: b ps: ps",
+            )
+            np.testing.assert_array_equal(actual["ps"].values, ps)
+
+    def test_write_requires_empty_time_varying_zfactor_chunk(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                [
+                    time_axis(self.project),
+                    hybrid_axis(self.project),
+                    *horizontal_axes(self.project),
+                ],
+                path=tmp_path / "writer-zfactor.nc",
+                zfactors=hybrid_zfactors(self.project),
+            )
+
+            with self.assertRaisesRegex(ValueError, "zfactor 'ps'.*every write"):
+                writer.write(
+                    np.ones((1, 2, 2, 2), dtype="f4"),
+                    time_values=[15.0],
+                    time_bounds=[[0.0, 30.0]],
+                )
+
+    def test_write_rejects_missing_chunked_zfactor_after_first_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                [
+                    time_axis(self.project),
+                    hybrid_axis(self.project),
+                    *horizontal_axes(self.project),
+                ],
+                path=tmp_path / "writer-zfactor.nc",
+                zfactors=hybrid_zfactors(self.project),
+            )
+            writer.write(
+                np.ones((1, 2, 2, 2), dtype="f4"),
+                time_values=[15.0],
+                time_bounds=[[0.0, 30.0]],
+                zfactors={"ps": np.ones((1, 2, 2), dtype="f4") * 99000.0},
+            )
+
+            with self.assertRaisesRegex(ValueError, "zfactor 'ps'.*every write"):
+                writer.write(
+                    np.ones((1, 2, 2, 2), dtype="f4"),
+                    time_values=[45.0],
+                    time_bounds=[[30.0, 60.0]],
+                )
+
+    def test_write_rejects_bad_zfactor_chunk_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                [
+                    time_axis(self.project),
+                    hybrid_axis(self.project),
+                    *horizontal_axes(self.project),
+                ],
+                path=tmp_path / "writer-zfactor.nc",
+                zfactors=hybrid_zfactors(self.project),
+            )
+
+            with self.assertRaisesRegex(ValueError, "Zfactor 'ps' chunk shape"):
+                writer.write(
+                    np.ones((1, 2, 2, 2), dtype="f4"),
+                    time_values=[15.0],
+                    time_bounds=[[0.0, 30.0]],
+                    zfactors={"ps": np.ones((2, 2), dtype="f4")},
+                )
+
     def test_write_rejects_bad_chunk_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
@@ -316,3 +511,259 @@ class DatasetWriterTest(unittest.TestCase):
             self.assertFalse(
                 any("endian-ness of dtype and endian kwarg" in msg for msg in messages)
             )
+
+    def test_write_rejects_unknown_zfactor_name(self) -> None:
+        """Test that providing an unknown zfactor name raises an error."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                [
+                    time_axis(self.project),
+                    hybrid_axis(self.project),
+                    *horizontal_axes(self.project),
+                ],
+                path=tmp_path / "writer-zfactor.nc",
+                zfactors=hybrid_zfactors(self.project),
+            )
+
+            with self.assertRaisesRegex(ValueError, "Unknown zfactor.*'unknown_zf'"):
+                writer.write(
+                    np.ones((1, 2, 2, 2), dtype="f4"),
+                    time_values=[15.0],
+                    time_bounds=[[0.0, 30.0]],
+                    zfactors={
+                        "ps": np.ones((1, 2, 2), dtype="f4") * 99000.0,
+                        "unknown_zf": np.ones((1, 2, 2), dtype="f4"),
+                    },
+                )
+
+    def test_write_rejects_non_time_varying_zfactor_per_chunk(self) -> None:
+        """Test that providing a scalar zfactor per-chunk raises an error."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                [
+                    time_axis(self.project),
+                    hybrid_axis(self.project),
+                    *horizontal_axes(self.project),
+                ],
+                path=tmp_path / "writer-zfactor.nc",
+                zfactors=hybrid_zfactors(self.project),
+            )
+
+            # p0 is a scalar (no time dimension), should not be supplied per-chunk
+            with self.assertRaisesRegex(
+                ValueError, "Zfactor 'p0'.*does not include time"
+            ):
+                writer.write(
+                    np.ones((1, 2, 2, 2), dtype="f4"),
+                    time_values=[15.0],
+                    time_bounds=[[0.0, 30.0]],
+                    zfactors={
+                        "ps": np.ones((1, 2, 2), dtype="f4") * 99000.0,
+                        "p0": np.array(100000.0),
+                    },
+                )
+
+    def test_write_validates_zfactor_nan_values(self) -> None:
+        """Test that NaN values in zfactor data are caught by validation."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                [
+                    time_axis(self.project),
+                    hybrid_axis(self.project),
+                    *horizontal_axes(self.project),
+                ],
+                path=tmp_path / "writer-zfactor.nc",
+                zfactors=hybrid_zfactors(self.project),
+            )
+
+            # Create ps data with NaN values
+            ps_with_nan = np.ones((1, 2, 2), dtype="f4") * 99000.0
+            ps_with_nan[0, 0, 0] = np.nan
+
+            with self.assertRaisesRegex(ValueError, "NaN"):
+                writer.write(
+                    np.ones((1, 2, 2, 2), dtype="f4"),
+                    time_values=[15.0],
+                    time_bounds=[[0.0, 30.0]],
+                    zfactors={"ps": ps_with_nan},
+                )
+
+    def test_preserve_definition_with_zfactors(self) -> None:
+        """Test preserve_definition=True with per-chunk zfactors."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable(
+                "tnhusscpbl_tavg-al-hxy-u",
+                table_id="atmos",
+            )
+            axes = [
+                time_axis(self.project),
+                hybrid_axis(self.project),
+                *horizontal_axes(self.project),
+            ]
+
+            writer = cmor4.DatasetWriter(
+                info,
+                variable,
+                axes,
+                zfactors=hybrid_zfactors(self.project),
+            )
+
+            # Write first file segment
+            data1 = np.arange(8, dtype="f4").reshape(1, 2, 2, 2)
+            ps1 = np.full((1, 2, 2), 99000.0, dtype="f4")
+            writer.write(
+                data1,
+                time_values=[15.0],
+                time_bounds=[[0.0, 30.0]],
+                zfactors={"ps": ps1},
+            )
+            ds1, path1 = writer.close(preserve_definition=True)
+            ds1.close()
+
+            # Write second file segment with different data
+            data2 = np.arange(8, 16, dtype="f4").reshape(1, 2, 2, 2)
+            ps2 = np.full((1, 2, 2), 99500.0, dtype="f4")
+            writer.write(
+                data2,
+                time_values=[45.0],
+                time_bounds=[[30.0, 60.0]],
+                zfactors={"ps": ps2},
+            )
+            ds2, path2 = writer.close()
+            ds2.close()
+
+            # Verify both files exist and have correct zfactor data
+            with xr.open_dataset(path1, decode_times=False) as file1:
+                np.testing.assert_array_equal(file1["ps"].values, ps1)
+                self.assertEqual(file1["ps"].shape, (1, 2, 2))
+
+            with xr.open_dataset(path2, decode_times=False) as file2:
+                np.testing.assert_array_equal(file2["ps"].values, ps2)
+                self.assertEqual(file2["ps"].shape, (1, 2, 2))
+
+            # Files should be different
+            self.assertNotEqual(path1, path2)
+
+
+class TestDatasetWriterEncoding(unittest.TestCase):
+    """Tests for NetCDF encoding with DatasetWriter."""
+
+    def setUp(self):
+        self.project = cmip7_project("tables/CMIP7_ocean.json")
+
+    def test_compression(self):
+        """Test that compression is applied correctly."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            axes = [time_axis(self.project), *horizontal_axes(self.project)]
+
+            # Specify compression (DatasetWriter applies auto-chunking for CMIP7)
+            encoding = {
+                "tos": {
+                    "zlib": True,
+                    "complevel": 4,
+                    "shuffle": True,
+                }
+            }
+
+            with cmor4.DatasetWriter(info, variable, axes, encoding=encoding) as writer:
+                data = np.arange(4, dtype="f4").reshape(1, 2, 2)
+                writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+
+            # Verify compression was applied
+            files = list(tmp_path.rglob("*.nc"))
+            self.assertEqual(len(files), 1)
+
+            with xr.open_dataset(files[0], decode_times=False) as ds:
+                # Check compression encoding
+                enc = ds["tos"].encoding
+                self.assertTrue(enc.get("zlib", False))
+                self.assertGreater(enc.get("complevel", 0), 0)
+                self.assertTrue(enc.get("shuffle", False))
+
+    def test_encoding_with_incremental_writes(self):
+        """Test encoding is maintained across incremental writes."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            axes = [time_axis(self.project), *horizontal_axes(self.project)]
+
+            encoding = {
+                "tos": {
+                    "zlib": True,
+                    "complevel": 4,
+                }
+            }
+
+            with cmor4.DatasetWriter(info, variable, axes, encoding=encoding) as writer:
+                # First write
+                data1 = np.arange(4, dtype="f4").reshape(1, 2, 2)
+                writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+
+                # Second write
+                data2 = np.arange(4, 8, dtype="f4").reshape(1, 2, 2)
+                writer.write(data2, time_values=[45.0], time_bounds=[[30.0, 60.0]])
+
+            # Verify encoding was maintained
+            files = list(tmp_path.rglob("*.nc"))
+            self.assertEqual(len(files), 1)
+
+            with xr.open_dataset(files[0], decode_times=False) as ds:
+                enc = ds["tos"].encoding
+                self.assertTrue(enc.get("zlib", False))
+                self.assertEqual(enc.get("complevel"), 4)
+                # Verify both time slices are present
+                self.assertEqual(ds["tos"].shape, (2, 2, 2))
+
+    def test_auto_chunking_applied(self):
+        """Test that CMIP7 auto-chunking is applied when not explicitly specified."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            info = self.project.dataset_info(dataset_info(tmp_path))
+            variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
+            axes = [time_axis(self.project), *horizontal_axes(self.project)]
+
+            # No encoding specified - should get auto-chunking
+            with cmor4.DatasetWriter(info, variable, axes) as writer:
+                data = np.arange(4, dtype="f4").reshape(1, 2, 2)
+                writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
+
+            # Verify chunking was applied (CMIP7 auto-chunking)
+            files = list(tmp_path.rglob("*.nc"))
+            self.assertEqual(len(files), 1)
+
+            with xr.open_dataset(files[0], decode_times=False) as ds:
+                # Check that variable has chunking
+                self.assertIsNotNone(ds["tos"].encoding.get("chunksizes"))
+                # Should have time-unlimited chunking
+                chunks = ds["tos"].encoding["chunksizes"]
+                self.assertEqual(chunks[0], 1)  # time dimension

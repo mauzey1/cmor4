@@ -11,6 +11,7 @@ CMOR4 is a Python package for creating CF-compliant climate model output in NetC
 - **xarray integration**: Built on xarray for modern, Pythonic data handling
 - **Minimal metadata entry**: Only specify variable names and data - CF attributes are applied automatically from tables
 - **CF compliance**: Produces Climate and Forecast conventions-compliant NetCDF files
+- **Incremental writes**: Write large datasets one time slice at a time with memory-bounded operation
 
 ## Installation
 
@@ -21,6 +22,8 @@ git clone https://github.com/mauzey1/cmor4.git
 cd cmor4
 pip install -e .
 ```
+
+**Note:** `DatasetWriter` for incremental writes is included in the standard installation (requires `zarr` and `dask`, which are installed automatically).
 
 For development:
 
@@ -144,8 +147,24 @@ print(f"Complete dataset written to: {writer.path}")
 - **Flexible**: Write data as it becomes available (e.g., monthly output from a running model)
 - **Validated**: Applies same CMOR table validation as `cmorize()`
 - **Automatic cleanup**: Temporary staging files are automatically removed
+- **Append mode**: Extend existing files with new time records (`existing="append"`)
+- **Formula terms**: Supports incremental writes of time-varying zfactors (e.g., surface pressure for hybrid coordinates)
 
-See the [DatasetWriter API documentation](src/cmor4/writer.py) for complete details.
+**Advanced features:**
+
+```python
+# Append new time records to an existing file
+with cmor4.DatasetWriter(dataset, variable, axes, 
+                         path="existing.nc", existing="append") as writer:
+    writer.write(new_data, time_values=new_times, time_bounds=new_bounds)
+
+# Incremental zfactor writes (for hybrid coordinates)
+with cmor4.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
+    writer.write(data, time_values=times, time_bounds=bounds,
+                 zfactors={"ps": surface_pressure_slice})
+```
+
+See the [Incremental Writing documentation](docs/source/usage/incremental_writing.rst) for complete details and examples.
 
 ## Example notebooks
 

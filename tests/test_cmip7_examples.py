@@ -1346,5 +1346,472 @@ class TestExample09CellMeasures(unittest.TestCase):
         self.assertEqual(self.ds.attrs["realm"], "aerosol")
 
 
+# ---------------------------------------------------------------------------
+# Integration tests: DatasetWriter equivalents
+# ---------------------------------------------------------------------------
+
+
+@_requires_tables
+class TestDatasetWriterIntegration01(unittest.TestCase):
+    """Example 1 rewritten with DatasetWriter: verify output matches cmorize()."""
+
+    def setUp(self):
+        import cmor4
+
+        self.tmp = tempfile.mkdtemp()
+        project = _project("CMIP7_ocean.json")
+        dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
+        variable = project.variable(
+            "tos_tavg-u-hxy-sea", table_id="ocean", missing_value=np.float32(1.0e20)
+        )
+        # Time axis without values (to be provided incrementally)
+        time_axis = project.axis("time", units=_TIME_UNITS)
+        axes = [time_axis, _lat_axis(project), _lon_axis(project)]
+        data = np.array(
+            [
+                254.0895,
+                258.4085,
+                1.0e20,
+                258.7101,
+                258.6680,
+                258.2990,
+                1.0e20,
+                255.0432,
+                253.7254,
+                251.2460,
+                1.0e20,
+                255.4808,
+                254.0995,
+                258.5085,
+                1.0e20,
+                258.8101,
+                258.8680,
+                258.4990,
+                1.0e20,
+                255.2432,
+                254.0254,
+                251.5460,
+                1.0e20,
+                255.7808,
+            ],
+            dtype="f4",
+        ).reshape(2, 3, 4)
+
+        # Write incrementally with DatasetWriter
+        with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+            # Write first time slice
+            writer.write(
+                data[0:1],
+                time_values=_TIME_VALS[0:1],
+                time_bounds=_TIME_BNDS[0:1],
+            )
+            # Write second time slice
+            writer.write(
+                data[1:2],
+                time_values=_TIME_VALS[1:2],
+                time_bounds=_TIME_BNDS[1:2],
+            )
+
+        # Find the output file
+        import glob
+
+        files = glob.glob(f"{self.tmp}/**/*.nc", recursive=True)
+        self.assertEqual(len(files), 1)
+        self.ds = xr.open_dataset(files[0], decode_times=False)
+
+    def tearDown(self):
+        self.ds.close()
+
+    def test_variable_dims(self):
+        self.assertEqual(self.ds["tos"].dims, ("time", "lat", "lon"))
+
+    def test_variable_shape(self):
+        self.assertEqual(self.ds["tos"].shape, (2, 3, 4))
+
+    def test_time_values(self):
+        np.testing.assert_array_almost_equal(self.ds["time"].values, _TIME_VALS)
+
+    def test_time_bounds(self):
+        np.testing.assert_array_almost_equal(self.ds["time_bnds"].values, _TIME_BNDS)
+
+    def test_data_values(self):
+        # Verify data matches (missing values become NaN)
+        data_ref = np.array(
+            [
+                254.0895,
+                258.4085,
+                np.nan,
+                258.7101,
+                258.6680,
+                258.2990,
+                np.nan,
+                255.0432,
+                253.7254,
+                251.2460,
+                np.nan,
+                255.4808,
+                254.0995,
+                258.5085,
+                np.nan,
+                258.8101,
+                258.8680,
+                258.4990,
+                np.nan,
+                255.2432,
+                254.0254,
+                251.5460,
+                np.nan,
+                255.7808,
+            ],
+            dtype="f4",
+        ).reshape(2, 3, 4)
+        np.testing.assert_array_almost_equal(self.ds["tos"].values, data_ref, decimal=4)
+
+
+@_requires_tables
+class TestDatasetWriterIntegration05(unittest.TestCase):
+    """Example 5 rewritten with DatasetWriter: incremental zfactors."""
+
+    _LEV_VALS = np.array([0.92, 0.72, 0.50, 0.30, 0.10], dtype="d")
+    _LEV_BNDS = np.array(
+        [[1.00, 0.83], [0.83, 0.61], [0.61, 0.40], [0.40, 0.20], [0.20, 0.00]],
+        dtype="d",
+    )
+    _A_VALS = np.array([0.12, 0.22, 0.30, 0.20, 0.10], dtype="d")
+    _A_BNDS = np.array(
+        [[0.06, 0.18], [0.18, 0.26], [0.26, 0.25], [0.25, 0.15], [0.15, 0.00]],
+        dtype="d",
+    )
+    _B_VALS = np.array([0.80, 0.50, 0.20, 0.10, 0.00], dtype="d")
+    _B_BNDS = np.array(
+        [[0.94, 0.65], [0.65, 0.35], [0.35, 0.15], [0.15, 0.05], [0.05, 0.00]],
+        dtype="d",
+    )
+    _PS = np.array(
+        [
+            97000.0,
+            97400.0,
+            97800.0,
+            98200.0,
+            98600.0,
+            99000.0,
+            99400.0,
+            99800.0,
+            100200.0,
+            100600.0,
+            101000.0,
+            101400.0,
+            97100.0,
+            97500.0,
+            97900.0,
+            98300.0,
+            98700.0,
+            99100.0,
+            99500.0,
+            99900.0,
+            100300.0,
+            100700.0,
+            101100.0,
+            101500.0,
+        ],
+        dtype="f4",
+    ).reshape(2, 3, 4)
+
+    def setUp(self):
+        import cmor4
+
+        self.tmp = tempfile.mkdtemp()
+        project = _project("CMIP7_atmos.json")
+        dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
+        variable = project.variable(
+            "cl_tavg-al-hxy-u", table_id="atmos", missing_value=np.float32(1.0e20)
+        )
+        time_axis = project.axis("time", units=_TIME_UNITS)
+        lat_axis = _lat_axis(project)
+        lon_axis = _lon_axis(project)
+        lev_axis = project.axis(
+            "standard_hybrid_sigma",
+            values=self._LEV_VALS,
+            bounds=self._LEV_BNDS,
+        )
+
+        # Define zfactors - ps has no values (will provide incrementally)
+        a_zfactor = project.zfactor("a", values=self._A_VALS, bounds=self._A_BNDS)
+        b_zfactor = project.zfactor("b", values=self._B_VALS, bounds=self._B_BNDS)
+        p0_zfactor = project.zfactor("p0", values=100000.0)
+        ps_zfactor = project.zfactor("ps")  # No values - incremental
+
+        data = np.array(
+            [
+                72.8,
+                73.2,
+                73.6,
+                74.0,
+                71.6,
+                72.0,
+                72.4,
+                72.4,
+                70.4,
+                70.8,
+                70.8,
+                71.2,
+                67.6,
+                69.2,
+                69.6,
+                70.0,
+                66.0,
+                66.4,
+                66.8,
+                67.2,
+                64.8,
+                65.2,
+                65.6,
+                66.0,
+                63.6,
+                64.0,
+                64.4,
+                64.4,
+                60.8,
+                61.2,
+                62.8,
+                63.2,
+                59.6,
+                59.6,
+                60.0,
+                60.4,
+                58.0,
+                58.4,
+                58.8,
+                59.2,
+                56.8,
+                57.2,
+                57.6,
+                58.0,
+                54.0,
+                54.4,
+                54.8,
+                56.4,
+                52.8,
+                53.2,
+                53.2,
+                53.6,
+                51.6,
+                51.6,
+                52.0,
+                52.4,
+                50.0,
+                50.4,
+                50.8,
+                51.2,
+                72.9,
+                73.3,
+                73.7,
+                74.1,
+                71.7,
+                72.1,
+                72.5,
+                72.5,
+                70.5,
+                70.9,
+                70.9,
+                71.3,
+                67.7,
+                69.3,
+                69.7,
+                70.1,
+                66.1,
+                66.5,
+                66.9,
+                67.3,
+                64.9,
+                65.3,
+                65.7,
+                66.1,
+                63.7,
+                64.1,
+                64.5,
+                64.5,
+                60.9,
+                61.3,
+                62.9,
+                63.3,
+                59.7,
+                59.7,
+                60.1,
+                60.5,
+                58.1,
+                58.5,
+                58.9,
+                59.3,
+                56.9,
+                57.3,
+                57.7,
+                58.1,
+                54.1,
+                54.5,
+                54.9,
+                56.5,
+                52.9,
+                53.3,
+                53.3,
+                53.7,
+                51.7,
+                51.7,
+                52.1,
+                52.5,
+                50.1,
+                50.5,
+                50.9,
+                51.3,
+            ],
+            dtype="f4",
+        ).reshape(2, 5, 3, 4)
+
+        # Write incrementally with DatasetWriter
+        with cmor4.DatasetWriter(
+            dataset,
+            variable,
+            [time_axis, lev_axis, lat_axis, lon_axis],
+            zfactors=[a_zfactor, b_zfactor, p0_zfactor, ps_zfactor],
+        ) as writer:
+            # Write first time slice with ps
+            writer.write(
+                data[0:1],
+                time_values=_TIME_VALS[0:1],
+                time_bounds=_TIME_BNDS[0:1],
+                zfactors={"ps": self._PS[0:1]},
+            )
+            # Write second time slice with ps
+            writer.write(
+                data[1:2],
+                time_values=_TIME_VALS[1:2],
+                time_bounds=_TIME_BNDS[1:2],
+                zfactors={"ps": self._PS[1:2]},
+            )
+
+        # Find the output file
+        import glob
+
+        files = glob.glob(f"{self.tmp}/**/*.nc", recursive=True)
+        self.assertEqual(len(files), 1)
+        self.ds = xr.open_dataset(files[0], decode_times=False)
+
+    def tearDown(self):
+        self.ds.close()
+
+    def test_variable_dims(self):
+        self.assertEqual(self.ds["cl"].dims, ("time", "lev", "lat", "lon"))
+
+    def test_lev_attrs(self):
+        a = self.ds["lev"].attrs
+        self.assertEqual(
+            a["standard_name"], "atmosphere_hybrid_sigma_pressure_coordinate"
+        )
+        self.assertEqual(a["long_name"], "hybrid sigma pressure coordinate")
+        self.assertEqual(a["units"], "1")
+        self.assertEqual(a["axis"], "Z")
+        self.assertEqual(a["positive"], "down")
+        self.assertEqual(a["formula"], "p = a*p0 + b*ps")
+        self.assertIn("formula_terms", a)
+
+    def test_zfactor_vars_present(self):
+        for name in ("a", "b", "p0", "ps", "a_bnds", "b_bnds", "lev_bnds"):
+            self.assertIn(name, self.ds)
+
+    def test_ps_shape(self):
+        # ps should have been accumulated incrementally
+        self.assertEqual(self.ds["ps"].shape, (2, 3, 4))
+
+    def test_ps_values(self):
+        np.testing.assert_array_almost_equal(self.ds["ps"].values, self._PS, decimal=1)
+
+    def test_data_shape(self):
+        self.assertEqual(self.ds["cl"].shape, (2, 5, 3, 4))
+
+
+@_requires_tables
+class TestDatasetWriterIntegration02(unittest.TestCase):
+    """Example 2 rewritten with DatasetWriter: pressure levels."""
+
+    _PLEV19 = np.array(
+        [
+            100000.0,
+            92500.0,
+            85000.0,
+            70000.0,
+            60000.0,
+            50000.0,
+            40000.0,
+            30000.0,
+            25000.0,
+            20000.0,
+            15000.0,
+            10000.0,
+            7000.0,
+            5000.0,
+            3000.0,
+            2000.0,
+            1000.0,
+            500.0,
+            100.0,
+        ],
+        dtype="d",
+    )
+
+    def setUp(self):
+        import cmor4
+
+        self.tmp = tempfile.mkdtemp()
+        project = _project("CMIP7_atmos.json")
+        dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
+        variable = project.variable(
+            "ta_tavg-p19-hxy-air", table_id="atmos", missing_value=np.float32(1.0e20)
+        )
+        plev_axis = project.axis("plev19", values=self._PLEV19)
+        time_axis = project.axis("time", units=_TIME_UNITS)
+        axes = [time_axis, plev_axis, _lat_axis(project), _lon_axis(project)]
+        data = np.linspace(250.0, 275.0, 2 * 19 * 3 * 4, dtype="f4").reshape(
+            2, 19, 3, 4
+        )
+        data[0, 0, 0, 0] = np.float32(1.0e20)
+
+        # Write incrementally with DatasetWriter
+        with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+            # Write first time slice
+            writer.write(
+                data[0:1],
+                time_values=_TIME_VALS[0:1],
+                time_bounds=_TIME_BNDS[0:1],
+            )
+            # Write second time slice
+            writer.write(
+                data[1:2],
+                time_values=_TIME_VALS[1:2],
+                time_bounds=_TIME_BNDS[1:2],
+            )
+
+        # Find the output file
+        import glob
+
+        files = glob.glob(f"{self.tmp}/**/*.nc", recursive=True)
+        self.assertEqual(len(files), 1)
+        self.ds = xr.open_dataset(files[0], decode_times=False)
+
+    def tearDown(self):
+        self.ds.close()
+
+    def test_variable_dims(self):
+        self.assertEqual(self.ds["ta"].dims, ("time", "plev", "lat", "lon"))
+
+    def test_variable_shape(self):
+        self.assertEqual(self.ds["ta"].shape, (2, 19, 3, 4))
+
+    def test_plev_coord_present(self):
+        self.assertIn("plev", self.ds.coords)
+
+    def test_time_values(self):
+        np.testing.assert_array_almost_equal(self.ds["time"].values, _TIME_VALS)
+
+
 if __name__ == "__main__":
     unittest.main()

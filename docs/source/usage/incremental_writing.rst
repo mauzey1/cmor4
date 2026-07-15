@@ -205,6 +205,53 @@ Control where files are written:
    # Auto-generated from metadata (CMIP DRS)
    writer = cmor4.DatasetWriter(dataset, variable, axes)
 
+Incremental Formula Terms (Hybrid Sigma Coordinates)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For variables on hybrid sigma coordinates, time-varying formula terms (e.g., surface pressure) can be written incrementally:
+
+.. code-block:: python
+
+   # Define hybrid vertical axis
+   hybrid_axis = project.axis(
+       "standard_hybrid_sigma",
+       values=[0.9, 0.1],
+       bounds=[[1.0, 0.5], [0.5, 0.0]],
+   )
+
+   # Define zfactors - omit values for time-varying terms
+   zfactors = [
+       project.zfactor("a", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+       project.zfactor("b", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+       project.zfactor("p0", values=100000.0),
+       project.zfactor("ps"),  # Time-varying - no values here
+   ]
+
+   axes = [time_axis, hybrid_axis, lat_axis, lon_axis]
+
+   with cmor4.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
+       for year in range(1850, 2015):
+           # Load model data and surface pressure for this year
+           data = load_model_data(year)  # Shape: (12, 2, 180, 360)
+           ps = load_surface_pressure(year)  # Shape: (12, 180, 360)
+
+           # Write data and surface pressure together
+           writer.write(
+               data,
+               time_values=time_values,
+               time_bounds=time_bounds,
+               zfactors={"ps": ps}  # Provide ps values per chunk
+           )
+
+   # Result: ps variable is accumulated incrementally along with data
+
+**Requirements:**
+
+- Static zfactors (``a``, ``b``, ``p0``) must include complete values in the zfactor definitions
+- Time-varying zfactors (``ps``) can omit values initially and provide them via ``write()``
+- If you provide a time-varying zfactor in any write, you must provide it in all subsequent writes
+- Zfactor chunk shape must match the dimensions for that write chunk
+
 Encoding and Compression
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -610,10 +657,51 @@ You can append multiple times to the same file:
 
    # Result: all three chunks in one file
 
-Append with Formula Terms (Hybrid Coordinates)
+Incremental Formula Terms (Hybrid Coordinates)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Append mode works with time-varying formula terms:
+DatasetWriter supports incremental writes for time-varying formula terms (e.g., surface pressure for hybrid coordinates):
+
+**Method 1: Per-chunk zfactor values**
+
+Provide time-varying zfactor values incrementally via the ``zfactors`` parameter of :meth:`write`:
+
+.. code-block:: python
+
+   # Define zfactors without values for time-varying terms
+   zfactors = [
+       project.zfactor("a", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+       project.zfactor("b", values=[0.9, 0.1], bounds=[[1.0, 0.5], [0.5, 0.0]]),
+       project.zfactor("p0", values=100000.0),
+       project.zfactor("ps"),  # No values - will provide per chunk
+   ]
+
+   with cmor4.DatasetWriter(
+       dataset, variable, axes, path="hybrid.nc", zfactors=zfactors
+   ) as writer:
+       # First write - provide ps values for this chunk
+       ps_chunk1 = np.full((12, 2, 2), 99000.0, dtype="f4")
+       writer.write(
+           data_2000,
+           time_values=times_2000,
+           time_bounds=bounds_2000,
+           zfactors={"ps": ps_chunk1}
+       )
+
+       # Second write - provide ps values for next chunk
+       ps_chunk2 = np.full((12, 2, 2), 99100.0, dtype="f4")
+       writer.write(
+           data_2001,
+           time_values=times_2001,
+           time_bounds=bounds_2001,
+           zfactors={"ps": ps_chunk2}
+       )
+
+   # Result: ps variable has 24 time slices accumulated from both writes
+
+**Method 2: Append mode with complete zfactor values**
+
+Alternatively, use append mode with complete zfactor values for each write:
 
 .. code-block:: python
 
@@ -647,6 +735,12 @@ Append mode works with time-varying formula terms:
        writer.write(data_2001, time_values=times_2001, time_bounds=bounds_2001)
 
    # Result: ps variable has 24 time slices (2000 + 2001)
+
+.. note::
+   - Static zfactors (e.g., ``a``, ``b``, ``p0``) should include complete values in the initial zfactor definitions
+   - Time-varying zfactors (e.g., ``ps``) can omit values and provide them per chunk via ``write()``
+   - Once you start providing a time-varying zfactor in a write, you must continue providing it in all subsequent writes
+   - Zfactor chunk shapes must match the variable's dimensions for that write
 
 Provenance Tracking in Append Mode
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
