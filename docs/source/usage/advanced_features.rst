@@ -616,4 +616,4 @@ See Also
 
 - :doc:`basic_usage` - Simple examples
 - :doc:`incremental_writing` - DatasetWriter details
-- :ref:`API Reference <api/classes:Classes>` - Complete API documentation
+- :doc:`/api/classes` - Complete API documentation

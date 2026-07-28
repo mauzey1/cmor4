@@ -311,4 +311,4 @@ See Also
 
 - :doc:`incremental_writing` - For large datasets
 - :doc:`advanced_features` - Custom grids, formula terms, etc.
-- :ref:`API Reference <api/functions:Functions>` - Complete function documentation
+- :doc:`/api/functions` - Complete function documentation
