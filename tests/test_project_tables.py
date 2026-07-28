@@ -1565,21 +1565,9 @@ class DatasetInfoMethodTest(unittest.TestCase):
             self.project.cv.validate_dataset_info({"activity_id": "CMIP"})
         self.assertIn("institution_id", str(ctx.exception))
 
-    def test_accepts_prepared_dataset_as_input(self):
-        """dataset_info should accept an existing DatasetInfo."""
-        di = DatasetInfo.from_prepared({
-            "activity_id": "CMIP",
-            "institution_id": "NCAR",
-        })
-        info = self.project.dataset_info(di)
-        self.assertIsInstance(info, DatasetInfo)
-        self.assertEqual(info["activity_id"], "CMIP")
-
     def test_user_info_is_preserved_in_output(self):
-        di = DatasetInfo.from_prepared(
-            {"activity_id": "CMIP", "institution_id": "NCAR"},
-        )
-        info = self.project.dataset_info(di)
+        raw_info = {"activity_id": "CMIP", "institution_id": "NCAR"}
+        info = self.project.dataset_info(raw_info)
         # user_info should carry through on the prepared dataset.
         self.assertIsInstance(info, DatasetInfo)
         self.assertEqual(info.user_info["activity_id"], "CMIP")

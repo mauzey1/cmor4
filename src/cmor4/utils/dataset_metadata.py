@@ -61,7 +61,7 @@ class DatasetMetadata(MetadataModel):
 
     def __init__(
         self,
-        data: Mapping[str, Any] | DatasetMetadata | None = None,
+        data: Mapping[str, Any] | None = None,
         /,
         **kwargs: Any,
     ) -> None:
@@ -130,7 +130,7 @@ class DatasetMetadata(MetadataModel):
     @classmethod
     def from_mapping(
         cls,
-        values: Mapping[str, Any] | DatasetMetadata,
+        values: Mapping[str, Any],
     ) -> Self:
         """Create dataset metadata from a mapping-like object."""
         return cls.model_validate(dict(values))

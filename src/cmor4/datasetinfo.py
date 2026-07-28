@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from pydantic import Field
 
@@ -29,14 +29,17 @@ class DatasetInfo(DatasetMetadata):
     @classmethod
     def from_prepared(
         cls,
-        values: Mapping[str, Any] | DatasetMetadata,
+        values: DatasetMetadata,
         *,
         project: Any = None,
-        user_info: Mapping[str, Any] | DatasetMetadata | None = None,
+        user_info: Mapping[str, Any] | None = None,
     ) -> DatasetInfo:
         """Create prepared dataset metadata with project context attached."""
 
-        data = dict(values)
+        if not isinstance(values, DatasetMetadata):
+            values = DatasetMetadata.from_mapping(cast(Mapping[str, Any], values))
+
+        data = values.to_dict()
         data["project"] = project
         data["user_info"] = dict(user_info) if user_info is not None else dict(values)
         return cls.model_validate(data)

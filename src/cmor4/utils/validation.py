@@ -13,7 +13,6 @@ import xarray as xr
 from .time_utils import cftime_interval_days
 from .dataset_metadata import DatasetMetadata
 from ..axis import Axis
-from ..datasetinfo import DatasetInfo
 from ..exceptions import AxisValidationError, VariableValidationError
 from ..grid import Grid
 from ..variable import Variable
@@ -209,7 +208,7 @@ def validate_final_dataset(
 def _dataset_for_variable(
     dataset: DatasetMetadata,
     variable: Variable,
-) -> tuple[DatasetInfo | DatasetMetadata, Variable]:
+) -> tuple[DatasetMetadata, Variable]:
     """Return dataset and variable prepared for a specific variable."""
 
     project = getattr(dataset, "project", None)
