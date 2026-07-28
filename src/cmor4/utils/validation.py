@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import xarray as xr
 
 from .time_utils import cftime_interval_days
+from .dataset_metadata import DatasetMetadata
 from ..axis import Axis
 from ..datasetinfo import DatasetInfo
 from ..exceptions import AxisValidationError, VariableValidationError
@@ -58,7 +59,7 @@ class _IntervalSpec(BaseModel):
 class ValidationContext:
     """Validated metadata and resolved dimension state for dataset creation."""
 
-    dataset: DatasetInfo
+    dataset: DatasetMetadata
     variable: Variable
     axes: tuple[Axis, ...]
     zfactors: tuple[ZFactor, ...]
@@ -69,7 +70,7 @@ class ValidationContext:
 
 
 def validate_metadata(
-    dataset: DatasetInfo,
+    dataset: DatasetMetadata,
     variable: Variable,
     axes: Sequence[Axis],
     zfactors: Sequence[ZFactor] | None = None,
@@ -164,7 +165,7 @@ def validate_final_dataset(
 ) -> None:
     """Validate final xarray dataset structure and project-level requirements."""
 
-    project = ctx.dataset.project
+    project = getattr(ctx.dataset, "project", None)
     if project is not None:
         project.validate_global_attributes(ds.attrs)
         project.validate_dataset(
@@ -206,23 +207,23 @@ def validate_final_dataset(
 
 
 def _dataset_for_variable(
-    dataset: DatasetInfo,
+    dataset: DatasetMetadata,
     variable: Variable,
-) -> tuple[DatasetInfo, Variable]:
+) -> tuple[DatasetInfo | DatasetMetadata, Variable]:
     """Return dataset and variable prepared for a specific variable."""
 
-    project = dataset.project
+    project = getattr(dataset, "project", None)
     if project is None:
         return dataset, variable
     return project._dataset_for_variable(dataset, variable)
 
 
 def _dataset_axes(
-    dataset: DatasetInfo,
+    dataset: DatasetMetadata,
     axes: Sequence[Axis],
     variable: Variable,
 ) -> tuple[Axis, ...]:
-    project = dataset.project
+    project = getattr(dataset, "project", None)
     if project is None:
         return tuple(axes)
     return project._axes(axes, variable)
@@ -301,7 +302,7 @@ def named_dimensions(
 
 
 def validate_and_normalize_axes(
-    dataset: DatasetInfo,
+    dataset: DatasetMetadata,
     variable: Variable,
     axes: Sequence[Axis],
 ) -> tuple[Axis, ...]:
@@ -310,7 +311,7 @@ def validate_and_normalize_axes(
 
 
 def validate_axes(
-    dataset: DatasetInfo | None,
+    dataset: DatasetMetadata | None,
     variable: Variable,
     axes: Sequence[Axis],
 ) -> None:
@@ -338,7 +339,7 @@ def validate_axis_values_early(axis: Axis) -> None:
 
 
 def _validate_and_normalize_axis(
-    dataset: DatasetInfo | None,
+    dataset: DatasetMetadata | None,
     variable: Variable | None,
     axis: Axis,
     *,
@@ -582,7 +583,7 @@ def _time_values_from_bounds(
 
 
 def _validate_time_interval(
-    dataset: DatasetInfo | None,
+    dataset: DatasetMetadata | None,
     variable: Variable | None,
     axis: Axis,
     values: np.ndarray,
@@ -644,7 +645,7 @@ def _time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.nda
 
 
 def _interval_spec(
-    dataset: DatasetInfo | None, variable: Variable | None
+    dataset: DatasetMetadata | None, variable: Variable | None
 ) -> _IntervalSpec | None:
     var_freq = (
         str(getattr(variable, "frequency", "") or "") if variable is not None else ""
@@ -746,7 +747,7 @@ def _validate_stored_direction(axis: Axis, values: np.ndarray, name: str) -> Non
 _MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset({"all_leap", "366_day"})
 
 
-def _validate_calendar(dataset: DatasetInfo) -> None:
+def _validate_calendar(dataset: DatasetMetadata) -> None:
     """Validate the calendar declared in the dataset metadata."""
     calendar = str(dataset.get("calendar", "") or "").strip()
     if not calendar:

@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 import re
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 import uuid
 import warnings
 
@@ -18,6 +18,9 @@ from .utils.templates import (
     render_template as _render_template,
 )
 from .exceptions import ControlledVocabularyError
+
+if TYPE_CHECKING:
+    from .datasetinfo import DatasetInfo
 
 # Variant label index keys and their allowed integer range.
 # CMOR3 stores these as C int (32-bit signed), so values above INT32_MAX
@@ -219,7 +222,9 @@ class ControlledVocabulary(Mapping[str, Any]):
             str(file_tmpl) if isinstance(file_tmpl, str) and file_tmpl else None,
         )
 
-    def get_dataset_info(self, dataset: Mapping[str, Any]) -> dict[str, Any]:
+    def get_dataset_info(
+        self, dataset: Mapping[str, Any] | DatasetInfo
+    ) -> dict[str, Any]:
         """Get dataset info with CV defaults.
 
         Parameters

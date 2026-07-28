@@ -94,7 +94,7 @@ def _project(*table_names: str):
 
 
 def _make_dataset(project, base: dict, outpath: str):
-    """Return a DatasetInfo with an outpath merged in."""
+    """Return dataset metadata with an outpath merged in."""
     return project.dataset_info({**base, "outpath": outpath})
 
 

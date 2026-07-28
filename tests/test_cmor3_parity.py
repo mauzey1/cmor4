@@ -2138,12 +2138,13 @@ class TestCreateSubdirectories(unittest.TestCase):
         return ds, dataset_info, variable
 
     def _patch_dataset(self, dataset_info, extra: dict):
-        """Return a new DatasetInfo with extra keys merged in."""
+        """Return a new prepared dataset with extra keys merged in."""
         from cmor4.datasetinfo import DatasetInfo
 
-        return DatasetInfo(
+        return DatasetInfo.from_prepared(
             {**dict(dataset_info), **extra},
             project=dataset_info.project,
+            user_info=dataset_info.user_info,
         )
 
     # -----------------------------------------------------------------------

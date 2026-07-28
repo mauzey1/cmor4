@@ -44,13 +44,13 @@ class ControlledVocabularyError(ValueError):
     --------
     Raised when a required global attribute is missing::
 
-        dataset = DatasetInfo({"mip_era": "CMIP7"})
+        dataset = {"mip_era": "CMIP7"}
         # ControlledVocabularyError: Required attribute 'institution_id'
         # is missing
 
     Raised when an attribute value is not in the CV::
 
-        dataset = DatasetInfo({"experiment_id": "unknown-experiment"})
+        dataset = {"experiment_id": "unknown-experiment"}
         # ControlledVocabularyError: experiment_id 'unknown-experiment'
         # not found in CV
     """

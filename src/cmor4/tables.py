@@ -24,6 +24,7 @@ from .datasetinfo import DatasetInfo
 from .exceptions import TableValidationError
 from .grid import Grid
 from .utils.unit_conversion import units_are_convertible as _units_are_convertible
+from .utils.dataset_metadata import DatasetMetadata
 from .utils.validation import (
     _validate_calendar,
     validate_axes as _validate_axes,
@@ -178,7 +179,7 @@ class ProjectTables:
 
     def dataset_info(
         self,
-        dataset: Mapping[str, Any],
+        dataset: Mapping[str, Any] | DatasetInfo,
     ) -> DatasetInfo:
         """Create prepared dataset metadata from user input and tables.
 
@@ -200,11 +201,15 @@ class ProjectTables:
         self.cv.validate_source_attributes(normalized_dataset)
         self.cv.validate_experiment(normalized_dataset)
         self.cv.validate_parent_attributes(normalized_dataset)
-        return DatasetInfo.from_mapping(normalized_dataset, project=self)
+        return DatasetInfo.from_prepared(
+            normalized_dataset,
+            project=self,
+            user_info=dataset,
+        )
 
     def _dataset_for_variable(
         self,
-        dataset_info: DatasetInfo,
+        dataset_info: DatasetMetadata,
         variable: Variable,
     ) -> tuple[DatasetInfo, Variable]:
         """Prepare dataset info with variable-specific metadata and validation.
@@ -240,7 +245,11 @@ class ProjectTables:
 
         # Note: Full variable and dataset-variable consistency validation
         # happens in validate_components, not here
-        prepared_dataset = DatasetInfo.from_mapping(normalized_dataset, project=self)
+        prepared_dataset = DatasetInfo.from_prepared(
+            normalized_dataset,
+            project=self,
+            user_info=getattr(dataset_info, "user_info", dataset_info),
+        )
 
         # Quick validation check for dataset-variable consistency
         # This is duplicated in validate_components but done early for fast
@@ -986,7 +995,7 @@ class ProjectTables:
 
     def _validate_dataset_variable_consistency(
         self,
-        dataset_info: DatasetInfo,
+        dataset_info: DatasetMetadata,
         variable: Variable,
         variable_entry: VariableEntry,
     ) -> None:
@@ -998,7 +1007,7 @@ class ProjectTables:
             and str(dataset_info["frequency"]) != str(variable.frequency)
         ):
             raise TableValidationError(
-                f"DatasetInfo frequency={dataset_info['frequency']!r} does not match "
+                f"dataset frequency={dataset_info['frequency']!r} does not match "
                 f"variable {variable_entry.table_id}:{variable_entry.name} "
                 f"frequency={variable.frequency!r}."
             )

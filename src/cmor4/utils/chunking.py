@@ -6,14 +6,14 @@ from typing import Sequence
 
 import numpy as np
 
-from ..datasetinfo import DatasetInfo
+from .dataset_metadata import DatasetMetadata
 
 
 # CMIP7 minimum chunk size in bytes (4 MiB)
 CMIP7_MIN_CHUNK_SIZE = 4 * 1024 * 1024  # 4,194,304 bytes
 
 
-def is_cmip7_dataset(dataset: DatasetInfo) -> bool:
+def is_cmip7_dataset(dataset: DatasetMetadata) -> bool:
     """Check if dataset is CMIP7.
 
     Parameters
