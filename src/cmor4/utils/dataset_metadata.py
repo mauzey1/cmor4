@@ -8,7 +8,7 @@ from typing import Any, Self
 
 from pydantic import field_validator
 
-from ..metadata import MetadataModel
+from .metadata import MetadataModel
 
 # Keys that must not appear in NetCDF global attributes
 INTERNAL_DATASET_KEYS: frozenset[str] = frozenset({

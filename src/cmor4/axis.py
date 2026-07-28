@@ -7,7 +7,7 @@ from typing import Any, Literal
 import numpy as np
 from pydantic import Field
 
-from .metadata import AxisStr, BoolCoerced, CoercedF, MetadataModel, StrSeq
+from .utils.metadata import AxisStr, BoolCoerced, CoercedF, MetadataModel, StrSeq
 
 
 class Axis(MetadataModel):

@@ -9,7 +9,7 @@ import numpy as np
 from pydantic import Field, model_validator
 
 from .axis import Axis
-from .metadata import MetadataModel, StrSeq, StrTuple
+from .utils.metadata import MetadataModel, StrSeq, StrTuple
 
 _LATITUDE_PARAMS: frozenset[str] = frozenset({
     "grid_north_pole_latitude",

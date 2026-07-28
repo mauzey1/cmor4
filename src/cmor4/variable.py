@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal, Mapping
 
 from pydantic import BeforeValidator, Field
 
-from .metadata import CoercedF, IntTuple, MetadataModel, StrOrTuple, StrSeq
+from .utils.metadata import CoercedF, IntTuple, MetadataModel, StrOrTuple, StrSeq
 
 
 def _lower_str(v: Any) -> Any:
