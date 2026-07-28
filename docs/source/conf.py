@@ -46,6 +46,16 @@ autodoc_typehints_format = "short"  # Use short form (e.g., list instead of typi
 python_use_unqualified_type_names = (
     True  # Use short names (e.g., Dataset instead of xarray.Dataset)
 )
+autodoc_type_aliases = {
+    "StrSeq": "list[str] | tuple[str, ...] | None",
+    "StrTuple": "tuple[str, ...] | None",
+    "IntTuple": "tuple[int, ...] | None",
+    "StrOrTuple": "str | tuple[str, ...] | None",
+    "CoercedF": "float | None",
+    "AxisStr": "str | None",
+    "BoolCoerced": "bool | None",
+    "PositiveLiteral": "Literal['up', 'down'] | None",
+}
 
 # Napoleon settings for Google/NumPy style docstrings
 napoleon_google_docstring = True
@@ -62,9 +72,12 @@ napoleon_use_rtype = True
 napoleon_preprocess_types = True
 napoleon_type_aliases = {
     "StrSeq": "list[str] | tuple[str, ...] | None",
+    "StrTuple": "tuple[str, ...] | None",
     "IntTuple": "tuple[int, ...] | None",
     "StrOrTuple": "str | tuple[str, ...] | None",
     "CoercedF": "float | None",
+    "AxisStr": "str | None",
+    "BoolCoerced": "bool | None",
     "PositiveLiteral": "Literal['up', 'down'] | None",
 }
 napoleon_attr_annotations = True
