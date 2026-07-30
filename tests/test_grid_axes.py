@@ -595,7 +595,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
             frequency="mon",
         )
         data = np.random.rand(1, nj, ni).astype("f4") + 273.15
-        dataset = DatasetInfo.from_mapping({"outpath": "/tmp", "frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
 
         ds = create_dataset(dataset, variable, [time_axis], data, grid=grid)
 
@@ -647,7 +647,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
             frequency="mon",
         )
         data = np.random.rand(1, nj, ni).astype("f4") + 273.15
-        dataset = DatasetInfo.from_mapping({"outpath": "/tmp", "frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
 
         ds = create_dataset(dataset, variable, [time_axis], data, grid=grid)
 
@@ -683,7 +683,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
             frequency="mon",
         )
         data = np.random.rand(1, nj, ni).astype("f4") + 273.15
-        dataset = DatasetInfo.from_mapping({"outpath": "/tmp", "frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
 
         # Pass j and i explicitly in the caller's axes list as well as via grid
         ds = create_dataset(

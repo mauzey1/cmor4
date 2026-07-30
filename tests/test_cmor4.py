@@ -361,7 +361,7 @@ class Cmor4Test(unittest.TestCase):
 
     def test_variable_value_validation_matches_cmor_nan_and_range_checks(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = cmor4.DatasetInfo.from_mapping(dataset_info(Path(tmp_dir)))
+            info = cmor4.DatasetInfo.from_prepared(dataset_info(Path(tmp_dir)))
             axis = cmor4.Axis(name="time", values=[0.0, 1.0, 2.0])
             variable = cmor4.Variable(
                 name="sample",
@@ -398,7 +398,7 @@ class Cmor4Test(unittest.TestCase):
 
     def test_variable_absolute_mean_validation_matches_cmor_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = cmor4.DatasetInfo.from_mapping(dataset_info(Path(tmp_dir)))
+            info = cmor4.DatasetInfo.from_prepared(dataset_info(Path(tmp_dir)))
             axis = cmor4.Axis(name="time", values=[0.0, 1.0, 2.0])
             variable = cmor4.Variable(
                 name="sample",
@@ -432,7 +432,7 @@ class Cmor4Test(unittest.TestCase):
 
     def test_zfactor_value_validation_uses_cmor_variable_checks(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = cmor4.DatasetInfo.from_mapping(dataset_info(Path(tmp_dir)))
+            info = cmor4.DatasetInfo.from_prepared(dataset_info(Path(tmp_dir)))
             axis = cmor4.Axis(name="time", values=[0.0, 1.0, 2.0])
             variable = cmor4.Variable(name="sample", dimensions=["time"])
             zfactor = cmor4.ZFactor(
@@ -469,7 +469,7 @@ class Cmor4Test(unittest.TestCase):
 
     def test_grid_mapping_parameters_match_cmor_range_checks(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            info = cmor4.DatasetInfo.from_mapping(dataset_info(Path(tmp_dir)))
+            info = cmor4.DatasetInfo.from_prepared(dataset_info(Path(tmp_dir)))
             variable = cmor4.Variable(
                 name="sample",
                 dimensions=["time", "y", "x"],
@@ -515,7 +515,7 @@ class Cmor4Test(unittest.TestCase):
     def test_string_from_template_uses_global_attrs_and_special_values(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             variable = cmor4.Variable(name="sample", dimensions=["time"])
-            info = cmor4.DatasetInfo.from_mapping(
+            info = cmor4.DatasetInfo.from_prepared(
                 dataset_info(Path(tmp_dir)),
             )
             ds = cmor4.create_dataset(
@@ -532,7 +532,7 @@ class Cmor4Test(unittest.TestCase):
                 "sample_DUMMY-MODEL_200001-200002_v20200101",
             )
 
-            path_info = cmor4.DatasetInfo.from_mapping(
+            path_info = cmor4.DatasetInfo.from_prepared(
                 {
                     **info.to_dict(),
                     "output_path_template": "<activity_id>",
@@ -822,7 +822,7 @@ class Cmor4Test(unittest.TestCase):
             name="sample",
             dimensions=["time", "latitude", "longitude"],
         )
-        info = cmor4.DatasetInfo.from_mapping(
+        info = cmor4.DatasetInfo.from_prepared(
             {"frequency": "mon"},
         )
         grid = cmor4.Grid(dimensions=["x", "y"])
@@ -982,7 +982,7 @@ class Cmor4Test(unittest.TestCase):
                 ),
             ]
             for frequency, values, units, expected_name in cases:
-                info = cmor4.DatasetInfo.from_mapping(
+                info = cmor4.DatasetInfo.from_prepared(
                     dict(base_info, frequency=frequency),
                 )
                 axes = [
@@ -1023,7 +1023,7 @@ class Cmor4Test(unittest.TestCase):
                 )
             ]
             variable = cmor4.Variable(name="co2_tclm-u-hm-u", dimensions=["time2"])
-            info = cmor4.DatasetInfo.from_mapping(raw_info)
+            info = cmor4.DatasetInfo.from_prepared(raw_info)
 
             ds = cmor4.create_dataset(info, variable, axes, np.ones(2, dtype="f4"))
 
@@ -1192,7 +1192,7 @@ class TableInfoTest(unittest.TestCase):
         not during dataset_info() when no variable is known yet."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             info = self.project.dataset_info(dataset_info(Path(tmp_dir)))
-        # Not present on the DatasetInfo object itself
+        # Not present until dataset creation knows the variable table.
         self.assertIsNone(info.get("table_info"))
 
     def test_table_info_not_overwritten_if_user_supplied(self):

@@ -117,7 +117,7 @@ class DatasetWriter:
     ----------
     dataset : DatasetInfo
         Dataset-level metadata including institution, experiment, variant, etc.
-        Created via :meth:`ProjectTables.dataset_info`.
+        Usually created via :meth:`ProjectTables.dataset_info`.
     variable : Variable
         Variable metadata including dimensions, units, and CF attributes.
         Created via :meth:`ProjectTables.variable`.

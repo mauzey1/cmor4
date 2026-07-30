@@ -1,5 +1,5 @@
 DatasetInfo
-===========
+===============
 
 .. currentmodule:: cmor4
 

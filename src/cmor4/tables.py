@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-import numpy as np
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+
+import numpy as np
+from pydantic import ValidationError
 
 from .utils.table_utils import (
     is_table_value as _is_table_value,
@@ -21,9 +23,10 @@ from .utils.tables import (
 from .axis import Axis
 from .cv import ControlledVocabulary
 from .datasetinfo import DatasetInfo
-from .exceptions import TableValidationError
+from .exceptions import ControlledVocabularyError, TableValidationError
 from .grid import Grid
 from .utils.unit_conversion import units_are_convertible as _units_are_convertible
+from .utils.dataset_metadata import DatasetMetadata
 from .utils.validation import (
     _validate_calendar,
     validate_axes as _validate_axes,
@@ -193,18 +196,27 @@ class ProjectTables:
             Validated and defaulted dataset metadata.
         """
 
-        normalized_dataset = self.cv.get_dataset_info(dataset)
+        user_info = dict(dataset)
+        try:
+            metadata = DatasetMetadata.from_mapping(user_info)
+        except ValidationError as exc:
+            raise ControlledVocabularyError(str(exc)) from exc
+        normalized_dataset = self.cv.get_dataset_info(metadata)
         self.cv.validate_dataset_values(normalized_dataset)
         self.cv.validate_variant_indices(normalized_dataset)
         self.cv.validate_forcing_terms(normalized_dataset)
         self.cv.validate_source_attributes(normalized_dataset)
         self.cv.validate_experiment(normalized_dataset)
         self.cv.validate_parent_attributes(normalized_dataset)
-        return DatasetInfo.from_mapping(normalized_dataset, project=self)
+        return DatasetInfo.from_prepared(
+            normalized_dataset,
+            project=self,
+            user_info=user_info,
+        )
 
     def _dataset_for_variable(
         self,
-        dataset_info: DatasetInfo,
+        dataset_info: DatasetMetadata,
         variable: Variable,
     ) -> tuple[DatasetInfo, Variable]:
         """Prepare dataset info with variable-specific metadata and validation.
@@ -225,14 +237,16 @@ class ProjectTables:
         normalized_dataset = self.cv.get_dataset_info(dataset_info)
         variable_entry = self.variable_table.resolve(variable.to_dict())
         variable_entry = self.variable_table.contextual_entry(
-            variable_entry, variable, normalized_dataset
+            variable_entry, variable, normalized_dataset.to_dict()
         )
         variable = self.variable_table.apply_contextual_metadata(
             variable, variable_entry
         )
 
-        self._add_table_header_defaults(normalized_dataset, variable_entry)
-        self._add_variable_global_defaults(normalized_dataset, variable)
+        normalized_data = normalized_dataset.to_dict()
+        self._add_table_header_defaults(normalized_data, variable_entry)
+        self._add_variable_global_defaults(normalized_data, variable)
+        normalized_dataset = DatasetMetadata.from_mapping(normalized_data)
         self.cv.validate_dataset_info(normalized_dataset)
         self.cv.validate_source_attributes(normalized_dataset)
         self.cv.validate_experiment(normalized_dataset)
@@ -240,7 +254,12 @@ class ProjectTables:
 
         # Note: Full variable and dataset-variable consistency validation
         # happens in validate_components, not here
-        prepared_dataset = DatasetInfo.from_mapping(normalized_dataset, project=self)
+        user_info = getattr(dataset_info, "user_info", dataset_info.to_dict())
+        prepared_dataset = DatasetInfo.from_prepared(
+            normalized_dataset,
+            project=self,
+            user_info=dict(user_info),
+        )
 
         # Quick validation check for dataset-variable consistency
         # This is duplicated in validate_components but done early for fast
@@ -726,7 +745,7 @@ class ProjectTables:
 
     def validate_dataset(
         self,
-        dataset_info: DatasetInfo | None,
+        dataset_info: DatasetMetadata | None,
         variable: Variable,
         axes: Sequence[Axis],
         *,
@@ -816,7 +835,7 @@ class ProjectTables:
         if dataset_info is not None:
             normalized_dataset = self.cv.get_dataset_info(dataset_info)
             variable_entry = self.variable_table.contextual_entry(
-                variable_entry, variable, normalized_dataset
+                variable_entry, variable, normalized_dataset.to_dict()
             )
 
         self.variable_table.validate_against(variable, variable_entry)
@@ -986,7 +1005,7 @@ class ProjectTables:
 
     def _validate_dataset_variable_consistency(
         self,
-        dataset_info: DatasetInfo,
+        dataset_info: DatasetMetadata,
         variable: Variable,
         variable_entry: VariableEntry,
     ) -> None:
@@ -998,7 +1017,7 @@ class ProjectTables:
             and str(dataset_info["frequency"]) != str(variable.frequency)
         ):
             raise TableValidationError(
-                f"DatasetInfo frequency={dataset_info['frequency']!r} does not match "
+                f"dataset frequency={dataset_info['frequency']!r} does not match "
                 f"variable {variable_entry.table_id}:{variable_entry.name} "
                 f"frequency={variable.frequency!r}."
             )
@@ -1020,10 +1039,11 @@ class ProjectTables:
             missing or controlled global attribute values are invalid.
         """
 
-        self.cv.validate_dataset_info(attrs)
-        self.cv.validate_source_attributes(attrs)
-        self.cv.validate_experiment(attrs)
-        self.cv.validate_parent_attributes(attrs)
+        metadata = DatasetMetadata.from_mapping(attrs)
+        self.cv.validate_dataset_info(metadata)
+        self.cv.validate_source_attributes(metadata)
+        self.cv.validate_experiment(metadata)
+        self.cv.validate_parent_attributes(metadata)
 
     def _mark_prepared_axis(self, axis: Axis) -> Axis:
         object.__setattr__(axis, "_cmor4_project_tables", self)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
 import tempfile
 import unittest
@@ -13,8 +14,8 @@ import cmor4
 from cmor4 import (
     Axis,
     ControlledVocabulary,
-    DatasetInfo,
     Grid,
+    DatasetInfo,
     ProjectTables,
     Variable,
     ZFactor,
@@ -410,7 +411,7 @@ class ProjectTablesTest(unittest.TestCase):
             dimensions=["time", "x", "y"],
             coordinates=["latitude", "longitude"],
         )
-        info = cmor4.DatasetInfo.from_mapping(
+        info = cmor4.DatasetInfo.from_prepared(
             {"frequency": "mon"},
         )
 
@@ -640,7 +641,7 @@ class ProjectTablesTest(unittest.TestCase):
             dimensions=["time", "x", "y"],
             coordinates=["latitude", "longitude"],
         )
-        info = cmor4.DatasetInfo.from_mapping(
+        info = cmor4.DatasetInfo.from_prepared(
             {"frequency": "mon"},
         )
 
@@ -1516,7 +1517,7 @@ class DatasetInfoMethodTest(unittest.TestCase):
     def tearDown(self):
         self._ctx.cleanup()
 
-    def test_returns_dataset_info_instance(self):
+    def test_returns_prepared_dataset_instance(self):
         info = self.project.dataset_info({
             "activity_id": "CMIP",
             "institution_id": "NCAR",
@@ -1564,20 +1565,29 @@ class DatasetInfoMethodTest(unittest.TestCase):
             self.project.cv.validate_dataset_info({"activity_id": "CMIP"})
         self.assertIn("institution_id", str(ctx.exception))
 
-    def test_accepts_dataset_info_as_input(self):
-        """dataset_info should accept an existing DatasetInfo, not just a plain dict."""
-        di = DatasetInfo.from_mapping({"activity_id": "CMIP", "institution_id": "NCAR"})
-        info = self.project.dataset_info(di)
-        self.assertIsInstance(info, DatasetInfo)
-        self.assertEqual(info["activity_id"], "CMIP")
-
     def test_user_info_is_preserved_in_output(self):
-        di = DatasetInfo.from_mapping(
-            {"activity_id": "CMIP", "institution_id": "NCAR"},
-        )
-        info = self.project.dataset_info(di)
-        # user_info should carry through (DatasetInfo stores it separately)
+        raw_info = {"activity_id": "CMIP", "institution_id": "NCAR"}
+        info = self.project.dataset_info(raw_info)
+        # user_info should carry through on the prepared dataset.
         self.assertIsInstance(info, DatasetInfo)
+        self.assertEqual(info.user_info["activity_id"], "CMIP")
+
+    def test_dict_like_view_without_mapping_inheritance(self):
+        info = DatasetInfo.from_prepared(
+            {
+                "activity_id": "CMIP",
+                "institution_id": "NCAR",
+                "custom_attribute": "custom value",
+            },
+        )
+
+        self.assertNotIsInstance(info, Mapping)
+        self.assertEqual(info["activity_id"], "CMIP")
+        self.assertEqual(info.get("custom_attribute"), "custom value")
+        self.assertIn("institution_id", info)
+        self.assertEqual(dict(info)["custom_attribute"], "custom value")
+        self.assertEqual(info.to_dict()["custom_attribute"], "custom value")
+        self.assertEqual(info.extra["custom_attribute"], "custom value")
 
 
 # ---------------------------------------------------------------------------
@@ -3499,12 +3509,12 @@ class ValidateComponentsIntegrationTest(unittest.TestCase):
 
     def test_dataset_from_dataset_info_passes_frequency_check(self):
         pr = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
         self.project.validate_dataset(dataset, pr, self._base_axes())
 
     def test_mismatched_frequency_between_dataset_and_variable(self):
         pr = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "day"})
+        dataset = DatasetInfo.from_prepared({"frequency": "day"})
         with self.assertRaises(TableValidationError):
             self.project.validate_dataset(dataset, pr, self._base_axes())
 
@@ -3717,7 +3727,7 @@ class MustHaveBoundsTest(unittest.TestCase):
 
     def test_lat_with_bounds_passes_with_dataset(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
         self.project.validate_dataset(dataset, var, self._base_axes(lat_bounds=True))
 
     # --- fails without bounds regardless of whether dataset is provided ---
@@ -3732,7 +3742,7 @@ class MustHaveBoundsTest(unittest.TestCase):
 
     def test_lat_without_bounds_raises_with_dataset(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
         with self.assertRaises(AxisValidationError) as ctx:
             self.project.validate_dataset(
                 dataset, var, self._base_axes(lat_bounds=False)
@@ -3837,7 +3847,7 @@ class TimeIntervalWithoutDatasetTest(unittest.TestCase):
 
     def test_monthly_time_with_monthly_variable_passes_with_dataset(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
         self.project.validate_dataset(
             dataset, var, [self._monthly_time()] + self._spatial_axes()
         )
@@ -3857,7 +3867,7 @@ class TimeIntervalWithoutDatasetTest(unittest.TestCase):
 
     def test_daily_time_with_monthly_variable_also_raises_with_dataset(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
         with self.assertRaises(AxisValidationError):
             self.project.validate_dataset(
                 dataset, var, [self._daily_time()] + self._spatial_axes()
@@ -3939,7 +3949,10 @@ class MIPCalendarTest(unittest.TestCase):
         Run validate_components with the given calendar and return any MIP warnings.
         """
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": calendar})
+        dataset = DatasetInfo.from_prepared({
+            "frequency": "mon",
+            "calendar": calendar,
+        })
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             self.project.validate_dataset(dataset, var, self._base_axes())
@@ -3950,26 +3963,29 @@ class MIPCalendarTest(unittest.TestCase):
     def test_utc_calendar_raises(self):
         """'utc' is not a CF calendar — raises AxisValidationError."""
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": "utc"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon", "calendar": "utc"})
         with self.assertRaises(AxisValidationError) as ctx:
             self.project.validate_dataset(dataset, var, self._base_axes())
         self.assertIn("utc", str(ctx.exception))
 
     def test_tai_calendar_raises(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": "tai"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon", "calendar": "tai"})
         with self.assertRaises(AxisValidationError):
             self.project.validate_dataset(dataset, var, self._base_axes())
 
     def test_completely_unknown_calendar_raises(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": "martian"})
+        dataset = DatasetInfo.from_prepared({
+            "frequency": "mon",
+            "calendar": "martian",
+        })
         with self.assertRaises(AxisValidationError):
             self.project.validate_dataset(dataset, var, self._base_axes())
 
     def test_invalid_calendar_error_lists_valid_options(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon", "calendar": "utc"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon", "calendar": "utc"})
         with self.assertRaises(AxisValidationError) as ctx:
             self.project.validate_dataset(dataset, var, self._base_axes())
         self.assertIn("standard", str(ctx.exception))
@@ -4018,7 +4034,7 @@ class MIPCalendarTest(unittest.TestCase):
 
     def test_no_calendar_in_dataset_no_warning(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             self.project.validate_dataset(dataset, var, self._base_axes())
@@ -4087,7 +4103,7 @@ class ValidateComponentsTest(unittest.TestCase):
     def test_valid_with_matching_frequency_passes(self):
         """Dataset frequency matching variable frequency passes."""
         variable = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
         self.project.validate_dataset(dataset, variable, self._standard_axes())
 
     def test_valid_with_no_grid_and_no_zfactors_passes(self):
@@ -4143,7 +4159,7 @@ class ValidateComponentsTest(unittest.TestCase):
     def test_frequency_mismatch_raises(self):
         """Dataset frequency differing from variable table frequency raises."""
         variable = self.project.variable("pr")  # table says 'mon'
-        dataset = DatasetInfo.from_mapping({"frequency": "day"})
+        dataset = DatasetInfo.from_prepared({"frequency": "day"})
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_dataset(dataset, variable, self._standard_axes())
         msg = str(ctx.exception)
@@ -4154,7 +4170,7 @@ class ValidateComponentsTest(unittest.TestCase):
     def test_frequency_mismatch_names_variable_table(self):
         """Error message identifies the variable and table where mismatch occurs."""
         variable = self.project.variable("pr")
-        dataset = DatasetInfo.from_mapping({"frequency": "fx"})
+        dataset = DatasetInfo.from_prepared({"frequency": "fx"})
         with self.assertRaises(TableValidationError) as ctx:
             self.project.validate_dataset(dataset, variable, self._standard_axes())
         self.assertIn("Amon", str(ctx.exception))

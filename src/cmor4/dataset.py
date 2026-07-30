@@ -11,7 +11,7 @@ import xarray as xr
 from .utils.templates import render_template
 from .utils.time_utils import decode_time_value, add_time_delta, date_part
 from .axis import Axis
-from .datasetinfo import DatasetInfo, INTERNAL_DATASET_KEYS
+from .datasetinfo import DatasetInfo
 from .grid import Grid
 from .utils.construction import (
     add_grid_coords,
@@ -26,6 +26,7 @@ from .utils.validation import (
     validate_final_dataset,
     validate_metadata,
 )
+from .utils.dataset_metadata import DatasetMetadata, INTERNAL_DATASET_KEYS
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -154,7 +155,7 @@ def create_dataset_from_validated_data(
         add_grid_coords(
             grid,
             tuple(variable.dimensions or ()),
-            dataset.project,
+            getattr(dataset, "project", None),
             coords,
             data_vars,
             auxiliary_coord_names,
@@ -641,7 +642,7 @@ def string_from_template(
 
 
 def _template_tokens(
-    dataset: DatasetInfo,
+    dataset: DatasetMetadata,
     variable: Variable,
     ds: xr.Dataset | None,
 ) -> dict[str, Any]:
