@@ -18,6 +18,7 @@ Table classes — own raw entries, resolution logic, and merge logic:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -132,6 +133,97 @@ class GridMappingEntry(BaseModel):
     @classmethod
     def _coerce_entry(cls, v: Any) -> dict[str, Any]:
         return dict(v) if not isinstance(v, dict) else v
+
+    def required_params(self) -> tuple[str, ...]:
+        """Return projection parameters required or recommended by this entry."""
+        required = _entry_tokens(
+            self.entry,
+            "required_params",
+            "required_parameters",
+            "required",
+        )
+        return _unique_tokens((*required, *self._numbered_parameters()))
+
+    def optional_params(self) -> tuple[str, ...]:
+        """Return optional projection parameter names declared by this entry."""
+        params = _entry_tokens(
+            self.entry,
+            "optional_params",
+            "optional_parameters",
+            "parameters",
+        )
+        table_params = self.entry.get("params")
+        if isinstance(table_params, Mapping):
+            params = (*params, *(str(key) for key in table_params))
+        return _unique_tokens(params)
+
+    def text_params(self) -> tuple[str, ...]:
+        """Return grid-mapping parameters that should be written as text."""
+        declared = _entry_tokens(self.entry, "text_params", "text_parameters")
+        known = tuple(
+            name
+            for name in (
+                *self.required_params(),
+                *self.optional_params(),
+                *self._numbered_parameters(),
+            )
+            if name in _TEXT_GRID_MAPPING_PARAMS
+        )
+        return _unique_tokens((*declared, *known))
+
+    def required_axes(self) -> tuple[str, ...]:
+        """Return required grid-axis designators or names in table order."""
+        return _entry_tokens(
+            self.entry,
+            "required_axes",
+            "required_axis",
+            "axes",
+            "axis",
+        )
+
+    def _numbered_parameters(self) -> tuple[str, ...]:
+        numbered: list[tuple[int, str]] = []
+        for key, value in self.entry.items():
+            match = re.fullmatch(r"parameter(\d+)", str(key))
+            if match and is_table_value(value):
+                numbered.append((int(match.group(1)), str(value)))
+        return tuple(value for _, value in sorted(numbered))
+
+
+_TEXT_GRID_MAPPING_PARAMS: frozenset[str] = frozenset({
+    "crs_wkt",
+    "GeoTransform",
+    "spatial_ref",
+})
+
+
+def _entry_tokens(entry: Mapping[str, Any], *keys: str) -> tuple[str, ...]:
+    tokens: list[str] = []
+    for key in keys:
+        value = entry.get(key)
+        if not is_table_value(value):
+            continue
+        if isinstance(value, str):
+            tokens.extend(item for item in re.split(r"[\s,]+", value) if item)
+        elif isinstance(value, Mapping):
+            tokens.extend(str(item) for item in value if str(item))
+        else:
+            try:
+                tokens.extend(str(item) for item in value if str(item))
+            except TypeError:
+                tokens.append(str(value))
+    return _unique_tokens(tokens)
+
+
+def _unique_tokens(tokens: Sequence[str]) -> tuple[str, ...]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        token = str(token)
+        if token and token not in seen:
+            result.append(token)
+            seen.add(token)
+    return tuple(result)
 
 
 class VariableEntry(BaseModel):

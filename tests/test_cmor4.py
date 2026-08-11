@@ -153,7 +153,8 @@ class Cmor4Test(unittest.TestCase):
             "latitude",
             values=[-45.0, 45.0],
         )
-        grid = self.project.grid("sample_user_mapping")
+        with self.assertWarnsRegex(RuntimeWarning, "false_easting"):
+            grid = self.project.grid("sample_user_mapping")
         zfactor = self.project.zfactor(
             "p0",
             values=100000.0,

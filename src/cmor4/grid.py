@@ -322,16 +322,61 @@ class Grid(MetadataModel):
         mname = self.mapping_name or self.grid_mapping_name
         if mname:
             attrs["grid_mapping_name"] = mname
+
+        skip_params: set[str] = set()
+        if "standard_parallel1" in self.params and "standard_parallel2" in self.params:
+            skip_params.update({"standard_parallel1", "standard_parallel2"})
+            if "standard_parallel" not in self.params:
+                sp1 = self.params["standard_parallel1"]
+                sp2 = self.params["standard_parallel2"]
+                if _valid_param("standard_parallel1", sp1) and _valid_param(
+                    "standard_parallel2", sp2
+                ):
+                    if (
+                        isinstance(sp1, (list, tuple))
+                        and len(sp1) == 2
+                        and isinstance(sp1[1], str)
+                    ):
+                        sp1 = sp1[0]
+                    if (
+                        isinstance(sp2, (list, tuple))
+                        and len(sp2) == 2
+                        and isinstance(sp2[1], str)
+                    ):
+                        sp2 = sp2[0]
+                    attrs["standard_parallel"] = [
+                        sp1,
+                        sp2,
+                    ]
+
         for key, val in self.params.items():
+            key = str(key)
+            if key in skip_params:
+                continue
             if not _valid_param(str(key), val):
                 continue
-            if isinstance(val, (list, tuple)) and val:
-                attrs[key] = val[0]
-                if len(val) > 1 and val[1]:
-                    attrs[f"{key}_units"] = val[1]
-            else:
-                attrs[key] = val
-        return self.netcdf_attrs(attrs)
+            if (
+                isinstance(val, (list, tuple))
+                and len(val) == 2
+                and isinstance(val[1], str)
+            ):
+                val = val[0]
+            attrs[key] = val
+
+        result: dict[str, Any] = {}
+        for key, value in attrs.items():
+            if MetadataModel.is_netcdf_attr_value(value):
+                result[str(key)] = value
+                continue
+            if isinstance(value, np.ndarray):
+                if value.dtype.kind in {"i", "u", "f"} and value.ndim > 0:
+                    result[str(key)] = value.tolist()
+                continue
+            if isinstance(value, (list, tuple)) and value:
+                arr = np.asarray(value)
+                if arr.dtype.kind in {"i", "u", "f"} and arr.ndim > 0:
+                    result[str(key)] = list(value)
+        return result
 
 
 def _valid_param(name: str, value: Any) -> bool:
@@ -365,7 +410,11 @@ def _valid_param(name: str, value: Any) -> bool:
 
 
 def _primary_num(value: Any) -> float | None:
-    if isinstance(value, (list, tuple)) and value:
+    if (
+        isinstance(value, (list, tuple))
+        and len(value) == 2
+        and isinstance(value[1], str)
+    ):
         value = value[0]
     try:
         return float(value)

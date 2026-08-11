@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -649,6 +650,14 @@ class ProjectTables:
                 },
             )
         """
+        requested = str(
+            values.get("table_entry")
+            or values.get("mapping_entry")
+            or name
+            or ""
+        )
+        gm_entry = self.grid_table.resolve_mapping(requested) if requested else None
+
         # Validate that each axis corresponds to an entry in the grids table.
         grid_axis_names = set(self.grid_table.axis_entries)
         for axis in axes:
@@ -664,6 +673,99 @@ class ProjectTables:
                     f"Axis {candidate!r} is not in the grid table axis_entry. "
                     f"Valid grid axes are: {sorted(grid_axis_names)}."
                 )
+        if gm_entry is not None:
+            required_params = gm_entry.required_params()
+            if required_params:
+                supplied_params: set[str] = set()
+                params = values.get("params")
+                if isinstance(params, Mapping):
+                    supplied_params.update(
+                        str(key) for key, value in params.items() if value is not None
+                    )
+                supplied_params.update(
+                    str(key)
+                    for key, value in values.items()
+                    if key != "params" and value is not None
+                )
+                missing_params: list[str] = []
+                for param in required_params:
+                    supplied = param in supplied_params
+                    if param == "standard_parallel":
+                        supplied = supplied or (
+                            {"standard_parallel1", "standard_parallel2"}
+                            <= supplied_params
+                        )
+                    elif param in {"standard_parallel1", "standard_parallel2"}:
+                        supplied = supplied or "standard_parallel" in supplied_params
+                    if not supplied:
+                        missing_params.append(param)
+                if missing_params:
+                    warnings.warn(
+                        f"grid mapping {gm_entry.name!r} is missing "
+                        "table-declared parameter(s): "
+                        f"{', '.join(missing_params)}. Table defaults will "
+                        "be used when available.",
+                        RuntimeWarning,
+                        stacklevel=3,
+                    )
+
+            required_axes = gm_entry.required_axes()
+            if required_axes:
+                if axes:
+                    if len(axes) != len(required_axes):
+                        raise TableValidationError(
+                            f"grid mapping {gm_entry.name!r} requires "
+                            f"{len(required_axes)} grid axis/axes "
+                            f"({', '.join(required_axes)}) but {len(axes)} "
+                            "were supplied."
+                        )
+                    for index, (axis, expected) in enumerate(
+                        zip(axes, required_axes, strict=True)
+                    ):
+                        expected_text = str(expected)
+                        if expected_text.upper() in {"X", "Y", "Z", "T"}:
+                            matches = (
+                                str(axis.axis or "").upper() == expected_text.upper()
+                            )
+                        else:
+                            matches = expected_text in {
+                                str(value)
+                                for value in (
+                                    axis.name,
+                                    axis.table_entry,
+                                    axis.axis_entry,
+                                    axis.coordinate,
+                                    axis.out_name,
+                                    axis.generic_level_name,
+                                )
+                                if value
+                            }
+                        if not matches:
+                            actual = (
+                                axis.axis
+                                or axis.table_entry
+                                or axis.name
+                                or axis.out_name
+                            )
+                            raise TableValidationError(
+                                f"grid mapping {gm_entry.name!r} requires "
+                                f"grid axis {expected!r} at position {index}; "
+                                f"got {actual!r}."
+                            )
+                elif values.get("dimensions") is not None:
+                    dimensions = values["dimensions"]
+                    dims = (
+                        (dimensions,)
+                        if isinstance(dimensions, str)
+                        else tuple(dimensions)
+                    )
+                    if len(dims) != len(required_axes):
+                        raise TableValidationError(
+                            f"grid mapping {gm_entry.name!r} requires "
+                            f"{len(required_axes)} grid axis/axes "
+                            f"({', '.join(required_axes)}) but dimensions="
+                            f"{dims!r} declares {len(dims)}."
+                        )
 
         data = {k: v for k, v in {"name": name, **values}.items() if v is not None}
         if axes:

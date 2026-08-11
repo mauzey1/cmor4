@@ -2644,6 +2644,99 @@ class GridMethodTest(unittest.TestCase):
         g = self.project.grid("lambert_conformal_conic", params=params)
         self.assertEqual(g.params, params)
 
+    def test_mapping_attributes_normalize_paired_standard_parallel(self):
+        grid = Grid(
+            mapping_name="lambert_conformal_conic",
+            params={
+                "standard_parallel1": (30.0, "degrees_north"),
+                "standard_parallel2": (60.0, "degrees_north"),
+                "false_easting": (10.0, "m"),
+            },
+            attrs={
+                "crs_wkt": "PROJCRS[...]",
+                "GeoTransform": "0 1 0 0 0 -1",
+            },
+        )
+
+        attrs = grid.mapping_attributes()
+
+        self.assertEqual(attrs["standard_parallel"], [30.0, 60.0])
+        self.assertNotIn("standard_parallel1", attrs)
+        self.assertNotIn("standard_parallel2", attrs)
+        self.assertNotIn("standard_parallel1_units", attrs)
+        self.assertNotIn("standard_parallel2_units", attrs)
+        self.assertEqual(attrs["false_easting"], 10.0)
+        self.assertNotIn("false_easting_units", attrs)
+        self.assertEqual(attrs["crs_wkt"], "PROJCRS[...]")
+        self.assertEqual(attrs["GeoTransform"], "0 1 0 0 0 -1")
+
+    def test_grid_mapping_entry_helpers_parse_declared_fields(self):
+        project = _build_project(
+            self.tmp,
+            mapping_entries={
+                "lambert": {
+                    "grid_mapping_name": "lambert_conformal_conic",
+                    "required_params": (
+                        "standard_parallel longitude_of_central_meridian"
+                    ),
+                    "optional_params": ["false_easting", "false_northing"],
+                    "text_params": "crs_wkt GeoTransform",
+                    "required_axes": "Y X",
+                }
+            },
+        )
+        entry = project.grid_table.resolve_mapping("lambert")
+        self.assertIsNotNone(entry)
+
+        assert entry is not None
+        self.assertEqual(
+            entry.required_params(),
+            ("standard_parallel", "longitude_of_central_meridian"),
+        )
+        self.assertEqual(entry.optional_params(), ("false_easting", "false_northing"))
+        self.assertEqual(entry.text_params(), ("crs_wkt", "GeoTransform"))
+        self.assertEqual(entry.required_axes(), ("Y", "X"))
+
+    def test_grid_warns_for_missing_table_declared_params(self):
+        project = _build_project(
+            self.tmp,
+            mapping_entries={
+                "lambert": {
+                    "grid_mapping_name": "lambert_conformal_conic",
+                    "required_params": (
+                        "standard_parallel longitude_of_central_meridian"
+                    ),
+                }
+            },
+        )
+
+        with self.assertWarnsRegex(
+            RuntimeWarning,
+            "longitude_of_central_meridian",
+        ):
+            project.grid("lambert", params={"standard_parallel": (30.0, "degrees")})
+
+    def test_grid_validates_required_axis_order(self):
+        project = _build_project(
+            self.tmp,
+            coordinate_entries={
+                **_DEFAULT_COORDINATE_ENTRIES,
+                "x": {"axis": "X", "out_name": "x", "units": "m"},
+                "y": {"axis": "Y", "out_name": "y", "units": "m"},
+            },
+            mapping_entries={
+                "projected": {
+                    "grid_mapping_name": "lambert_conformal_conic",
+                    "required_axes": "Y X",
+                }
+            },
+        )
+        x_axis = project.axis("x", values=[0.0])
+        y_axis = project.axis("y", values=[0.0])
+
+        with self.assertRaisesRegex(TableValidationError, "position 0"):
+            project.grid("projected", axes=[x_axis, y_axis])
+
     def test_user_dimensions_preserved(self):
         g = self.project.grid(dimensions=["j", "i"])
         self.assertEqual(list(g.dimensions), ["j", "i"])
