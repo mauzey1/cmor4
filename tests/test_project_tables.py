@@ -2716,6 +2716,64 @@ class GridMethodTest(unittest.TestCase):
         ):
             project.grid("lambert", params={"standard_parallel": (30.0, "degrees")})
 
+    def test_grid_rejects_unknown_projection_params(self):
+        project = _build_project(
+            self.tmp,
+            mapping_entries={
+                "projected": {
+                    "grid_mapping_name": "lambert_conformal_conic",
+                    "optional_params": ["false_easting"],
+                }
+            },
+        )
+
+        with self.assertRaisesRegex(TableValidationError, "unexpected"):
+            project.grid("projected", params={"unexpected": 1.0})
+
+    def test_grid_rejects_non_numeric_projection_params(self):
+        project = _build_project(
+            self.tmp,
+            mapping_entries={
+                "projected": {
+                    "grid_mapping_name": "lambert_conformal_conic",
+                    "optional_params": ["false_easting"],
+                }
+            },
+        )
+
+        with self.assertRaisesRegex(TableValidationError, "must be numeric"):
+            project.grid("projected", params={"false_easting": "east"})
+
+    def test_grid_rejects_non_string_text_params(self):
+        project = _build_project(
+            self.tmp,
+            mapping_entries={
+                "projected": {
+                    "grid_mapping_name": "lambert_conformal_conic",
+                    "text_params": "crs_wkt",
+                }
+            },
+        )
+
+        with self.assertRaisesRegex(TableValidationError, "must be a string"):
+            project.grid("projected", params={"crs_wkt": 1.0})
+
+        grid = project.grid("projected", params={"crs_wkt": "PROJCRS[...]"})
+        self.assertEqual(grid.params["crs_wkt"], "PROJCRS[...]")
+
+    def test_grid_mapping_name_conflict_rejected_at_construction(self):
+        project = _build_project(
+            self.tmp,
+            mapping_entries={
+                "projected": {
+                    "grid_mapping_name": "lambert_conformal_conic",
+                }
+            },
+        )
+
+        with self.assertRaisesRegex(TableValidationError, "grid_mapping_name"):
+            project.grid("projected", grid_mapping_name="wrong_mapping")
+
     def test_grid_validates_required_axis_order(self):
         project = _build_project(
             self.tmp,

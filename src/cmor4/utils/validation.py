@@ -13,8 +13,13 @@ import xarray as xr
 from .time_utils import cftime_interval_days
 from .dataset_metadata import DatasetMetadata
 from ..axis import Axis
-from ..exceptions import AxisValidationError, VariableValidationError
+from ..exceptions import (
+    AxisValidationError,
+    TableValidationError,
+    VariableValidationError,
+)
 from ..grid import Grid
+from .tables import GridMappingEntry
 from ..variable import Variable
 from ..zfactor import ZFactor
 
@@ -335,6 +340,156 @@ def validate_axis_values_early(axis: Axis) -> None:
         enforce_required_bounds=False,
         normalize=False,
     )
+
+
+def validate_grid_mapping(
+    entry: GridMappingEntry,
+    data: Grid | Mapping[str, Any],
+    *,
+    axes: Sequence[Axis] = (),
+    dimensions: Sequence[Any] | str | None = None,
+) -> None:
+    """Validate grid-mapping metadata against a grid-table mapping entry."""
+    if isinstance(data, Grid):
+        mapping_name = data.mapping_name
+        grid_mapping_name = data.grid_mapping_name
+        params = dict(data.params)
+        if dimensions is None:
+            dimensions = data.dimensions
+        if not axes:
+            axes = data.axes
+    else:
+        mapping_name = data.get("mapping_name")
+        grid_mapping_name = data.get("grid_mapping_name")
+        params = dict(data.get("params") or {})
+
+    for key, value in (
+        ("mapping_name", mapping_name),
+        ("grid_mapping_name", grid_mapping_name),
+    ):
+        expected = entry.entry.get(key)
+        if expected not in (None, "", [], ()) and value is not None:
+            if str(value) != str(expected):
+                raise TableValidationError(
+                    f"grid mapping {entry.name!r} {key}={value!r} does not "
+                    f"match table value {expected!r}."
+                )
+
+    required_params = set(entry.required_params())
+    optional_params = set(entry.optional_params())
+    text_params = set(entry.text_params())
+    allowed_params = set(required_params | optional_params | text_params)
+    if "standard_parallel" in allowed_params:
+        allowed_params.update({"standard_parallel1", "standard_parallel2"})
+    if {"standard_parallel1", "standard_parallel2"} & allowed_params:
+        allowed_params.add("standard_parallel")
+
+    if allowed_params:
+        unknown = sorted(
+            str(param) for param in params if str(param) not in allowed_params
+        )
+        if unknown:
+            raise TableValidationError(
+                f"grid mapping {entry.name!r} does not allow projection "
+                f"parameter(s): {', '.join(unknown)}."
+            )
+
+    supplied_params = {str(key) for key, value in params.items() if value is not None}
+    if not isinstance(data, Grid):
+        supplied_params.update(
+            str(key)
+            for key, value in data.items()
+            if key != "params" and value is not None and str(key) in allowed_params
+        )
+    missing_params: list[str] = []
+    for param in entry.required_params():
+        supplied = param in supplied_params
+        if param == "standard_parallel":
+            supplied = supplied or (
+                {"standard_parallel1", "standard_parallel2"} <= supplied_params
+            )
+        elif param in {"standard_parallel1", "standard_parallel2"}:
+            supplied = supplied or "standard_parallel" in supplied_params
+        if not supplied:
+            missing_params.append(param)
+    if missing_params:
+        warnings.warn(
+            f"grid mapping {entry.name!r} is missing table-declared "
+            f"parameter(s): {', '.join(missing_params)}. Table defaults will "
+            "be used when available.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+
+    for name, value in params.items():
+        name = str(name)
+        if allowed_params and name not in allowed_params:
+            continue
+        if (
+            isinstance(value, (list, tuple))
+            and len(value) == 2
+            and isinstance(value[1], str)
+        ):
+            value = value[0]
+        if name in text_params:
+            if not isinstance(value, str):
+                raise TableValidationError(
+                    f"grid mapping {entry.name!r} parameter {name!r} must "
+                    "be a string."
+                )
+            continue
+        arr = np.asarray(value)
+        values = arr.reshape(-1).tolist() if arr.ndim else [arr.item()]
+        for item in values:
+            try:
+                float(item)
+            except (TypeError, ValueError) as exc:
+                raise TableValidationError(
+                    f"grid mapping {entry.name!r} parameter {name!r} must "
+                    "be numeric."
+                ) from exc
+
+    required_axes = entry.required_axes()
+    if not required_axes:
+        return
+    if axes:
+        if len(axes) != len(required_axes):
+            raise TableValidationError(
+                f"grid mapping {entry.name!r} requires {len(required_axes)} "
+                f"grid axis/axes ({', '.join(required_axes)}) but "
+                f"{len(axes)} were supplied."
+            )
+        for index, (axis, expected) in enumerate(zip(axes, required_axes, strict=True)):
+            expected_text = str(expected)
+            if expected_text.upper() in {"X", "Y", "Z", "T"}:
+                matches = str(axis.axis or "").upper() == expected_text.upper()
+            else:
+                matches = expected_text in {
+                    str(value)
+                    for value in (
+                        axis.name,
+                        axis.table_entry,
+                        axis.axis_entry,
+                        axis.coordinate,
+                        axis.out_name,
+                        axis.generic_level_name,
+                    )
+                    if value
+                }
+            if not matches:
+                actual = axis.axis or axis.table_entry or axis.name or axis.out_name
+                raise TableValidationError(
+                    f"grid mapping {entry.name!r} requires grid axis "
+                    f"{expected!r} at position {index}; got {actual!r}."
+                )
+    elif dimensions is not None:
+        dims = (dimensions,) if isinstance(dimensions, str) else tuple(dimensions)
+        if len(dims) != len(required_axes):
+            raise TableValidationError(
+                f"grid mapping {entry.name!r} requires {len(required_axes)} "
+                f"grid axis/axes ({', '.join(required_axes)}) but "
+                f"dimensions={dims!r} declares {len(dims)}."
+            )
 
 
 def _validate_and_normalize_axis(
