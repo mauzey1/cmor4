@@ -673,7 +673,11 @@ class ProjectTables:
                     f"Axis {candidate!r} is not in the grid table axis_entry. "
                     f"Valid grid axes are: {sorted(grid_axis_names)}."
                 )
-        if gm_entry is not None:
+        if (
+            gm_entry is not None
+            or values.get("mapping_name") is not None
+            or values.get("grid_mapping_name") is not None
+        ):
             _validate_grid_mapping(
                 gm_entry,
                 values,

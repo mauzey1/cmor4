@@ -332,6 +332,10 @@ class Grid(MetadataModel):
                 if _valid_param("standard_parallel1", sp1) and _valid_param(
                     "standard_parallel2", sp2
                 ):
+                    if isinstance(sp1, dict):
+                        sp1 = sp1.get("value", sp1.get("values"))
+                    if isinstance(sp2, dict):
+                        sp2 = sp2.get("value", sp2.get("values"))
                     if (
                         isinstance(sp1, (list, tuple))
                         and len(sp1) == 2
@@ -355,6 +359,8 @@ class Grid(MetadataModel):
                 continue
             if not _valid_param(str(key), val):
                 continue
+            if isinstance(val, dict):
+                val = val.get("value", val.get("values"))
             if (
                 isinstance(val, (list, tuple))
                 and len(val) == 2
@@ -410,6 +416,8 @@ def _valid_param(name: str, value: Any) -> bool:
 
 
 def _primary_num(value: Any) -> float | None:
+    if isinstance(value, dict):
+        value = value.get("value", value.get("values"))
     if (
         isinstance(value, (list, tuple))
         and len(value) == 2

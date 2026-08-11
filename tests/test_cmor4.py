@@ -481,7 +481,7 @@ class Cmor4Test(unittest.TestCase):
                 cmor4.Axis(name="x", values=[0.0]),
             ]
             grid = cmor4.Grid(
-                mapping_name="lambert_azimuthal_equal_area",
+                mapping_name="stereographic",
                 params={
                     "latitude_of_projection_origin": [100.0, "degrees_north"],
                     "longitude_of_projection_origin": [200.0, "degrees_east"],
@@ -512,6 +512,32 @@ class Cmor4Test(unittest.TestCase):
             self.assertNotIn("longitude_of_projection_origin", ds["crs"].attrs)
             self.assertNotIn("scale_factor_at_projection_origin", ds["crs"].attrs)
             self.assertEqual(ds["crs"].attrs["false_easting"], 10.0)
+
+    def test_grid_mapping_name_must_be_cf_valid_for_direct_grid(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            info = cmor4.DatasetInfo.from_prepared(dataset_info(Path(tmp_dir)))
+            variable = cmor4.Variable(
+                name="sample",
+                dimensions=["time", "y", "x"],
+            )
+            axes = [
+                cmor4.Axis(name="time", values=[0.0]),
+                cmor4.Axis(name="y", values=[0.0]),
+                cmor4.Axis(name="x", values=[0.0]),
+            ]
+            grid = cmor4.Grid(
+                mapping_name="not_a_cf_mapping",
+                params={"false_easting": 10.0},
+            )
+
+            with self.assertRaisesRegex(cmor4.TableValidationError, "CF-1.12"):
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    axes,
+                    np.ones((1, 1, 1), dtype="f4"),
+                    grid=grid,
+                )
 
     def test_string_from_template_uses_global_attrs_and_special_values(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

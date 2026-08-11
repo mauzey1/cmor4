@@ -10,6 +10,10 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 import xarray as xr
 
+from .grid_mapping_registry import (
+    TEXT_GRID_MAPPING_ATTRIBUTES,
+    allowed_grid_mapping_attributes,
+)
 from .time_utils import cftime_interval_days
 from .dataset_metadata import DatasetMetadata
 from ..axis import Axis
@@ -87,6 +91,12 @@ def validate_metadata(
     axes = validate_and_normalize_axes(dataset, variable, axes)
     axes = _merge_grid_axes(axes, grid)
     axis_dims = build_axis_dimension_map(axes)
+    if grid is not None and (
+        grid.mapping_name
+        or grid.grid_mapping_name
+        or "grid_mapping_name" in grid.params
+    ):
+        validate_grid_mapping(None, grid)
 
     if grid is not None:
         dim_names = grid.variable_dimensions(variable)
@@ -343,7 +353,7 @@ def validate_axis_values_early(axis: Axis) -> None:
 
 
 def validate_grid_mapping(
-    entry: GridMappingEntry,
+    entry: GridMappingEntry | None,
     data: Grid | Mapping[str, Any],
     *,
     axes: Sequence[Axis] = (),
@@ -363,22 +373,50 @@ def validate_grid_mapping(
         grid_mapping_name = data.get("grid_mapping_name")
         params = dict(data.get("params") or {})
 
-    for key, value in (
-        ("mapping_name", mapping_name),
-        ("grid_mapping_name", grid_mapping_name),
-    ):
-        expected = entry.entry.get(key)
-        if expected not in (None, "", [], ()) and value is not None:
-            if str(value) != str(expected):
-                raise TableValidationError(
-                    f"grid mapping {entry.name!r} {key}={value!r} does not "
-                    f"match table value {expected!r}."
-                )
+    entry_name = entry.name if entry is not None else None
+    if entry is not None:
+        for key, value in (
+            ("mapping_name", mapping_name),
+            ("grid_mapping_name", grid_mapping_name),
+        ):
+            expected = entry.entry.get(key)
+            if expected not in (None, "", [], ()) and value is not None:
+                if str(value) != str(expected):
+                    raise TableValidationError(
+                        f"grid mapping {entry.name!r} {key}={value!r} does "
+                        f"not match table value {expected!r}."
+                    )
 
-    required_params = set(entry.required_params())
-    optional_params = set(entry.optional_params())
-    text_params = set(entry.text_params())
+    cf_mapping_name = (
+        grid_mapping_name
+        or mapping_name
+        or (entry.entry.get("grid_mapping_name") if entry is not None else None)
+        or (entry.entry.get("mapping_name") if entry is not None else None)
+        or params.get("grid_mapping_name")
+    )
+    if (
+        cf_mapping_name is None
+        and entry is not None
+        and allowed_grid_mapping_attributes(entry.name) is not None
+    ):
+        cf_mapping_name = entry.name
+    cf_mapping_name = str(cf_mapping_name) if cf_mapping_name else None
+    cf_allowed_params: frozenset[str] | None = None
+    if cf_mapping_name is not None:
+        cf_allowed_params = allowed_grid_mapping_attributes(cf_mapping_name)
+        if cf_allowed_params is None:
+            raise TableValidationError(
+                f"grid_mapping_name {cf_mapping_name!r} is not a CF-1.12 "
+                "grid mapping name."
+            )
+
+    required_params = set(entry.required_params()) if entry is not None else set()
+    optional_params = set(entry.optional_params()) if entry is not None else set()
+    text_params = set(entry.text_params()) if entry is not None else set()
     allowed_params = set(required_params | optional_params | text_params)
+    if cf_allowed_params is not None:
+        allowed_params.update(cf_allowed_params)
+        text_params.update(TEXT_GRID_MAPPING_ATTRIBUTES)
     if "standard_parallel" in allowed_params:
         allowed_params.update({"standard_parallel1", "standard_parallel2"})
     if {"standard_parallel1", "standard_parallel2"} & allowed_params:
@@ -389,8 +427,9 @@ def validate_grid_mapping(
             str(param) for param in params if str(param) not in allowed_params
         )
         if unknown:
+            label = entry_name or cf_mapping_name or "<unknown>"
             raise TableValidationError(
-                f"grid mapping {entry.name!r} does not allow projection "
+                f"grid mapping {label!r} does not allow projection "
                 f"parameter(s): {', '.join(unknown)}."
             )
 
@@ -402,7 +441,7 @@ def validate_grid_mapping(
             if key != "params" and value is not None and str(key) in allowed_params
         )
     missing_params: list[str] = []
-    for param in entry.required_params():
+    for param in required_params:
         supplied = param in supplied_params
         if param == "standard_parallel":
             supplied = supplied or (
@@ -413,8 +452,9 @@ def validate_grid_mapping(
         if not supplied:
             missing_params.append(param)
     if missing_params:
+        label = entry_name or cf_mapping_name or "<unknown>"
         warnings.warn(
-            f"grid mapping {entry.name!r} is missing table-declared "
+            f"grid mapping {label!r} is missing table-declared "
             f"parameter(s): {', '.join(missing_params)}. Table defaults will "
             "be used when available.",
             RuntimeWarning,
@@ -425,6 +465,8 @@ def validate_grid_mapping(
         name = str(name)
         if allowed_params and name not in allowed_params:
             continue
+        if isinstance(value, Mapping):
+            value = value.get("value", value.get("values"))
         if (
             isinstance(value, (list, tuple))
             and len(value) == 2
@@ -433,8 +475,9 @@ def validate_grid_mapping(
             value = value[0]
         if name in text_params:
             if not isinstance(value, str):
+                label = entry_name or cf_mapping_name or "<unknown>"
                 raise TableValidationError(
-                    f"grid mapping {entry.name!r} parameter {name!r} must "
+                    f"grid mapping {label!r} parameter {name!r} must "
                     "be a string."
                 )
             continue
@@ -444,12 +487,13 @@ def validate_grid_mapping(
             try:
                 float(item)
             except (TypeError, ValueError) as exc:
+                label = entry_name or cf_mapping_name or "<unknown>"
                 raise TableValidationError(
-                    f"grid mapping {entry.name!r} parameter {name!r} must "
+                    f"grid mapping {label!r} parameter {name!r} must "
                     "be numeric."
                 ) from exc
 
-    required_axes = entry.required_axes()
+    required_axes = entry.required_axes() if entry is not None else ()
     if not required_axes:
         return
     if axes:

@@ -2631,13 +2631,17 @@ class GridMethodTest(unittest.TestCase):
         self.assertIsInstance(g, Grid)
         self.assertIsNone(g.name)
 
-    def test_grid_name_not_in_table_accepted(self):
-        """Grid names not in the grid table are accepted; user must supply attrs."""
+    def test_grid_name_not_in_table_accepted_for_cf_mapping(self):
+        """Grid names not in the grid table are accepted when CF-valid."""
         g = self.project.grid(
             "custom_projection",
-            grid_mapping_name="custom_crs",
+            grid_mapping_name="latitude_longitude",
         )
         self.assertIsInstance(g, Grid)
+
+    def test_grid_name_not_in_cf_registry_rejected(self):
+        with self.assertRaisesRegex(TableValidationError, "CF-1.12"):
+            self.project.grid("custom_projection", grid_mapping_name="custom_crs")
 
     def test_user_params_preserved(self):
         params = {"standard_parallel": ([30.0, 60.0], "degrees_north")}
@@ -2648,9 +2652,9 @@ class GridMethodTest(unittest.TestCase):
         grid = Grid(
             mapping_name="lambert_conformal_conic",
             params={
-                "standard_parallel1": (30.0, "degrees_north"),
+                "standard_parallel1": {"value": 30.0, "units": "degrees_north"},
                 "standard_parallel2": (60.0, "degrees_north"),
-                "false_easting": (10.0, "m"),
+                "false_easting": {"value": 10.0, "units": "m"},
             },
             attrs={
                 "crs_wkt": "PROJCRS[...]",
@@ -2669,6 +2673,25 @@ class GridMethodTest(unittest.TestCase):
         self.assertNotIn("false_easting_units", attrs)
         self.assertEqual(attrs["crs_wkt"], "PROJCRS[...]")
         self.assertEqual(attrs["GeoTransform"], "0 1 0 0 0 -1")
+
+    def test_cf_registry_allows_common_latitude_longitude_attrs(self):
+        grid = self.project.grid(
+            grid_mapping_name="latitude_longitude",
+            params={
+                "semi_major_axis": {"value": 6378137.0, "units": "m"},
+                "inverse_flattening": (298.257223563, ""),
+                "GeoTransform": "-179.5 0.1 0 74.5 0.1",
+                "crs_wkt": "GEOGCS[...]",
+            },
+        )
+
+        attrs = grid.mapping_attributes()
+
+        self.assertEqual(attrs["grid_mapping_name"], "latitude_longitude")
+        self.assertEqual(attrs["semi_major_axis"], 6378137.0)
+        self.assertEqual(attrs["inverse_flattening"], 298.257223563)
+        self.assertEqual(attrs["GeoTransform"], "-179.5 0.1 0 74.5 0.1")
+        self.assertEqual(attrs["crs_wkt"], "GEOGCS[...]")
 
     def test_grid_mapping_entry_helpers_parse_declared_fields(self):
         project = _build_project(
@@ -2730,6 +2753,23 @@ class GridMethodTest(unittest.TestCase):
         with self.assertRaisesRegex(TableValidationError, "unexpected"):
             project.grid("projected", params={"unexpected": 1.0})
 
+    def test_cf_registry_rejects_unknown_params_without_table_schema(self):
+        with self.assertRaisesRegex(TableValidationError, "unexpected"):
+            self.project.grid(
+                "lambert_conformal_conic",
+                params={
+                    "standard_parallel": 30.0,
+                    "unexpected": 1.0,
+                },
+            )
+
+    def test_cf_registry_rejects_unknown_mapping_name(self):
+        with self.assertRaisesRegex(TableValidationError, "not a CF-1.12"):
+            self.project.grid(
+                grid_mapping_name="not_a_cf_mapping",
+                params={"false_easting": 0.0},
+            )
+
     def test_grid_rejects_non_numeric_projection_params(self):
         project = _build_project(
             self.tmp,
@@ -2743,6 +2783,30 @@ class GridMethodTest(unittest.TestCase):
 
         with self.assertRaisesRegex(TableValidationError, "must be numeric"):
             project.grid("projected", params={"false_easting": "east"})
+
+    def test_cf_registry_allows_geostationary_text_axis_params(self):
+        grid = self.project.grid(
+            grid_mapping_name="geostationary",
+            params={
+                "latitude_of_projection_origin": 0.0,
+                "longitude_of_projection_origin": 140.7,
+                "perspective_point_height": 35785831.0,
+                "sweep_angle_axis": "x",
+            },
+        )
+
+        self.assertEqual(grid.params["sweep_angle_axis"], "x")
+
+        with self.assertRaisesRegex(TableValidationError, "must be a string"):
+            self.project.grid(
+                grid_mapping_name="geostationary",
+                params={
+                    "latitude_of_projection_origin": 0.0,
+                    "longitude_of_projection_origin": 140.7,
+                    "perspective_point_height": 35785831.0,
+                    "sweep_angle_axis": 1.0,
+                },
+            )
 
     def test_grid_rejects_non_string_text_params(self):
         project = _build_project(
