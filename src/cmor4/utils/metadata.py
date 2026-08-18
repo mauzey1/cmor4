@@ -6,22 +6,21 @@ from collections.abc import Mapping
 from typing import Annotated, Any, Self
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic import BeforeValidator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 # ---------------------------------------------------------------------------
 # Shared coercion helpers and annotated type aliases
 # ---------------------------------------------------------------------------
 # Axis, Variable, ZFactor, and Grid import these instead of duplicating them.
 # ---------------------------------------------------------------------------
-
-
-def _str_tuple(v: Any) -> tuple[str, ...] | None:
-    if v is None:
-        return None
-    if isinstance(v, str):
-        return (v,)
-    return tuple(str(x) for x in v)
 
 
 def _str_seq(v: Any) -> list[str] | tuple[str, ...] | None:
@@ -35,34 +34,6 @@ def _str_seq(v: Any) -> list[str] | tuple[str, ...] | None:
     if isinstance(v, str):
         return [v]
     return [str(x) for x in v]
-
-
-def _int_tuple(v: Any) -> tuple[int, ...] | None:
-    if v is None:
-        return None
-    return tuple(int(x) for x in v)
-
-
-def _str_or_tuple(v: Any) -> str | tuple[str, ...] | None:
-    if v is None:
-        return None
-    if isinstance(v, str):
-        return v
-    items = tuple(str(x) for x in v)
-    return items[0] if len(items) == 1 else items
-
-
-def _float_or_none(v: Any) -> float | None:
-    if v is None or v == "":
-        return None
-    return float(v)
-
-
-def _upper_str(v: Any) -> Any:
-    """Upper-case the axis designator so 't'/'x'/'y'/'z' are accepted."""
-    if isinstance(v, str):
-        return v.upper()
-    return v
 
 
 def _to_bool(v: Any) -> bool | None:
@@ -80,12 +51,24 @@ def _to_bool(v: Any) -> bool | None:
     return str(v).lower() in {"1", "true", "yes"}
 
 
-StrTuple = Annotated[tuple[str, ...] | None, BeforeValidator(_str_tuple)]
+StrTuple = Annotated[
+    tuple[str, ...] | None,
+    BeforeValidator(lambda value: (value,) if isinstance(value, str) else value),
+]
 StrSeq = Annotated[list[str] | tuple[str, ...] | None, BeforeValidator(_str_seq)]
-IntTuple = Annotated[tuple[int, ...] | None, BeforeValidator(_int_tuple)]
-StrOrTuple = Annotated[str | tuple[str, ...] | None, BeforeValidator(_str_or_tuple)]
-CoercedF = Annotated[float | None, BeforeValidator(_float_or_none)]
-AxisStr = Annotated[str | None, BeforeValidator(_upper_str)]
+IntTuple = tuple[int, ...] | None
+StrOrTuple = Annotated[
+    str | tuple[str, ...] | None,
+    AfterValidator(
+        lambda value: value[0]
+        if isinstance(value, tuple) and len(value) == 1
+        else value
+    ),
+]
+CoercedF = Annotated[
+    float | None, BeforeValidator(lambda value: None if value == "" else value)
+]
+AxisStr = Annotated[str, StringConstraints(to_upper=True)] | None
 BoolCoerced = Annotated[bool | None, BeforeValidator(_to_bool)]
 
 
@@ -153,19 +136,19 @@ class MetadataModel(BaseModel):
 
         ``extra`` field contents are inlined at the top level.
         """
-        result: dict[str, Any] = {}
-        for name, info in type(self).model_fields.items():
-            if name == "extra" or getattr(info, "exclude", False):
-                continue
-            value = getattr(self, name)
-            if value is None:
-                continue
-            if isinstance(value, dict) and not value:
-                continue
-            result[name] = value
-        for key, value in self.extra.items():
-            if value is not None:
-                result.setdefault(key, value)
+        result = {
+            name: value
+            for name, field in type(self).model_fields.items()
+            if name != "extra"
+            and not getattr(field, "exclude", False)
+            and (value := getattr(self, name)) is not None
+            and (not isinstance(value, dict) or value)
+        }
+        result.update(
+            (key, value)
+            for key, value in self.extra.items()
+            if value is not None and key not in result
+        )
         return result
 
     def updated(self, **updates: Any) -> Self:

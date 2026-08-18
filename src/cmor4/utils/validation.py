@@ -733,7 +733,8 @@ def _validate_monotonic(
         if pairs.shape[0] >= 2:
             ends = pairs[:, 1]
             deltas = starts[1:] - ends[:-1]
-            overlap = deltas * _direction(starts) < -1.0e-12
+            direction = 1.0 if starts.size < 2 or starts[-1] >= starts[0] else -1.0
+            overlap = deltas * direction < -1.0e-12
             if np.any(overlap):
                 index = int(np.nonzero(overlap)[0][0])
                 raise AxisValidationError(
@@ -854,11 +855,12 @@ def _validate_time_interval(
 
 
 def _time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.ndarray:
-    cftime_intervals = cftime_interval_days(values, units, calendar)
-    if cftime_intervals is not None:
-        return cftime_intervals
-    interval_values = np.diff(values)
-    return np.abs(interval_values) * _time_unit_days(units)
+    intervals = cftime_interval_days(values, units, calendar)
+    return (
+        intervals
+        if intervals is not None
+        else np.abs(np.diff(values)) * _time_unit_days(units)
+    )
 
 
 def _interval_spec(
@@ -1009,12 +1011,6 @@ def _strictly_monotonic(values: np.ndarray) -> bool:
     return bool(np.all(diffs > 0.0) or np.all(diffs < 0.0))
 
 
-def _direction(values: np.ndarray) -> float:
-    if values.size < 2:
-        return 1.0
-    return 1.0 if values[-1] >= values[0] else -1.0
-
-
 def _tolerance(axis: Axis) -> float:
     value = _numeric_or_none(axis.tolerance)
     return value if value is not None else 1.0
@@ -1058,8 +1054,9 @@ def validate_variable_values(
 ) -> None:
     """Apply CMOR-style checks to data variable and formula-term values."""
 
-    values = _as_float_masked_array(data)
-    if values is None:
+    try:
+        values = np.ma.asarray(data, dtype=float)
+    except (TypeError, ValueError):
         return
 
     valid_mask = ~np.ma.getmaskarray(values)
@@ -1126,13 +1123,6 @@ def validate_variable_values(
         table_id=table_id,
     )
     _check_absolute_mean(variable, active, name=name, table_id=table_id)
-
-
-def _as_float_masked_array(data: Any) -> np.ma.MaskedArray | None:
-    try:
-        return np.ma.asarray(data, dtype=float)
-    except (TypeError, ValueError):
-        return None
 
 
 def _warn_for_limit(

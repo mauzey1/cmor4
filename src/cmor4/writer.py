@@ -465,7 +465,9 @@ class DatasetWriter:
             len(chunk_time_values),
         )
         self._validate_time_order(chunk_time_values, chunk_time_bounds)
-        self._append_to_zarr(validated_data)
+        self._staging.append(
+            self._ctx.variable.names()[0], validated_data, self._time_dim_index
+        )
         self._append_zfactors_to_zarr(zfactor_chunks)
 
         self._time_values.append(chunk_time_values)
@@ -799,13 +801,6 @@ class DatasetWriter:
                 "output file."
             )
 
-    def _append_to_zarr(self, data: np.ndarray) -> None:
-        self._staging.append(
-            self._ctx.variable.names()[0],
-            data,
-            self._time_dim_index,
-        )
-
     def _validate_zfactor_chunks(
         self,
         zfactors: Mapping[str, Any] | None,
@@ -813,9 +808,13 @@ class DatasetWriter:
         chunk_time_len: int,
     ) -> dict[str, np.ndarray]:
         zfactor_values = {str(name): value for name, value in (zfactors or {}).items()}
-        lookup = self._zfactor_lookup()
+        known = {
+            str(alias)
+            for zfactor in self._ctx.zfactors
+            for alias in (zfactor.name, zfactor.out_name or zfactor.name)
+        }
         unknown = sorted(
-            str(name) for name in zfactor_values if str(name) not in lookup
+            str(name) for name in zfactor_values if str(name) not in known
         )
         if unknown:
             raise ValueError(f"Unknown zfactor chunk(s): {unknown!r}.")
@@ -903,7 +902,11 @@ class DatasetWriter:
 
     def _append_zfactors_to_zarr(self, zfactors: Mapping[str, np.ndarray]) -> None:
         for name, data in zfactors.items():
-            zfactor = self._zfactor_by_output_name(name)
+            zfactor = next(
+                zfactor
+                for zfactor in self._ctx.zfactors
+                if str(zfactor.out_name or zfactor.name) == name
+            )
             dims = self._zfactor_dims(zfactor)
             time_dim_index = dims.index(self._time_dim)
             self._staging.append(
@@ -937,19 +940,6 @@ class DatasetWriter:
                 zfactor.updated(values=self._staging.lazy_array(out_name))
             )
         return tuple(final_zfactors)
-
-    def _zfactor_lookup(self) -> dict[str, ZFactor]:
-        lookup: dict[str, ZFactor] = {}
-        for zfactor in self._ctx.zfactors:
-            lookup[str(zfactor.name)] = zfactor
-            lookup[str(zfactor.out_name or zfactor.name)] = zfactor
-        return lookup
-
-    def _zfactor_by_output_name(self, out_name: str) -> ZFactor:
-        for zfactor in self._ctx.zfactors:
-            if str(zfactor.out_name or zfactor.name) == out_name:
-                return zfactor
-        raise ValueError(f"Unknown zfactor {out_name!r}.")
 
     def _zfactor_dims(self, zfactor: ZFactor) -> tuple[str, ...]:
         return named_dimensions(zfactor.dimensions or (), self._ctx.axis_dims)

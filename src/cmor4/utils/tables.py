@@ -22,7 +22,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from .table_utils import (
     entry_bounds,
@@ -42,7 +42,16 @@ from ..variable import Variable
 # ---------------------------------------------------------------------------
 
 
-class AxisEntry(BaseModel):
+class TableEntry(BaseModel):
+    """Immutable base for a named raw table entry."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(min_length=1)
+    entry: Mapping[str, Any]
+
+
+class AxisEntry(TableEntry):
     """One resolved entry from a coordinate or grid-coordinate table.
 
     Parameters
@@ -57,26 +66,10 @@ class AxisEntry(BaseModel):
         authoritative and how bounds attributes are looked up.
     """
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    name: str
-    entry: Mapping[str, Any]
     is_grid_coord: bool = False
 
-    @field_validator("name")
-    @classmethod
-    def _name_not_empty(cls, v: str) -> str:
-        if not v:
-            raise ValueError("AxisEntry name must not be empty")
-        return v
 
-    @field_validator("entry", mode="before")
-    @classmethod
-    def _coerce_entry(cls, v: Any) -> dict[str, Any]:
-        return dict(v) if not isinstance(v, dict) else v
-
-
-class ZFactorEntry(BaseModel):
+class ZFactorEntry(TableEntry):
     """One resolved entry from a formula-terms table.
 
     Parameters
@@ -87,25 +80,8 @@ class ZFactorEntry(BaseModel):
         Raw entry metadata dict from the JSON table.
     """
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    name: str
-    entry: Mapping[str, Any]
-
-    @field_validator("name")
-    @classmethod
-    def _name_not_empty(cls, v: str) -> str:
-        if not v:
-            raise ValueError("ZFactorEntry name must not be empty")
-        return v
-
-    @field_validator("entry", mode="before")
-    @classmethod
-    def _coerce_entry(cls, v: Any) -> dict[str, Any]:
-        return dict(v) if not isinstance(v, dict) else v
-
-
-class GridMappingEntry(BaseModel):
+class GridMappingEntry(TableEntry):
     """One resolved entry from a grid-mapping table.
 
     Parameters
@@ -116,23 +92,6 @@ class GridMappingEntry(BaseModel):
     entry:
         Raw entry metadata dict from the JSON table.
     """
-
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    name: str
-    entry: Mapping[str, Any]
-
-    @field_validator("name")
-    @classmethod
-    def _name_not_empty(cls, v: str) -> str:
-        if not v:
-            raise ValueError("GridMappingEntry name must not be empty")
-        return v
-
-    @field_validator("entry", mode="before")
-    @classmethod
-    def _coerce_entry(cls, v: Any) -> dict[str, Any]:
-        return dict(v) if not isinstance(v, dict) else v
 
     def required_params(self) -> tuple[str, ...]:
         """Return projection parameters required or recommended by this entry."""
@@ -226,7 +185,7 @@ def _unique_tokens(tokens: Sequence[str]) -> tuple[str, ...]:
     return tuple(result)
 
 
-class VariableEntry(BaseModel):
+class VariableEntry(TableEntry):
     """One resolved entry from a variable table.
 
     Parameters
@@ -246,33 +205,10 @@ class VariableEntry(BaseModel):
         unless this entry was produced by :meth:`VariableTable.contextual_entry`.
     """
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-
-    name: str
-    table_id: str
-    entry: Mapping[str, Any]
+    table_id: str = Field(min_length=1)
     table_file: Path | None = None
     table_header: Mapping[str, Any] | None = None
     contextual_attrs: tuple[str, ...] = ()
-
-    @field_validator("name", "table_id")
-    @classmethod
-    def _not_empty(cls, v: str) -> str:
-        if not v:
-            raise ValueError("VariableEntry name and table_id must not be empty")
-        return v
-
-    @field_validator("entry", mode="before")
-    @classmethod
-    def _coerce_entry(cls, v: Any) -> dict[str, Any]:
-        return dict(v) if not isinstance(v, dict) else v
-
-    @field_validator("table_header", mode="before")
-    @classmethod
-    def _coerce_header(cls, v: Any) -> dict[str, Any] | None:
-        if v is None:
-            return None
-        return dict(v) if not isinstance(v, dict) else v
 
 
 # ---------------------------------------------------------------------------

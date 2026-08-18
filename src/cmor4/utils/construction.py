@@ -51,7 +51,8 @@ def add_grid_coords(
 ) -> None:
     """Write grid lat/lon/vertices directly into xarray mappings."""
 
-    spatial_dims = _grid_spatial_dims(grid, variable_dimensions)
+    dimensions = grid.dimensions or variable_dimensions
+    spatial_dims = [str(dim) for dim in dimensions if str(dim).lower() != "time"]
     coord_table = getattr(project, "coordinate_table", None)
     new_coords, new_data_vars, new_aux_names = grid.to_dataset_coords(
         spatial_dims, coord_table=coord_table
@@ -143,7 +144,11 @@ def add_zfactor(
     name = zfactor.name
     out_name = str(zfactor.out_name or name)
     dims = named_dimensions(zfactor.dimensions or (), axis_dims)
-    values = _zfactor_values(zfactor)
+    values = (
+        zfactor.values
+        if zfactor.values is not None and hasattr(zfactor.values, "__dask_graph__")
+        else zfactor.values_array()
+    )
     if not dims and values.size == 1:
         values = values.reshape(())
     attrs = zfactor.attributes()
@@ -161,13 +166,6 @@ def add_zfactor(
         attrs["bounds"] = bounds_name
         data_vars[out_name] = (dims, values, attrs)
     return out_name
-
-
-def _zfactor_values(zfactor: ZFactor) -> Any:
-    values = zfactor.values
-    if values is not None and hasattr(values, "__dask_graph__"):
-        return values
-    return zfactor.values_array()
 
 
 def set_formula_terms(
@@ -207,12 +205,3 @@ def set_formula_terms(
                         bnds_attrs[key] = ds[coord_name].attrs[key]
                 bnds_attrs["formula_terms"] = bnds_formula_terms
                 ds[bounds_name].attrs.update(bnds_attrs)
-
-
-def _grid_spatial_dims(
-    grid: Grid,
-    variable_dimensions: tuple[str, ...],
-) -> list[str]:
-    if grid.dimensions:
-        return [str(dim) for dim in grid.dimensions if str(dim).lower() != "time"]
-    return [str(dim) for dim in variable_dimensions if str(dim).lower() != "time"]

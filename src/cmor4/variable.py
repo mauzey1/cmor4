@@ -9,15 +9,10 @@ from pydantic import BeforeValidator, Field
 from .utils.metadata import CoercedF, IntTuple, MetadataModel, StrOrTuple, StrSeq
 
 
-def _lower_str(v: Any) -> Any:
-    """Normalise a string to lowercase, pass everything else through."""
-    return v.lower() if isinstance(v, str) else v
-
-
 # Literal type for the CF positive attribute, accepting any case.
 PositiveLiteral = Annotated[
     Literal["up", "down"] | None,
-    BeforeValidator(_lower_str),
+    BeforeValidator(lambda value: value.lower() if isinstance(value, str) else value),
 ]
 
 # ---------------------------------------------------------------------------
