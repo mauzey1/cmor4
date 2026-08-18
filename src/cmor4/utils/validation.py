@@ -387,19 +387,31 @@ def validate_grid_mapping(
                         f"not match table value {expected!r}."
                     )
 
-    cf_mapping_name = (
-        grid_mapping_name
-        or mapping_name
-        or (entry.entry.get("grid_mapping_name") if entry is not None else None)
-        or (entry.entry.get("mapping_name") if entry is not None else None)
-        or params.get("grid_mapping_name")
+    supplied_mapping_name = (
+        grid_mapping_name or mapping_name or params.get("grid_mapping_name")
     )
-    if (
-        cf_mapping_name is None
-        and entry is not None
-        and allowed_grid_mapping_attributes(entry.name) is not None
-    ):
-        cf_mapping_name = entry.name
+    table_mapping_name = None
+    if entry is not None:
+        table_mapping_name = entry.entry.get(
+            "grid_mapping_name"
+        ) or entry.entry.get("mapping_name")
+        if (
+            table_mapping_name is None
+            and allowed_grid_mapping_attributes(entry.name) is not None
+        ):
+            table_mapping_name = entry.name
+        if (
+            table_mapping_name is not None
+            and supplied_mapping_name is not None
+            and str(supplied_mapping_name) != str(table_mapping_name)
+        ):
+            raise TableValidationError(
+                f"grid mapping {entry.name!r} grid_mapping_name="
+                f"{supplied_mapping_name!r} does not match table value "
+                f"{table_mapping_name!r}."
+            )
+
+    cf_mapping_name = supplied_mapping_name or table_mapping_name
     cf_mapping_name = str(cf_mapping_name) if cf_mapping_name else None
     cf_allowed_params: frozenset[str] | None = None
     if cf_mapping_name is not None:
@@ -433,13 +445,20 @@ def validate_grid_mapping(
                 f"parameter(s): {', '.join(unknown)}."
             )
 
-    supplied_params = {str(key) for key, value in params.items() if value is not None}
+    # Legacy grid tables declare projection parameters as ``parameter1``,
+    # ``parameter2``, ... and callers may provide those values as top-level
+    # grid arguments.  GridTable.build() later moves them into ``Grid.params``;
+    # include the same effective values here so construction-time validation
+    # cannot be bypassed by using the table-native input form.
+    effective_params = dict(params)
     if not isinstance(data, Grid):
-        supplied_params.update(
-            str(key)
-            for key, value in data.items()
-            if key != "params" and value is not None and str(key) in allowed_params
-        )
+        for param in allowed_params:
+            if param not in effective_params and data.get(param) is not None:
+                effective_params[param] = data[param]
+
+    supplied_params = {
+        str(key) for key, value in effective_params.items() if value is not None
+    }
     missing_params: list[str] = []
     for param in required_params:
         supplied = param in supplied_params
@@ -461,7 +480,7 @@ def validate_grid_mapping(
             stacklevel=3,
         )
 
-    for name, value in params.items():
+    for name, value in effective_params.items():
         name = str(name)
         if allowed_params and name not in allowed_params:
             continue
