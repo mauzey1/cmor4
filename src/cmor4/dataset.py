@@ -17,6 +17,7 @@ from .utils.construction import (
     add_grid_coords,
     add_zfactor,
     build_axis_mappings,
+    derive_forecast_coords,
     set_formula_terms,
 )
 from .utils.validation import (
@@ -148,6 +149,15 @@ def create_dataset_from_validated_data(
         scalar_coord_names,
         auxiliary_coord_names,
     ) = build_axis_mappings(axes)
+
+    forecast_coord_name = derive_forecast_coords(
+        axes,
+        coords,
+        getattr(dataset, "project", None),
+        calendar=str(dataset.get("calendar", "standard") or "standard"),
+    )
+    if forecast_coord_name is not None:
+        auxiliary_coord_names.append(forecast_coord_name)
 
     # Write lat/lon and vertex arrays directly as dataset coords, bypassing
     # the Axis pipeline — same pattern as CMOR3's cmor_grid associated_variables.
