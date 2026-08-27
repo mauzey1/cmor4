@@ -86,6 +86,66 @@ For meshes and unstructured grids:
        bounds_longitude=cell_lon_bounds,
    )
 
+Grid Mapping Validation
+~~~~~~~~~~~~~~~~~~~~~~~
+
+CMOR4 validates grid mappings against the CF-1.12 convention's registered grid mapping names and parameters. This ensures that projected coordinate systems are properly specified:
+
+.. code-block:: python
+
+   # Lambert Conformal Conic projection (automatically validated)
+   grid = project.grid(
+       "lambert_conformal",
+       grid_mapping_name="lambert_conformal_conic",
+       standard_parallel=[33.0, 45.0],
+       longitude_of_central_meridian=-97.0,
+       latitude_of_projection_origin=40.0,
+       false_easting=0.0,
+       false_northing=0.0,
+   )
+
+   # CMOR4 validates:
+   # 1. grid_mapping_name is a valid CF-1.12 registered name
+   # 2. All required parameters for that projection are present
+   # 3. Parameter names and values follow CF conventions
+
+**Supported Grid Mappings:**
+
+CMOR4 validates against all CF-1.12 registered grid mappings, including:
+
+- ``albers_conical_equal_area``
+- ``azimuthal_equidistant``
+- ``geostationary``
+- ``lambert_azimuthal_equal_area``
+- ``lambert_conformal_conic``
+- ``lambert_cylindrical_equal_area``
+- ``latitude_longitude`` (unprojected)
+- ``mercator``
+- ``orthographic``
+- ``polar_stereographic``
+- ``rotated_latitude_longitude``
+- ``sinusoidal``
+- ``stereographic``
+- ``transverse_mercator``
+- ``vertical_perspective``
+- and more...
+
+**Grid Table Validation:**
+
+When loading project tables, CMOR4 now performs enhanced validation on grid definitions:
+
+.. code-block:: python
+
+   # This will raise an error if the grid table contains:
+   # - Invalid grid_mapping_name values
+   # - Missing required parameters for grid mappings
+   # - Inconsistent coordinate specifications
+   project = cmor4.ProjectTables.from_directory(
+       "project_tables/cmip7-cmor-tables",
+       cv_file="tables-cvs/cmor-cvs.json",
+       grid_table="tables/CMIP7_grids.json",  # Validated on load
+   )
+
 Formula Terms and Vertical Coordinates
 ---------------------------------------
 
@@ -209,6 +269,115 @@ CMOR4 supports various calendar types:
        units="days since 1850-01-01",
        calendar="360_day",
    )
+
+Forecast Coordinates (Reference Time and Lead Time)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CMOR4 automatically derives forecast coordinates for forecast/initialized model output. When you provide a ``forecast_reference_time`` (reftime) coordinate, CMOR4 automatically generates the corresponding ``forecast_period`` (leadtime) coordinate:
+
+.. code-block:: python
+
+   import cmor4
+   import numpy as np
+
+   project = cmor4.ProjectTables.from_directory(
+       "project_tables/cmip7-cmor-tables",
+       cv_file="tables-cvs/cmor-cvs.json",
+       variable_tables=["tables/CMIP7_atmos.json"],
+   )
+
+   # Define dataset with forecast metadata
+   dataset = project.dataset_info({
+       "mip_era": "CMIP7",
+       "activity_id": "DCPP",  # Decadal Climate Prediction Project
+       "institution_id": "PCMDI",
+       "source_id": "PCMDI-MODEL",
+       "experiment_id": "dcppA-hindcast",
+       "license_id": "CC-BY-4.0",
+       "variant_label": "r1i1p1f1",
+       "grid_label": "gn",
+       "outpath": "./output",
+   })
+
+   # Define forecast reference time (initialization time)
+   reftime_axis = project.axis(
+       "reftime",
+       out_name="reftime",
+       values=[0.0],  # Single initialization time
+       units="days since 2020-01-01",
+       standard_name="forecast_reference_time",
+       scalar=True,
+   )
+
+   # Define forecast time axis
+   time_axis = project.axis(
+       "time",
+       values=[30.0, 60.0, 90.0],  # Monthly forecasts
+       bounds=[[0, 30], [30, 60], [60, 90]],
+       units="days since 2020-01-01",
+   )
+
+   axes = [time_axis, reftime_axis, lat_axis, lon_axis]
+
+   # CMOR4 automatically generates leadtime coordinate
+   # leadtime[i] = time[i] - reftime
+   ds, path = cmor4.cmorize(
+       data=data,
+       dataset=dataset,
+       variable=variable,
+       axes=axes,
+   )
+
+   # Output contains:
+   # - time: [30.0, 60.0, 90.0] days since 2020-01-01
+   # - reftime: 0.0 days since 2020-01-01 (scalar coordinate)
+   # - leadtime: [30.0, 60.0, 90.0] days (automatically derived)
+
+**Multiple Initialization Times:**
+
+For ensemble forecasts with multiple initialization times:
+
+.. code-block:: python
+
+   # Non-scalar reftime for multiple initializations
+   reftime_axis = project.axis(
+       "reftime",
+       out_name="reftime",
+       values=[0.0, 365.0],  # Two annual initializations
+       units="days since 2020-01-01",
+       standard_name="forecast_reference_time",
+       scalar=False,
+   )
+
+   # Time axis spans both forecasts
+   time_axis = project.axis(
+       "time",
+       values=[30.0, 60.0, 395.0, 425.0],
+       units="days since 2020-01-01",
+   )
+
+   # Data has shape (time, reftime, lat, lon)
+   # CMOR4 derives leadtime for each time-reftime pair
+
+**Incremental Writing with Forecasts:**
+
+DatasetWriter also supports incremental writing of forecast data:
+
+.. code-block:: python
+
+   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+       for init_time in initialization_times:
+           # Load forecast data for this initialization
+           reftime = init_time
+           time_values = np.arange(reftime + 30, reftime + 365, 30)
+           data = load_forecast_data(init_time)
+
+           writer.write(
+               data,
+               time_values=time_values.tolist(),
+           )
+
+   # Leadtime automatically computed and written for each chunk
 
 Climatological Time
 ~~~~~~~~~~~~~~~~~~~
