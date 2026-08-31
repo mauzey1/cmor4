@@ -60,9 +60,9 @@ IntTuple = tuple[int, ...] | None
 StrOrTuple = Annotated[
     str | tuple[str, ...] | None,
     AfterValidator(
-        lambda value: value[0]
-        if isinstance(value, tuple) and len(value) == 1
-        else value
+        lambda value: (
+            value[0] if isinstance(value, tuple) and len(value) == 1 else value
+        )
     ),
 ]
 CoercedF = Annotated[

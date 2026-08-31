@@ -10,7 +10,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 import xarray as xr
 
-from .grid_mapping_registry import (
+from .tables import (
     TEXT_GRID_MAPPING_ATTRIBUTES,
     allowed_grid_mapping_attributes,
 )
@@ -392,9 +392,9 @@ def validate_grid_mapping(
     )
     table_mapping_name = None
     if entry is not None:
-        table_mapping_name = entry.entry.get(
-            "grid_mapping_name"
-        ) or entry.entry.get("mapping_name")
+        table_mapping_name = entry.entry.get("grid_mapping_name") or entry.entry.get(
+            "mapping_name"
+        )
         if (
             table_mapping_name is None
             and allowed_grid_mapping_attributes(entry.name) is not None
@@ -496,8 +496,7 @@ def validate_grid_mapping(
             if not isinstance(value, str):
                 label = entry_name or cf_mapping_name or "<unknown>"
                 raise TableValidationError(
-                    f"grid mapping {label!r} parameter {name!r} must "
-                    "be a string."
+                    f"grid mapping {label!r} parameter {name!r} must be a string."
                 )
             continue
         arr = np.asarray(value)
@@ -508,8 +507,7 @@ def validate_grid_mapping(
             except (TypeError, ValueError) as exc:
                 label = entry_name or cf_mapping_name or "<unknown>"
                 raise TableValidationError(
-                    f"grid mapping {label!r} parameter {name!r} must "
-                    "be numeric."
+                    f"grid mapping {label!r} parameter {name!r} must be numeric."
                 ) from exc
 
     required_axes = entry.required_axes() if entry is not None else ()

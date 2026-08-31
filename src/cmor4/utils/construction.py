@@ -93,9 +93,7 @@ def derive_forecast_coords(
         or "standard"
     )
     reference_value = reference_values.reshape(-1)[0]
-    reference_date = decode_time_value(
-        reference_value, reference_units, axis_calendar
-    )
+    reference_date = decode_time_value(reference_value, reference_units, axis_calendar)
     if reference_date is None:
         raise ValueError(
             "Cannot derive leadtime from the forecast reference-time coordinate."
@@ -124,9 +122,7 @@ def derive_forecast_coords(
                 Unit(explicit_units).convert(explicit, Unit(duration_units)),
                 dtype="f8",
             )
-            tolerance = float(
-                Unit("seconds").convert(1.0, Unit(duration_units))
-            )
+            tolerance = float(Unit("seconds").convert(1.0, Unit(duration_units)))
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 f"Cannot compare leadtime units {leadtime_axis.units!r} "
@@ -153,9 +149,7 @@ def derive_forecast_coords(
     out_name = str(entry_data.get("out_name") or getattr(entry, "name", "leadtime"))
     attrs = {
         "units": duration_units,
-        "standard_name": str(
-            entry_data.get("standard_name") or "forecast_period"
-        ),
+        "standard_name": str(entry_data.get("standard_name") or "forecast_period"),
         "long_name": str(
             entry_data.get("long_name")
             or "Time elapsed since the start of the forecast"

@@ -33,7 +33,8 @@ from .table_utils import (
     table_dimensions,
     validate_table_metadata,
 )
-from .unit_conversion import units_are_convertible as _units_convertible
+
+# Unit conversion function defined below
 from ..exceptions import TableValidationError
 from ..variable import Variable
 
@@ -1315,3 +1316,225 @@ def _read_table_entries(table_file: Path, key: str) -> dict[str, Mapping[str, An
         for name, entry in data.get(key, {}).items()
         if isinstance(entry, Mapping)
     }
+
+
+# ---------------------------------------------------------------------------
+# Unit conversion (from unit_conversion.py)
+# ---------------------------------------------------------------------------
+
+
+def _units_convertible(user_units: str, table_units: str) -> bool:
+    """Return True if *user_units* and *table_units* are dimensionally
+    compatible.
+
+    Uses ``cf_units`` (a required dependency) for a proper udunits-based check,
+    so that physically equivalent unit strings such as ``"degC"`` and ``"K"``
+    or ``"hPa"`` and ``"Pa"`` are accepted even when the strings differ.
+
+    If the unit strings cannot be parsed by ``cf_units`` (e.g. non-standard
+    strings) the function falls back to requiring exact string equality.
+
+    Parameters
+    ----------
+    user_units
+        Units string supplied by the user.
+    table_units
+        Units string from the project table entry.
+
+    Returns
+    -------
+    bool
+        True when the units are the same string or are dimensionally
+        convertible; False when they belong to different physical dimensions.
+
+    Examples
+    --------
+    >>> _units_convertible("degC", "K")
+    True
+    >>> _units_convertible("hPa", "Pa")
+    True
+    >>> _units_convertible("m s-1", "K")
+    False
+    >>> _units_convertible("kg m-2 s-1", "kg m-2 s-1")
+    True
+    """
+    if user_units == table_units:
+        return True
+    try:
+        import cf_units
+
+        a = cf_units.Unit(user_units)
+        b = cf_units.Unit(table_units)
+        return a.is_convertible(b)
+    except Exception:
+        # Unit strings not parseable by cf_units: require exact equality.
+        return False
+
+
+# ---------------------------------------------------------------------------
+# CF-1.12 grid mapping registry (from grid_mapping_registry.py)
+# ---------------------------------------------------------------------------
+
+
+COMMON_GRID_MAPPING_ATTRIBUTES: frozenset[str] = frozenset({
+    "crs_wkt",
+    "earth_radius",
+    "GeoTransform",
+    "geographic_coordinate_system_name",
+    "geographic_crs_name",
+    "geoid_name",
+    "geopotential_datum_name",
+    "grid_mapping_name",
+    "horizontal_datum_name",
+    "inverse_flattening",
+    "long_name",
+    "longitude_of_prime_meridian",
+    "prime_meridian_name",
+    "projected_coordinate_system_name",
+    "projected_crs_name",
+    "reference_ellipsoid_name",
+    "semi_major_axis",
+    "semi_minor_axis",
+    "spatial_ref",
+    "towgs84",
+})
+
+
+TEXT_GRID_MAPPING_ATTRIBUTES: frozenset[str] = frozenset({
+    "crs_wkt",
+    "fixed_angle_axis",
+    "GeoTransform",
+    "geographic_coordinate_system_name",
+    "geographic_crs_name",
+    "geoid_name",
+    "geopotential_datum_name",
+    "grid_mapping_name",
+    "horizontal_datum_name",
+    "long_name",
+    "prime_meridian_name",
+    "projected_coordinate_system_name",
+    "projected_crs_name",
+    "reference_ellipsoid_name",
+    "spatial_ref",
+    "sweep_angle_axis",
+})
+
+
+GRID_MAPPING_ATTRIBUTES: dict[str, frozenset[str]] = {
+    "albers_conical_equal_area": frozenset({
+        "standard_parallel",
+        "longitude_of_central_meridian",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "azimuthal_equidistant": frozenset({
+        "longitude_of_projection_origin",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "geostationary": frozenset({
+        "latitude_of_projection_origin",
+        "longitude_of_projection_origin",
+        "perspective_point_height",
+        "false_easting",
+        "false_northing",
+        "sweep_angle_axis",
+        "fixed_angle_axis",
+    }),
+    "lambert_azimuthal_equal_area": frozenset({
+        "longitude_of_projection_origin",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "lambert_conformal_conic": frozenset({
+        "standard_parallel",
+        "longitude_of_central_meridian",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "lambert_cylindrical_equal_area": frozenset({
+        "longitude_of_central_meridian",
+        "standard_parallel",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "latitude_longitude": frozenset(),
+    "mercator": frozenset({
+        "longitude_of_projection_origin",
+        "standard_parallel",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "oblique_mercator": frozenset({
+        "azimuth_of_central_line",
+        "latitude_of_projection_origin",
+        "longitude_of_projection_origin",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "orthographic": frozenset({
+        "longitude_of_projection_origin",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "polar_stereographic": frozenset({
+        "longitude_of_projection_origin",
+        "straight_vertical_longitude_from_pole",
+        "latitude_of_projection_origin",
+        "standard_parallel",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "rotated_latitude_longitude": frozenset({
+        "grid_north_pole_latitude",
+        "grid_north_pole_longitude",
+        "north_pole_grid_longitude",
+    }),
+    "sinusoidal": frozenset({
+        "longitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "stereographic": frozenset({
+        "longitude_of_projection_origin",
+        "latitude_of_projection_origin",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "transverse_mercator": frozenset({
+        "scale_factor_at_central_meridian",
+        "longitude_of_central_meridian",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "vertical_perspective": frozenset({
+        "latitude_of_projection_origin",
+        "longitude_of_projection_origin",
+        "perspective_point_height",
+        "false_easting",
+        "false_northing",
+    }),
+}
+
+
+def allowed_grid_mapping_attributes(mapping_name: str) -> frozenset[str] | None:
+    """Return CF-1.12 attributes allowed for *mapping_name*, or ``None``."""
+    specific = GRID_MAPPING_ATTRIBUTES.get(mapping_name)
+    if specific is None:
+        return None
+    allowed = set(COMMON_GRID_MAPPING_ATTRIBUTES)
+    allowed.update(specific)
+    if "standard_parallel" in allowed:
+        allowed.update({"standard_parallel1", "standard_parallel2"})
+    return frozenset(allowed)

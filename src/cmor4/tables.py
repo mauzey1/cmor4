@@ -25,7 +25,7 @@ from .cv import ControlledVocabulary
 from .datasetinfo import DatasetInfo
 from .exceptions import ControlledVocabularyError, TableValidationError
 from .grid import Grid
-from .utils.unit_conversion import units_are_convertible as _units_are_convertible
+from .utils.tables import _units_convertible as _units_are_convertible
 from .utils.dataset_metadata import DatasetMetadata
 from .utils.validation import (
     _validate_calendar,
@@ -651,10 +651,7 @@ class ProjectTables:
             )
         """
         requested = str(
-            values.get("table_entry")
-            or values.get("mapping_entry")
-            or name
-            or ""
+            values.get("table_entry") or values.get("mapping_entry") or name or ""
         )
         gm_entry = self.grid_table.resolve_mapping(requested) if requested else None
 
