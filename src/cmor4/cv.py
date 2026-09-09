@@ -10,10 +10,8 @@ import uuid
 import warnings
 
 from .utils.dataset_metadata import DatasetMetadata
-from .utils.table_utils import (
-    is_table_value as _is_table_value,
-    metadata_value_matches as _metadata_value_matches,
-)
+from .utils.constraints import has_value as _is_table_value
+from .utils.constraints import value_matches_constraint as _metadata_value_matches
 from .utils.templates import (
     is_unresolved_template as _is_unresolved_template,
     render_template as _render_template,

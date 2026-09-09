@@ -8,10 +8,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 from pydantic import ValidationError
 
-from .utils.table_utils import (
-    is_table_value as _is_table_value,
-    validate_table_metadata as _validate_table_metadata,
-)
+from .utils.constraints import has_value as _is_table_value
 from .utils.templates import is_unresolved_template as _is_unresolved_template
 from .utils.tables import (
     CoordinateTable,
@@ -884,19 +881,15 @@ class ProjectTables:
                 adict = axis.to_dict()
                 if ae := self.coordinate_table.resolve_grid_coord(axis):
                     # Grid coordinates validated against grid coordinate table
-                    _validate_table_metadata(
+                    ae.validate_metadata(
                         adict,
-                        ae.name,
-                        ae,
                         ("units", "standard_name", "long_name"),
                         "grid coordinate",
                     )
                 elif ae := self.coordinate_table.resolve_coord(axis):
                     # Regular coordinates validated against coordinate table
-                    _validate_table_metadata(
+                    ae.validate_metadata(
                         adict,
-                        ae.name,
-                        ae,
                         (
                             "units",
                             "standard_name",
@@ -1013,10 +1006,8 @@ class ProjectTables:
 
             # Validate remaining metadata (standard_name, long_name)
             # by exact match.
-            _validate_table_metadata(
+            entry.validate_metadata(
                 zfactor.to_dict(),
-                entry_name,
-                entry,
                 ("standard_name", "long_name"),
                 "formula term",
             )

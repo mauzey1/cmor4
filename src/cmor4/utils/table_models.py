@@ -15,7 +15,22 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .table_utils import parse_table_value
+from .constraints import value_matches_constraint
+from ..exceptions import TableValidationError
+
+
+def _numeric_table_value(value: Any) -> Any:
+    """Normalize a numeric scalar encoded as a JSON string."""
+
+    if not isinstance(value, str):
+        return value
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value
 
 
 class TableModel(BaseModel):
@@ -50,6 +65,27 @@ class NamedTableEntry(TableModel):
     standard_name: str | None = None
     long_name: str | None = None
     type: str | None = None
+
+    def validate_metadata(
+        self,
+        data: dict[str, Any],
+        keys: Iterable[str],
+        entity_type: str = "entry",
+    ) -> None:
+        """Reject runtime metadata that conflicts with this typed entry."""
+
+        for key in keys:
+            expected = getattr(self, key, None)
+            user_value = data.get(key)
+            if (
+                expected not in (None, "")
+                and user_value not in (None, "")
+                and not value_matches_constraint(user_value, expected)
+            ):
+                raise TableValidationError(
+                    f"{entity_type} {self.name!r} {key}={user_value!r} "
+                    f"does not match table value {expected!r}."
+                )
 
 
 class DimensionedTableEntry(NamedTableEntry):
@@ -108,7 +144,7 @@ class CoordinateTableEntry(DimensionedTableEntry):
         if value in (None, ""):
             return None
         values = value if isinstance(value, (list, tuple)) else [value]
-        return [parse_table_value(item) for item in values]
+        return [_numeric_table_value(item) for item in values]
 
     @property
     def runtime_bounds(self) -> list[list[Any]] | None:
@@ -118,7 +154,7 @@ class CoordinateTableEntry(DimensionedTableEntry):
         if value in (None, ""):
             return None
         values = value if isinstance(value, (list, tuple)) else str(value).split()
-        parsed = [parse_table_value(item) for item in values]
+        parsed = [_numeric_table_value(item) for item in values]
         if len(parsed) % 2:
             return None
         return [parsed[index : index + 2] for index in range(0, len(parsed), 2)]

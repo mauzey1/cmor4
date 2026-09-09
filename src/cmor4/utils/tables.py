@@ -21,12 +21,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .table_utils import (
-    is_table_value,
-    metadata_value_matches,
-    parse_table_value,
-    validate_table_metadata,
-)
+from .constraints import has_value as is_table_value
+from .constraints import value_matches_constraint
 from .dataset_metadata import DatasetMetadata
 from .table_models import (
     CoordinateTableDocument,
@@ -250,10 +246,8 @@ class CoordinateTable:
         entry_name = axis_entry.name
         entry = axis_entry
         data.setdefault("table_entry", entry_name)
-        validate_table_metadata(
+        entry.validate_metadata(
             data,
-            entry_name,
-            entry,
             ("units", "standard_name", "long_name", "axis", "positive", "formula"),
             "axis",
         )
@@ -280,7 +274,7 @@ class CoordinateTable:
         ):
             val = getattr(entry, key)
             if is_table_value(val):
-                data.setdefault(key, parse_table_value(val))
+                data.setdefault(key, val)
         data.setdefault("out_name", entry_name)
         if "values" not in data:
             v = entry.runtime_values
@@ -317,7 +311,7 @@ class CoordinateTable:
         ):
             val = getattr(entry, key)
             if is_table_value(val):
-                data.setdefault(key, parse_table_value(val))
+                data.setdefault(key, val)
         data.setdefault("out_name", entry_name)
         bname = data.get("bounds_name")
         if bname:
@@ -327,7 +321,7 @@ class CoordinateTable:
                 for key in ("units", "standard_name", "long_name"):
                     val = getattr(be, key)
                     if is_table_value(val):
-                        ba.setdefault(key, parse_table_value(val))
+                        ba.setdefault(key, val)
                 if ba:
                     data["bounds_attrs"] = ba
 
@@ -353,7 +347,7 @@ class CoordinateTable:
                 (n, e)
                 for n, e in matches
                 if is_table_value(getattr(e, key))
-                and metadata_value_matches(val, getattr(e, key))
+                and value_matches_constraint(val, getattr(e, key))
             ]
             if narrowed:
                 matches = narrowed
@@ -473,10 +467,8 @@ class FormulaTable:
         entry_name = zf_entry.name
         entry = zf_entry
         data.setdefault("table_entry", entry_name)
-        validate_table_metadata(
+        entry.validate_metadata(
             data,
-            entry_name,
-            entry,
             ("units", "standard_name", "long_name"),
             "formula term",
         )
@@ -487,7 +479,7 @@ class FormulaTable:
         for key in ("valid_min", "valid_max", "ok_min_mean_abs", "ok_max_mean_abs"):
             val = getattr(entry, key)
             if is_table_value(val):
-                data.setdefault(key, parse_table_value(val))
+                data.setdefault(key, val)
         if "dimensions" not in data and entry.dimensions:
             data["dimensions"] = entry.runtime_dimensions
         if "bounds" in data:
@@ -971,7 +963,7 @@ class VariableTable:
             if not is_table_value(value) and entry.table_header:
                 value = getattr(entry.table_header, key)
             if is_table_value(value):
-                data.setdefault(key, parse_table_value(value))
+                data.setdefault(key, value)
         for key in (
             "units",
             "standard_name",
@@ -1118,7 +1110,7 @@ class VariableTable:
             if (
                 expected not in (None, "")
                 and user_val is not None
-                and not metadata_value_matches(user_val, expected)
+                and not value_matches_constraint(user_val, expected)
             ):
                 raise TableValidationError(
                     f"{key}={user_val!r} does not match "
