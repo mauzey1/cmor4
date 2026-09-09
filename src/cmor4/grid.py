@@ -251,14 +251,11 @@ class Grid(MetadataModel):
                     "grid_coordinate": name,
                 }) or coord_table.resolve_coord({"name": name})
                 if entry is not None:
-                    raw = dict(entry.entry)
                     result: dict[str, Any] = {}
-                    if "units" in raw:
-                        result["units"] = str(raw["units"])
-                    if "standard_name" in raw:
-                        result["standard_name"] = str(raw["standard_name"])
-                    if "long_name" in raw:
-                        result["long_name"] = str(raw["long_name"])
+                    for key in ("units", "standard_name", "long_name"):
+                        value = getattr(entry, key)
+                        if value is not None:
+                            result[key] = str(value)
                     return result
             # CF hard-coded defaults
             attrs: dict[str, Any] = {

@@ -456,7 +456,7 @@ class ProjectTablesTest(unittest.TestCase):
             "depth_coord", project.coordinate_table.generic_level_entries["olevel"]
         )
         self.assertEqual(
-            project.variable_table.entries["tos_tavg-u-hxy-sea"].entry["out_name"],
+            project.variable_table.entries["tos_tavg-u-hxy-sea"].out_name,
             "tos",
         )
 
@@ -698,16 +698,18 @@ class ProjectTablesTest(unittest.TestCase):
         prepared_variable = project.variable("o3zm")
         prepared_dataset = project.dataset_info(dataset)
 
-        self.assertEqual(prepared_dataset["source_id"], "BSVertOzone-v1-0")
+        self.assertEqual(prepared_dataset.source_id, "BSVertOzone-v1-0")
         self.assertEqual(prepared_variable.id, "o3")
         self.assertEqual(prepared_variable.units, "mol mol-1")
         self.assertEqual(prepared_variable.dimensions, ("time", "height", "latitude"))
         self.assertEqual(
-            prepared_dataset["source"],
+            prepared_dataset.to_dict()["source"],
             "BSVertOzone v1-0 (2018): Mole concentration of ozone in air",
         )
-        self.assertEqual(prepared_dataset["source_type"], "satellite_retrieval")
-        self.assertEqual(prepared_dataset["source_version_number"], "v1-0")
+        self.assertEqual(
+            prepared_dataset.to_dict()["source_type"], "satellite_retrieval"
+        )
+        self.assertEqual(prepared_dataset.to_dict()["source_version_number"], "v1-0")
 
     def test_axis_resolution_does_not_use_axis_letter_alone(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -773,7 +775,7 @@ class ProjectTablesTest(unittest.TestCase):
         )
 
         self.assertEqual(entry.table_id, "obs4MIPs_A1hrPt")
-        self.assertEqual(entry.entry["frequency"], "1hr")
+        self.assertEqual(entry.frequency, "1hr")
 
     def test_cmip7_uses_project_cv_and_variable_table(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -956,7 +958,7 @@ class ProjectTablesTest(unittest.TestCase):
             }
 
             prepared = project.dataset_info(dataset)
-            self.assertEqual(prepared["source_type"], "AOGCM AER")
+            self.assertEqual(prepared.to_dict()["source_type"], "AOGCM AER")
 
             with self.assertRaisesRegex(
                 cmor4.ControlledVocabularyError, "missing required"
@@ -1355,7 +1357,7 @@ class ConstructorTest(unittest.TestCase):
         )
         project = ProjectTables(cv_file, [t1, t2])
         self.assertEqual(
-            project.variable_table.entries["pr"].entry["out_name"], "pr_from_t1"
+            project.variable_table.entries["pr"].out_name, "pr_from_t1"
         )
 
     def test_table_id_stripped_of_table_prefix(self):
@@ -1530,7 +1532,7 @@ class DatasetInfoMethodTest(unittest.TestCase):
             "activity_id": "CMIP",
             "institution_id": "NCAR",
         })
-        self.assertEqual(info["mip_era"], "CMIP7")
+        self.assertEqual(info.mip_era, "CMIP7")
 
     def test_user_values_are_preserved(self):
         info = self.project.dataset_info({
@@ -1538,16 +1540,16 @@ class DatasetInfoMethodTest(unittest.TestCase):
             "institution_id": "NCAR",
             "grid_label": "gn",
         })
-        self.assertEqual(info["activity_id"], "CMIP")
-        self.assertEqual(info["grid_label"], "gn")
+        self.assertEqual(info.activity_id, "CMIP")
+        self.assertEqual(info.grid_label, "gn")
 
     def test_institution_text_filled_from_institution_id(self):
         info = self.project.dataset_info({
             "activity_id": "CMIP",
             "institution_id": "NCAR",
         })
-        self.assertIn("institution", info)
-        self.assertIn("National Center", info["institution"])
+        self.assertIn("institution", info.to_dict())
+        self.assertIn("National Center", info.to_dict()["institution"])
 
     def test_rejects_invalid_activity_id_at_validation(self):
         """dataset_info validates controlled values and rejects unknown ones."""
@@ -1572,7 +1574,7 @@ class DatasetInfoMethodTest(unittest.TestCase):
         self.assertIsInstance(info, DatasetInfo)
         self.assertEqual(info.user_info["activity_id"], "CMIP")
 
-    def test_dict_like_view_without_mapping_inheritance(self):
+    def test_typed_model_view_without_mapping_protocol(self):
         info = DatasetInfo.from_prepared(
             {
                 "activity_id": "CMIP",
@@ -1582,10 +1584,8 @@ class DatasetInfoMethodTest(unittest.TestCase):
         )
 
         self.assertNotIsInstance(info, Mapping)
-        self.assertEqual(info["activity_id"], "CMIP")
-        self.assertEqual(info.get("custom_attribute"), "custom value")
-        self.assertIn("institution_id", info)
-        self.assertEqual(dict(info)["custom_attribute"], "custom value")
+        self.assertEqual(info.activity_id, "CMIP")
+        self.assertFalse(hasattr(info, "get"))
         self.assertEqual(info.to_dict()["custom_attribute"], "custom value")
         self.assertEqual(info.extra["custom_attribute"], "custom value")
 
@@ -1616,10 +1616,11 @@ class VariableMethodTest(unittest.TestCase):
         var = self.project.variable("pr")
         self.assertEqual(var.standard_name, "precipitation_flux")
 
-    def test_table_dimensions_applied(self):
+    def test_runtime_dimensions_applied(self):
         """Variable dimensions come from the table entry.
 
-        Note: table_dimensions() reverses the declared order, so we check
+        Note: VariableTableEntry.runtime_dimensions reverses the declared order,
+        so we check
         that the expected names are all present rather than asserting a
         specific sequence.
         """
@@ -1637,8 +1638,8 @@ class VariableMethodTest(unittest.TestCase):
         # frequency is a first-class Variable attribute
         self.assertEqual(var.frequency, "mon")
         # realm lives in the raw table entry, not the Variable dataclass
-        entry = self.project.variable_table.entries["pr"].entry
-        self.assertEqual(entry.get("realm"), "atmos")
+        entry = self.project.variable_table.entries["pr"]
+        self.assertEqual(entry.realm, "atmos")
 
     def test_user_missing_value_preserved(self):
         var = self.project.variable("pr", missing_value=-999.0)
@@ -1817,7 +1818,7 @@ class VariableRemappingTest(unittest.TestCase):
             entry, variable, self.dataset
         )
 
-        self.assertEqual(effective.entry["cell_measures"], "area: areacella")
+        self.assertEqual(effective.cell_measures, "area: areacella")
 
     def test_empty_cell_measures_remap_clears_existing_value(self):
         variable = self.project.variable("bar_tavg-u-hxy-u")
@@ -2713,12 +2714,14 @@ class GridMethodTest(unittest.TestCase):
 
         assert entry is not None
         self.assertEqual(
-            entry.required_params(),
+            entry.required_parameter_names(),
             ("standard_parallel", "longitude_of_central_meridian"),
         )
-        self.assertEqual(entry.optional_params(), ("false_easting", "false_northing"))
-        self.assertEqual(entry.text_params(), ("crs_wkt", "GeoTransform"))
-        self.assertEqual(entry.required_axes(), ("Y", "X"))
+        self.assertEqual(
+            entry.optional_parameter_names(), ("false_easting", "false_northing")
+        )
+        self.assertEqual(entry.text_parameter_names(), ("crs_wkt", "GeoTransform"))
+        self.assertEqual(entry.required_axis_names(), ("Y", "X"))
 
     def test_grid_warns_for_missing_table_declared_params(self):
         project = _build_project(

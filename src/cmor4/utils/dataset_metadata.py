@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import ItemsView, Iterator, KeysView, Mapping, ValuesView
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Self
 
-from pydantic import field_validator
+from pydantic import ConfigDict, field_validator, model_validator
 
 from .metadata import MetadataModel
 
@@ -41,6 +41,14 @@ _RIPF_MAX: int = 2**31 - 1
 class DatasetMetadata(MetadataModel):
     """Shared dataset-level metadata fields and helpers."""
 
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+        coerce_numbers_to_str=True,
+    )
+
     # Typed CMIP DRS fields
     mip_era: str | None = None
     activity_id: str | None = None
@@ -59,14 +67,32 @@ class DatasetMetadata(MetadataModel):
     outpath: str | None = None
     version: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _collect_project_attributes(cls, data: Any) -> Any:
+        """Retain project-specific global attributes in the explicit extra field."""
+
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        explicit_extra = data.pop("extra", None)
+        extra = dict(explicit_extra) if isinstance(explicit_extra, dict) else {}
+        known = set(cls.model_fields)
+        for key in tuple(data):
+            if key not in known:
+                extra.setdefault(key, data.pop(key))
+        data["extra"] = extra
+        return data
+
     def __init__(
         self,
-        data: Mapping[str, Any] | None = None,
+        data: Mapping[str, Any] | DatasetMetadata | None = None,
         /,
         **kwargs: Any,
     ) -> None:
         """Accept an optional positional metadata mapping."""
-        merged = {**dict(data), **kwargs} if data is not None else kwargs
+        source = data.to_dict() if isinstance(data, DatasetMetadata) else data
+        merged = {**dict(source), **kwargs} if source is not None else kwargs
         super().__init__(**merged)
 
     @field_validator(
@@ -102,30 +128,6 @@ class DatasetMetadata(MetadataModel):
     def to_dict(self) -> dict[str, Any]:
         """Mutable copy of the public metadata view."""
         return super().to_dict()
-
-    def __getitem__(self, key: str) -> Any:
-        return self.to_dict()[key]
-
-    def __iter__(self) -> Iterator[str]:  # type: ignore[override]
-        return iter(self.to_dict())
-
-    def __len__(self) -> int:
-        return len(self.to_dict())
-
-    def __contains__(self, key: object) -> bool:
-        return key in self.to_dict()
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self.to_dict().get(key, default)
-
-    def items(self) -> ItemsView[str, Any]:
-        return self.to_dict().items()
-
-    def keys(self) -> KeysView[str]:
-        return self.to_dict().keys()
-
-    def values(self) -> ValuesView[Any]:
-        return self.to_dict().values()
 
     @classmethod
     def from_mapping(

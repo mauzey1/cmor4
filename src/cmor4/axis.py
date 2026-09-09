@@ -100,6 +100,7 @@ class Axis(MetadataModel):
     auxiliary_name: str | None = None
     auxiliary_attrs: dict[str, Any] = Field(default_factory=dict)
     climatology: BoolCoerced = None
+    calendar: str | None = None
     generic_level_name: str | None = None
     z_factors: str | None = None
     z_bounds_factors: str | None = None
@@ -130,6 +131,7 @@ class Axis(MetadataModel):
             ("axis", self.axis),
             ("positive", self.positive),
             ("formula", self.formula),
+            ("calendar", self.calendar),
         ):
             if val is not None:
                 attrs[key] = val

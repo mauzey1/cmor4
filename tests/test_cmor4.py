@@ -136,7 +136,7 @@ class Cmor4Test(unittest.TestCase):
 
         attrs = info.global_attributes(variable)
 
-        self.assertEqual(info["source_id"], "DUMMY-MODEL")
+        self.assertEqual(info.source_id, "DUMMY-MODEL")
         self.assertEqual(info.variant_label(), "r9i1p1f3")
         self.assertEqual(attrs["variable_id"], "tos")
         self.assertEqual(attrs["branded_variable"], "tos_tavg-u-hxy-sea")
@@ -1220,7 +1220,7 @@ class TableInfoTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             info = self.project.dataset_info(dataset_info(Path(tmp_dir)))
         # Not present until dataset creation knows the variable table.
-        self.assertIsNone(info.get("table_info"))
+        self.assertIsNone(info.to_dict().get("table_info"))
 
     def test_table_info_not_overwritten_if_user_supplied(self):
         """

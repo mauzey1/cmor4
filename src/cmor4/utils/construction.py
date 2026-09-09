@@ -87,7 +87,9 @@ def derive_forecast_coords(
         )
 
     axis_calendar = str(
-        time_axis.attrs.get("calendar")
+        time_axis.calendar
+        or reference_axis.calendar
+        or time_axis.attrs.get("calendar")
         or reference_axis.attrs.get("calendar")
         or calendar
         or "standard"
@@ -149,18 +151,19 @@ def derive_forecast_coords(
             "standard_name": "forecast_period",
         })
 
-    entry_data = dict(entry.entry) if entry is not None else {}
-    out_name = str(entry_data.get("out_name") or getattr(entry, "name", "leadtime"))
+    out_name = str(
+        getattr(entry, "out_name", None) or getattr(entry, "name", "leadtime")
+    )
     attrs = {
         "units": duration_units,
         "standard_name": str(
-            entry_data.get("standard_name") or "forecast_period"
+            getattr(entry, "standard_name", None) or "forecast_period"
         ),
         "long_name": str(
-            entry_data.get("long_name")
+            getattr(entry, "long_name", None)
             or "Time elapsed since the start of the forecast"
         ),
-        "axis": str(entry_data.get("axis") or "T"),
+        "axis": str(getattr(entry, "axis", None) or "T"),
     }
     time_name = str(time_axis.out_name or time_axis.name)
     time_dims = tuple(coords[time_name][0])
@@ -241,6 +244,7 @@ def add_axis(
     coord_attrs = axis.attributes()
 
     if bool(axis.scalar):
+        scalar_value: Any
         if values.shape == ():
             scalar_value = values.item()
         elif values.size == 1:

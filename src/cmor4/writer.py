@@ -626,7 +626,7 @@ class DatasetWriter:
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
         traceback: Any,
-    ) -> bool:
+    ) -> Literal[False]:
         if exc_type is None and not self._closed:
             if self._write_count > 0:
                 self.close()
@@ -733,10 +733,12 @@ class DatasetWriter:
         chunk_time_len: int,
     ) -> None:
         if data.ndim != len(self._ctx.dims):
-            expected = " x ".join(self._ctx.dims) if self._ctx.dims else "scalar"
+            expected_dims = (
+                " x ".join(self._ctx.dims) if self._ctx.dims else "scalar"
+            )
             raise ValueError(
                 f"Data for {self._ctx.variable.names()[0]!r} has {data.ndim} "
-                f"dimensions, but variable dimensions resolve to {expected!r}."
+                f"dimensions, but variable dimensions resolve to {expected_dims!r}."
             )
         expected_shape = []
         for index, dim in enumerate(self._ctx.dims):

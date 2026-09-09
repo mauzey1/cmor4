@@ -312,7 +312,7 @@ class TestInstitutionValidation(unittest.TestCase):
         """The ``institution`` attribute is auto-populated from the CV."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            institution = dict(info).get("institution", "")
+            institution = info.to_dict().get("institution", "")
             self.assertTrue(
                 len(institution) > 0,
                 "institution attribute should be non-empty",
@@ -402,7 +402,7 @@ class TestSourceValidation(unittest.TestCase):
         """The ``source`` global attribute is auto-filled from the CV source entry."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            source = dict(info).get("source", "")
+            source = info.to_dict().get("source", "")
             self.assertIn("PCMDI-test", source)
 
 
@@ -539,7 +539,7 @@ class TestVariantLabelValidation(unittest.TestCase):
         """The variant_label used in the CMOR3 CMIP6 test suite is accepted."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp, variant_label="r3i1p1f1"))
-            self.assertEqual(dict(info)["variant_label"], "r3i1p1f1")
+            self.assertEqual(info.to_dict()["variant_label"], "r3i1p1f1")
 
     def test_valid_ripf_integers_produce_variant_label(self) -> None:
         """A variant_label in the CMIP6 format ``r9i1p1f3`` is accepted.
@@ -553,7 +553,7 @@ class TestVariantLabelValidation(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp, variant_label="r9i1p1f3"))
-            variant_label = dict(info).get("variant_label", "")
+            variant_label = info.to_dict().get("variant_label", "")
             self.assertEqual(variant_label, "r9i1p1f3")
             self.assertRegex(variant_label, r"r\d+i\d+p\d+f\d+")
 
@@ -818,13 +818,13 @@ class TestExperimentValidation(unittest.TestCase):
         """The well-known amip experiment_id is accepted."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            self.assertEqual(dict(info).get("experiment_id"), "amip")
+            self.assertEqual(info.to_dict().get("experiment_id"), "amip")
 
     def test_experiment_description_is_auto_filled(self) -> None:
         """The ``experiment`` attribute is auto-populated from the CV entry."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            experiment = dict(info).get("experiment", "")
+            experiment = info.to_dict().get("experiment", "")
             self.assertIn("AMIP", experiment.upper())
 
     def test_mip_era_cmip6_is_required(self) -> None:
@@ -913,7 +913,7 @@ class TestOutputAttributes(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            tracking_id = dict(info).get("tracking_id", "")
+            tracking_id = info.to_dict().get("tracking_id", "")
             self.assertTrue(
                 tracking_id.startswith("hdl:21.14100/"),
                 "tracking_id should start with 'hdl:21.14100/' "
@@ -924,7 +924,7 @@ class TestOutputAttributes(unittest.TestCase):
         """The tracking_id UUID portion matches the standard UUID4 format."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            tracking_id = dict(info).get("tracking_id", "")
+            tracking_id = info.to_dict().get("tracking_id", "")
             uuid_part = tracking_id.split("/", 1)[-1] if "/" in tracking_id else ""
             uuid_pattern = re.compile(
                 r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -948,7 +948,7 @@ class TestOutputAttributes(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            tracking_id = dict(info).get("tracking_id", "")
+            tracking_id = info.to_dict().get("tracking_id", "")
             self.assertRegex(
                 tracking_id,
                 python_pattern,
@@ -962,7 +962,7 @@ class TestOutputAttributes(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            conventions = dict(info).get("Conventions", "")
+            conventions = info.to_dict().get("Conventions", "")
             self.assertTrue(
                 conventions.startswith("CF-1.7 CMIP-6."),
                 f"Conventions should match CMIP6 pattern but got {conventions!r}",
@@ -1001,13 +1001,13 @@ class TestOutputAttributes(unittest.TestCase):
         """The mip_era global attribute is set to CMIP6."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            self.assertEqual(dict(info).get("mip_era"), "CMIP6")
+            self.assertEqual(info.to_dict().get("mip_era"), "CMIP6")
 
     def test_institution_attribute_is_populated(self) -> None:
         """The full institution name is populated from the CV."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            institution = dict(info).get("institution", "")
+            institution = info.to_dict().get("institution", "")
             # PCMDI's CV entry is the full long-form name
             self.assertIn("Program for Climate Model Diagnosis", institution)
 
@@ -1015,14 +1015,14 @@ class TestOutputAttributes(unittest.TestCase):
         """The full source description is populated from the CV."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            source = dict(info).get("source", "")
+            source = info.to_dict().get("source", "")
             self.assertIn("PCMDI-test", source)
 
     def test_experiment_attribute_is_populated(self) -> None:
         """The human-readable experiment description is populated from the CV."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            experiment = dict(info).get("experiment", "")
+            experiment = info.to_dict().get("experiment", "")
             self.assertTrue(len(experiment) > 0)
 
 
@@ -1255,7 +1255,7 @@ class TestCmip6DatasetRoundtrip(unittest.TestCase):
         """The creation_date attribute is in ISO 8601 UTC format."""
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))
-            creation_date = dict(info).get("creation_date", "")
+            creation_date = info.to_dict().get("creation_date", "")
             self.assertRegex(
                 creation_date,
                 r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$",
@@ -1270,8 +1270,8 @@ class TestCmip6DatasetRoundtrip(unittest.TestCase):
         ):
             info1 = self.project.dataset_info(_amip_attrs(tmp1))
             info2 = self.project.dataset_info(_amip_attrs(tmp2))
-            tid1 = dict(info1).get("tracking_id", "")
-            tid2 = dict(info2).get("tracking_id", "")
+            tid1 = info1.to_dict().get("tracking_id", "")
+            tid2 = info2.to_dict().get("tracking_id", "")
             self.assertNotEqual(
                 tid1,
                 tid2,

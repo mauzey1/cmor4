@@ -1730,37 +1730,41 @@ class TestNestedCVAttributes(unittest.TestCase):
         """Selecting a code injects all scalar leaf attributes from the CV entry."""
         cv = self._cv()
         dataset = cv.get_dataset_info({"hierarchical_attr_setting": "information"})
-        self.assertEqual(dataset["coder"], "Denis Nadeau")
-        self.assertEqual(dataset["creator"], "PCMDI")
-        self.assertEqual(dataset["model"], "Ocean Model")
-        self.assertEqual(dataset["country"], "USA")
+        values = dataset.to_dict()
+        self.assertEqual(values["coder"], "Denis Nadeau")
+        self.assertEqual(values["creator"], "PCMDI")
+        self.assertEqual(values["model"], "Ocean Model")
+        self.assertEqual(values["country"], "USA")
 
     def test_selector_attribute_itself_is_preserved(self):
         """The user-set selector key is also present in the dataset."""
         cv = self._cv()
         dataset = cv.get_dataset_info({"hierarchical_attr_setting": "information"})
-        self.assertEqual(dataset["hierarchical_attr_setting"], "information")
+        self.assertEqual(
+            dataset.to_dict()["hierarchical_attr_setting"], "information"
+        )
 
     def test_site_id_location_attrs_injected(self):
         """obs4MIPs-style site_id lookup injects latitude/longitude/location."""
         cv = self._cv()
         dataset = cv.get_dataset_info({"site_id": "AR-SLu"})
-        self.assertEqual(dataset["latitude"], "-33.4648")
-        self.assertEqual(dataset["location"], "San Luis")
-        self.assertEqual(dataset["longitude"], "-66.4598")
+        values = dataset.to_dict()
+        self.assertEqual(values["latitude"], "-33.4648")
+        self.assertEqual(values["location"], "San Luis")
+        self.assertEqual(values["longitude"], "-66.4598")
 
     def test_no_injection_when_user_does_not_set_key(self):
         """Leaf attributes are NOT injected when the user omits the selector."""
         cv = self._cv()
         dataset = cv.get_dataset_info({})
-        self.assertNotIn("coder", dataset)
-        self.assertNotIn("creator", dataset)
+        self.assertNotIn("coder", dataset.to_dict())
+        self.assertNotIn("creator", dataset.to_dict())
 
     def test_no_injection_for_unknown_code(self):
         """An unrecognised code injects nothing (no KeyError)."""
         cv = self._cv()
         dataset = cv.get_dataset_info({"hierarchical_attr_setting": "nonexistent"})
-        self.assertNotIn("coder", dataset)
+        self.assertNotIn("coder", dataset.to_dict())
 
     def test_user_values_not_overwritten_by_injection(self):
         """Leaf attributes already set by the user are not overwritten (setdefault)."""
@@ -1769,7 +1773,7 @@ class TestNestedCVAttributes(unittest.TestCase):
             "hierarchical_attr_setting": "information",
             "coder": "override",
         })
-        self.assertEqual(dataset["coder"], "override")
+        self.assertEqual(dataset.to_dict()["coder"], "override")
 
     def test_dedicated_handler_values_not_overwritten(self):
         """Attributes set by dedicated handlers (e.g. experiment defaults) win."""
@@ -1800,11 +1804,11 @@ class TestNestedCVAttributes(unittest.TestCase):
         # _add_experiment_defaults runs before _add_nested_defaults, so its
         # setdefault("description", ...) wins.
         self.assertEqual(
-            dataset["description"],
+            dataset.to_dict()["description"],
             "Experiment description from dedicated handler.",
         )
         # 'org' has no conflict, so it is injected normally.
-        self.assertEqual(dataset["org"], "PCMDI")
+        self.assertEqual(dataset.to_dict()["org"], "PCMDI")
 
     def test_entry_with_non_scalar_values_not_injected(self):
         """Entries whose looked-up value contains a list or dict are not injected."""
@@ -1847,11 +1851,11 @@ class TestNestedCVAttributes(unittest.TestCase):
             }
         })
         dataset = cv.get_dataset_info({"frequency": "mon"})
-        self.assertNotIn("approx_interval", dataset)
-        self.assertNotIn("approx_interval_error", dataset)
-        self.assertNotIn("approx_interval_warning", dataset)
+        self.assertNotIn("approx_interval", dataset.to_dict())
+        self.assertNotIn("approx_interval_error", dataset.to_dict())
+        self.assertNotIn("approx_interval_warning", dataset.to_dict())
         # 'frequency' itself is still set (user-supplied value)
-        self.assertEqual(dataset.get("frequency"), "mon")
+        self.assertEqual(dataset.frequency, "mon")
 
     # -----------------------------------------------------------------------
     # Integration: global attrs written to output dataset

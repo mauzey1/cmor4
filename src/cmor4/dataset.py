@@ -141,6 +141,7 @@ def create_dataset_from_validated_data(
     axes = ctx.axes
     grid = ctx.grid
     var_name, var_labels = variable.names()
+    dataset_values = dataset.to_dict()
 
     (
         coords,
@@ -154,7 +155,7 @@ def create_dataset_from_validated_data(
         axes,
         coords,
         getattr(dataset, "project", None),
-        calendar=str(dataset.get("calendar", "standard") or "standard"),
+        calendar=str(dataset_values.get("calendar", "standard") or "standard"),
     )
     if forecast_coord_name is not None:
         auxiliary_coord_names.append(forecast_coord_name)
@@ -413,7 +414,7 @@ def write_netcdf(
     # it cannot create the directory (e.g. a non-existent /CMIP6 root).
     # Default is True for backwards-compatibility with CMOR4's original
     # always-create behaviour.
-    create_subdirs = bool(dataset.get("create_subdirectories", True))
+    create_subdirs = bool(dataset.to_dict().get("create_subdirectories", True))
     if create_subdirs:
         output_path.parent.mkdir(parents=True, exist_ok=True)
     elif not output_path.parent.exists():
@@ -584,7 +585,8 @@ def build_output_path(
     """
 
     dataset, variable = _dataset_for_variable(dataset, variable)
-    root = Path(str(dataset.get("outpath", "."))).expanduser()
+    dataset_values = dataset.to_dict()
+    root = Path(str(dataset_values.get("outpath", "."))).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
 
     # Read CV DRS templates once; both may be None when the CV lacks a DRS
@@ -596,12 +598,12 @@ def build_output_path(
         cv_path_tmpl, cv_file_tmpl = cv.drs_templates()
 
     path_template = str(
-        dataset.get("output_path_template")
+        dataset_values.get("output_path_template")
         or cv_path_tmpl
         or DEFAULT_OUTPUT_PATH_TEMPLATE
     )
     file_template = str(
-        dataset.get("output_file_template")
+        dataset_values.get("output_file_template")
         or cv_file_tmpl
         or DEFAULT_OUTPUT_FILE_TEMPLATE
     )
@@ -657,9 +659,10 @@ def _template_tokens(
     ds: xr.Dataset | None,
 ) -> dict[str, Any]:
     var_name, labels = variable.names()
-    frequency = str(dataset.get("frequency") or variable.frequency or "fx")
+    dataset_values = dataset.to_dict()
+    frequency = str(dataset_values.get("frequency") or variable.frequency or "fx")
     variant_label = dataset.variant_label()
-    version = str(dataset.get("version") or f"v{date.today():%Y%m%d}")
+    version = str(dataset_values.get("version") or f"v{date.today():%Y%m%d}")
     time_range = _time_range(ds, frequency) if frequency != "fx" else None
 
     tokens = {
@@ -669,7 +672,7 @@ def _template_tokens(
     }
     tokens.update({
         str(key): value
-        for key, value in dataset.items()
+        for key, value in dataset_values.items()
         if (key not in INTERNAL_DATASET_KEYS and not str(key).startswith("_"))
     })
     tokens.update({
@@ -678,9 +681,11 @@ def _template_tokens(
         "branded_variable_name": labels["branded_name"],
         "branding_suffix": labels.get("branding_suffix", ""),
         "frequency": frequency,
-        "grid_label": dataset.get("grid_label", tokens.get("grid_label", "gn")),
-        "member_id": dataset.get("member_id", variant_label),
-        "region": dataset.get("region", tokens.get("region", "glb")),
+        "grid_label": dataset_values.get(
+            "grid_label", tokens.get("grid_label", "gn")
+        ),
+        "member_id": dataset_values.get("member_id", variant_label),
+        "region": dataset_values.get("region", tokens.get("region", "glb")),
         "time-range": time_range or "",
         "time_range": time_range or "",
         "variable_id": var_name,

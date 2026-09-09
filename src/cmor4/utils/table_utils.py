@@ -3,49 +3,13 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping, Sequence
 
+from pydantic import BaseModel
+
 from ..exceptions import TableValidationError
-
-
-def table_dimensions(entry: Mapping[str, Any]) -> tuple[str, ...]:
-    dimensions = entry.get("dimensions", ())
-    if isinstance(dimensions, str):
-        values = tuple(dimensions.split())
-    else:
-        values = tuple(str(value) for value in dimensions)
-    return tuple(reversed(values))
 
 
 def is_table_value(value: Any) -> bool:
     return value not in (None, "")
-
-
-def entry_values(entry: Mapping[str, Any]) -> list[Any] | None:
-    requested = entry.get("requested")
-    if is_table_value(requested):
-        if isinstance(requested, list):
-            return [parse_table_value(value) for value in requested]
-        return [parse_table_value(requested)]
-    value = entry.get("value")
-    if is_table_value(value):
-        return [parse_table_value(value)]
-    return None
-
-
-def entry_bounds(entry: Mapping[str, Any]) -> list[list[Any]] | None:
-    requested_bounds = entry.get("requested_bounds")
-    if not is_table_value(requested_bounds):
-        requested_bounds = entry.get("bounds_values")
-    if not is_table_value(requested_bounds):
-        return None
-    values = (
-        requested_bounds
-        if isinstance(requested_bounds, list)
-        else str(requested_bounds).split()
-    )
-    parsed = [parse_table_value(value) for value in values]
-    if len(parsed) % 2:
-        return None
-    return [parsed[index : index + 2] for index in range(0, len(parsed), 2)]
 
 
 def parse_table_value(value: Any) -> Any:
@@ -76,7 +40,7 @@ def metadata_value_matches(value: Any, expected: Any) -> bool:
 def validate_table_metadata(
     data: dict[str, Any],
     entry_name: str | None,
-    table_values: Mapping[str, Any],
+    table_values: Mapping[str, Any] | BaseModel,
     keys: Sequence[str],
     entity_type: str = "entry",
 ) -> None:
@@ -89,7 +53,7 @@ def validate_table_metadata(
     entry_name:
         Name of the table entry being checked (used in error messages).
     table_values:
-        The raw table entry dict whose values are the authoritative source.
+        Typed table entry or mapping whose values are the authoritative source.
     keys:
         Field names to check.
     entity_type:
@@ -97,7 +61,11 @@ def validate_table_metadata(
         ``"formula term"``.
     """
     for key in keys:
-        expected = table_values.get(key)
+        expected = (
+            getattr(table_values, key, None)
+            if isinstance(table_values, BaseModel)
+            else table_values.get(key)
+        )
         user_val = data.get(key)
         if (
             is_table_value(expected)

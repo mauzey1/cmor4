@@ -13,7 +13,6 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
-    model_validator,
 )
 
 # ---------------------------------------------------------------------------
@@ -89,43 +88,22 @@ class MetadataModel(BaseModel):
     ------------
     * ``frozen=True`` enforces immutability after construction.
       Use :meth:`updated` to create a modified copy.
-    * ``extra`` is a **declared field** rather than Pydantic's ``model_extra``.
-      Unknown kwargs are routed there by ``_collect_extras`` so they end up
-      in :meth:`to_dict` and are written as NetCDF attributes when valid.
-    * ``extra="ignore"`` in model_config: truly unknown keys are routed into
-      ``self.extra`` by the ``_collect_extras`` before-validator.
+    * ``extra`` is an explicit compatibility field. Unknown constructor keys
+      are rejected; callers should use the component's ``attrs`` field for
+      output attributes.
     * ``coerce_numbers_to_str=True`` converts numeric table-entry values
       (e.g. ``"units": 1``) silently for ``str`` fields.
     """
 
     model_config = ConfigDict(
         frozen=True,
-        extra="ignore",
+        extra="forbid",
         arbitrary_types_allowed=True,
         populate_by_name=True,
         coerce_numbers_to_str=True,
     )
 
     extra: dict[str, Any] = Field(default_factory=dict, repr=False)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _collect_extras(cls, data: Any) -> Any:
-        """Spread ``extra=`` dict and collect unknown kwargs into ``extra``."""
-        if not isinstance(data, dict):
-            return data
-        data = dict(data)
-        explicit_extra = data.pop("extra", None)
-        if isinstance(explicit_extra, dict):
-            for k, v in explicit_extra.items():
-                data.setdefault(k, v)
-        known = set(cls.model_fields.keys())
-        unknown = {k: v for k, v in list(data.items()) if k not in known}
-        if unknown:
-            for k in unknown:
-                del data[k]
-            data["extra"] = {**unknown, **(data.get("extra") or {})}
-        return data
 
     # ------------------------------------------------------------------
     # Serialisation helpers
@@ -153,7 +131,7 @@ class MetadataModel(BaseModel):
 
     def updated(self, **updates: Any) -> Self:
         """Return a new instance with *updates* applied (no table re-merge)."""
-        return type(self).model_validate({**self.to_dict(), **updates})
+        return type(self).model_validate({**self.model_dump(), **updates})
 
     # ------------------------------------------------------------------
     # NetCDF helpers

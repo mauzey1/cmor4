@@ -17,10 +17,10 @@ class DatasetInfo(DatasetMetadata):
     ----------
     project : ProjectTables, optional
         :class:`~cmor4.tables.ProjectTables` that prepared this record.
-        Excluded from the dict-like view and serialisation.
+        Excluded from metadata serialization.
     user_info : dict, optional
         Original user-supplied metadata before CV defaults were applied.
-        Excluded from the dict-like view and serialisation.
+        Excluded from metadata serialization.
     """
 
     project: Any = Field(default=None, exclude=True, repr=False)
@@ -41,5 +41,7 @@ class DatasetInfo(DatasetMetadata):
 
         data = values.to_dict()
         data["project"] = project
-        data["user_info"] = dict(user_info) if user_info is not None else dict(values)
+        data["user_info"] = (
+            dict(user_info) if user_info is not None else values.to_dict()
+        )
         return cls.model_validate(data)

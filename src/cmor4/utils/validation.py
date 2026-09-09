@@ -379,7 +379,7 @@ def validate_grid_mapping(
             ("mapping_name", mapping_name),
             ("grid_mapping_name", grid_mapping_name),
         ):
-            expected = entry.entry.get(key)
+            expected = getattr(entry, key)
             if expected not in (None, "", [], ()) and value is not None:
                 if str(value) != str(expected):
                     raise TableValidationError(
@@ -392,9 +392,7 @@ def validate_grid_mapping(
     )
     table_mapping_name = None
     if entry is not None:
-        table_mapping_name = entry.entry.get(
-            "grid_mapping_name"
-        ) or entry.entry.get("mapping_name")
+        table_mapping_name = entry.grid_mapping_name or entry.mapping_name
         if (
             table_mapping_name is None
             and allowed_grid_mapping_attributes(entry.name) is not None
@@ -422,9 +420,13 @@ def validate_grid_mapping(
                 "grid mapping name."
             )
 
-    required_params = set(entry.required_params()) if entry is not None else set()
-    optional_params = set(entry.optional_params()) if entry is not None else set()
-    text_params = set(entry.text_params()) if entry is not None else set()
+    required_params = (
+        set(entry.required_parameter_names()) if entry is not None else set()
+    )
+    optional_params = (
+        set(entry.optional_parameter_names()) if entry is not None else set()
+    )
+    text_params = set(entry.text_parameter_names()) if entry is not None else set()
     allowed_params = set(required_params | optional_params | text_params)
     if cf_allowed_params is not None:
         allowed_params.update(cf_allowed_params)
@@ -512,9 +514,10 @@ def validate_grid_mapping(
                     "be numeric."
                 ) from exc
 
-    required_axes = entry.required_axes() if entry is not None else ()
+    required_axes = entry.required_axis_names() if entry is not None else ()
     if not required_axes:
         return
+    assert entry is not None
     if axes:
         if len(axes) != len(required_axes):
             raise TableValidationError(
@@ -809,8 +812,11 @@ def _validate_time_interval(
     var_freq = (
         str(getattr(variable, "frequency", "") or "") if variable is not None else ""
     )
+    dataset_values = dataset.to_dict() if dataset is not None else {}
     frequency = (
-        str(dataset.get("frequency", var_freq)) if dataset is not None else var_freq
+        str(dataset_values.get("frequency", var_freq))
+        if dataset is not None
+        else var_freq
     )
     if not frequency:
         if dataset is not None:
@@ -831,7 +837,7 @@ def _validate_time_interval(
     units = str(axis.units or "days since ?")
     calendar = str(
         axis.attrs.get("calendar")
-        or (dataset.get("calendar", "standard") if dataset is not None else "standard")
+        or dataset_values.get("calendar", "standard")
     )
     interval_days = _time_interval_days(flat, units, calendar)
     if interval_days.size == 0:
@@ -869,8 +875,11 @@ def _interval_spec(
     var_freq = (
         str(getattr(variable, "frequency", "") or "") if variable is not None else ""
     )
+    dataset_values = dataset.to_dict() if dataset is not None else {}
     frequency = (
-        str(dataset.get("frequency", var_freq)) if dataset is not None else var_freq
+        str(dataset_values.get("frequency", var_freq))
+        if dataset is not None
+        else var_freq
     )
     if not frequency:
         return None
@@ -968,7 +977,7 @@ _MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset({"all_leap", "366_day"}
 
 def _validate_calendar(dataset: DatasetMetadata) -> None:
     """Validate the calendar declared in the dataset metadata."""
-    calendar = str(dataset.get("calendar", "") or "").strip()
+    calendar = str(dataset.to_dict().get("calendar", "") or "").strip()
     if not calendar:
         return
     try:
