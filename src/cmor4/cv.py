@@ -11,7 +11,6 @@ import warnings
 
 from .utils.dataset_metadata import DatasetMetadata
 from .utils.constraints import has_value as _is_table_value
-from .utils.constraints import value_matches_constraint as _metadata_value_matches
 from .utils.templates import (
     is_unresolved_template as _is_unresolved_template,
     render_template as _render_template,
@@ -773,7 +772,12 @@ class ControlledVocabulary(Mapping[str, Any]):
                 continue
             if not _is_table_value(expected) or key not in dataset_values:
                 continue
-            if not _metadata_value_matches(dataset_values[key], expected):
+            value = dataset_values[key]
+            if isinstance(expected, list):
+                matches = str(value) in {str(item) for item in expected}
+            else:
+                matches = str(value) == str(expected)
+            if not matches:
                 raise ControlledVocabularyError(
                     f"{key}={dataset_values[key]!r} does not match "
                     f"experiment_id={dataset.experiment_id!r} "
@@ -781,7 +785,13 @@ class ControlledVocabulary(Mapping[str, Any]):
                 )
         expected_activity = experiment_entry.get("activity_id")
         if _is_table_value(expected_activity) and dataset.activity_id is not None:
-            if not _metadata_value_matches(dataset.activity_id, expected_activity):
+            if isinstance(expected_activity, list):
+                matches = str(dataset.activity_id) in {
+                    str(item) for item in expected_activity
+                }
+            else:
+                matches = str(dataset.activity_id) == str(expected_activity)
+            if not matches:
                 raise ControlledVocabularyError(
                     f"activity_id={dataset.activity_id!r} does not match "
                     f"experiment_id={dataset.experiment_id!r} "
@@ -871,9 +881,12 @@ class ControlledVocabulary(Mapping[str, Any]):
         for key, expected in source_entry.items():
             if key == "source_id" or key not in dataset_values:
                 continue
-            if _is_table_value(expected) and not _metadata_value_matches(
-                dataset_values[key], expected
-            ):
+            value = dataset_values[key]
+            if isinstance(expected, list):
+                matches = str(value) in {str(item) for item in expected}
+            else:
+                matches = str(value) == str(expected)
+            if _is_table_value(expected) and not matches:
                 raise ControlledVocabularyError(
                     f"{key}={dataset_values[key]!r} does not match "
                     f"source_id={source_id!r} CV value {expected!r}."
@@ -1059,7 +1072,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                     if isinstance(candidate, Mapping):
                         license_info = candidate
             if license_info is not None and key in license_info:
-                return _metadata_value_matches(value, license_info[key])
+                return str(value) == str(license_info[key])
             return True
         if isinstance(allowed, Mapping):
             if key in {"realm", "source_type"}:
@@ -1149,7 +1162,11 @@ class ControlledVocabulary(Mapping[str, Any]):
         value = getattr(dataset, key)
         if value in (None, ""):
             raise ControlledVocabularyError(f"{key} is required.")
-        if _is_table_value(expected) and not _metadata_value_matches(value, expected):
+        if isinstance(expected, list):
+            matches = str(value) in {str(item) for item in expected}
+        else:
+            matches = str(value) == str(expected)
+        if _is_table_value(expected) and not matches:
             raise ControlledVocabularyError(
                 f"{key}={value!r} does not match experiment_id="
                 f"{dataset.experiment_id!r} CV value {expected!r}."

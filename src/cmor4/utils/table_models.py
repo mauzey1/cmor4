@@ -15,7 +15,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .constraints import value_matches_constraint
 from ..exceptions import TableValidationError
 
 
@@ -77,10 +76,18 @@ class NamedTableEntry(TableModel):
         for key in keys:
             expected = getattr(self, key, None)
             user_value = data.get(key)
+            expected_text = str(expected)
+            if expected_text.endswith(" since ?"):
+                matches = " since " in str(user_value)
+            elif "?" in expected_text:
+                pattern = re.escape(expected_text).replace(r"\?", ".+")
+                matches = re.fullmatch(pattern, str(user_value)) is not None
+            else:
+                matches = str(user_value) == expected_text
             if (
                 expected not in (None, "")
                 and user_value not in (None, "")
-                and not value_matches_constraint(user_value, expected)
+                and not matches
             ):
                 raise TableValidationError(
                     f"{entity_type} {self.name!r} {key}={user_value!r} "

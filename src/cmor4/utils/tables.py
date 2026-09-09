@@ -18,11 +18,11 @@ Table classes — own typed entries, resolution logic, and construction logic:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .constraints import has_value as is_table_value
-from .constraints import value_matches_constraint
 from .dataset_metadata import DatasetMetadata
 from .table_models import (
     CoordinateTableDocument,
@@ -347,7 +347,15 @@ class CoordinateTable:
                 (n, e)
                 for n, e in matches
                 if is_table_value(getattr(e, key))
-                and value_matches_constraint(val, getattr(e, key))
+                and (
+                    " since " in str(val)
+                    if str(getattr(e, key)).endswith(" since ?")
+                    else re.fullmatch(
+                        re.escape(str(getattr(e, key))).replace(r"\?", ".+"),
+                        str(val),
+                    )
+                    is not None
+                )
             ]
             if narrowed:
                 matches = narrowed
@@ -1107,10 +1115,14 @@ class VariableTable:
             "table_id": entry.table_id,
         }.items():
             user_val = vdict.get(key)
+            if isinstance(expected, list):
+                matches = str(user_val) in {str(item) for item in expected}
+            else:
+                matches = str(user_val) == str(expected)
             if (
                 expected not in (None, "")
                 and user_val is not None
-                and not value_matches_constraint(user_val, expected)
+                and not matches
             ):
                 raise TableValidationError(
                     f"{key}={user_val!r} does not match "
