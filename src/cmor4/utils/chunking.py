@@ -26,7 +26,7 @@ def is_cmip7_dataset(dataset: DatasetMetadata) -> bool:
     bool
         True if mip_era is "CMIP7" (case-insensitive).
     """
-    mip_era = dataset.to_dict().get("mip_era", "")
+    mip_era = dataset.mip_era or ""
     return str(mip_era).upper() == "CMIP7"
 
 

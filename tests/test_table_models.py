@@ -87,3 +87,20 @@ def test_dataset_info_has_an_explicit_serialization_boundary() -> None:
     assert not hasattr(info, "get")
     with pytest.raises(TypeError):
         _ = info["activity_id"]  # type: ignore[index]
+
+
+def test_common_dataset_controls_are_declared_typed_fields() -> None:
+    info = DatasetInfo.from_prepared({
+        "variant_label": "r2i1p1f1",
+        "create_subdirectories": "false",
+        "output_file_template": "<variable_id>",
+        "region": "glb",
+    })
+
+    assert info.variant_label_value == "r2i1p1f1"
+    assert info.variant_label() == "r2i1p1f1"
+    assert info.create_subdirectories is False
+    assert info.output_file_template == "<variable_id>"
+    assert info.region == "glb"
+    assert "variant_label" not in info.extra
+    assert info.to_dict()["variant_label"] == "r2i1p1f1"

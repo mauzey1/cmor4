@@ -242,7 +242,7 @@ class ProjectTables:
         normalized_dataset = self.cv.get_dataset_info(dataset_info)
         variable_entry = self.variable_table.resolve(variable)
         variable_entry = self.variable_table.contextual_entry(
-            variable_entry, variable, normalized_dataset.to_dict()
+            variable_entry, variable, normalized_dataset
         )
         variable = self.variable_table.apply_contextual_metadata(
             variable, variable_entry
@@ -866,7 +866,7 @@ class ProjectTables:
         if dataset_info is not None:
             normalized_dataset = self.cv.get_dataset_info(dataset_info)
             variable_entry = self.variable_table.contextual_entry(
-                variable_entry, variable, normalized_dataset.to_dict()
+                variable_entry, variable, normalized_dataset
             )
 
         self.variable_table.validate_against(variable, variable_entry)
@@ -1041,7 +1041,7 @@ class ProjectTables:
     ) -> None:
         """Validate consistency between dataset and variable metadata."""
         # Check frequency consistency
-        dataset_frequency = dataset_info.to_dict().get("frequency")
+        dataset_frequency = dataset_info.frequency
         if (
             dataset_frequency is not None
             and variable.frequency is not None

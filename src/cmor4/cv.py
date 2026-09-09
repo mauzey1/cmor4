@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 import re
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Mapping, Sequence
 import uuid
 import warnings
 
@@ -233,9 +233,6 @@ class ControlledVocabulary(Mapping[str, Any]):
         DatasetMetadata
             Dataset metadata with controlled-vocabulary defaults applied.
         """
-        if not isinstance(dataset, DatasetMetadata):
-            dataset = DatasetMetadata.from_mapping(cast(Mapping[str, Any], dataset))
-
         normalized_dataset = dataset.to_dict()
         self._add_scalar_defaults(normalized_dataset)
         self._add_source_defaults(normalized_dataset)
@@ -355,7 +352,7 @@ class ControlledVocabulary(Mapping[str, Any]):
     def _add_experiment_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill scalar attributes supplied by an experiment_id CV entry."""
 
-        experiment_entry = self.experiment_entry(dataset)
+        experiment_entry = self._experiment_entry_for_id(dataset.get("experiment_id"))
         if experiment_entry is None:
             return
         for key, value in experiment_entry.items():
@@ -457,9 +454,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         }
         dataset["license"] = _render_template(license_template, tokens)
 
-    def validate_dataset_info(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> None:
+    def validate_dataset_info(self, dataset: DatasetMetadata) -> None:
         """Validate user-supplied controlled values against the project CV.
 
         Parameters
@@ -473,15 +468,12 @@ class ControlledVocabulary(Mapping[str, Any]):
             Raises ``ControlledVocabularyError`` if validation fails.
         """
 
-        dataset = _dataset_dict(dataset)
         self.validate_dataset_values(dataset)
         self.validate_required_global_attributes(dataset)
         self.validate_variant_indices(dataset)
         self.validate_forcing_terms(dataset)
 
-    def validate_forcing_terms(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> None:
+    def validate_forcing_terms(self, dataset: DatasetMetadata) -> None:
         """Validate the ``forcing`` global attribute against the CV forcing list.
 
         The ``forcing`` attribute (used in CMIP6-style projects) is a
@@ -516,13 +508,12 @@ class ControlledVocabulary(Mapping[str, Any]):
             the CV's forcing enumeration.
         """
 
-        dataset = _dataset_dict(dataset)
         forcing_cv = self.get("forcing")
         # Only validate when the CV provides an enumeration.
         if not isinstance(forcing_cv, (list, Mapping)):
             return
 
-        forcing_text = str(dataset.get("forcing", "") or "")
+        forcing_text = str(dataset.forcing or "")
         if not forcing_text.strip():
             return
 
@@ -549,9 +540,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                     f"Check {self.filename}."
                 )
 
-    def validate_variant_indices(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> None:
+    def validate_variant_indices(self, dataset: DatasetMetadata) -> None:
         """Validate variant index integers and the derived variant_label format.
 
         Each of ``realization_index``, ``initialization_index``,
@@ -577,9 +566,8 @@ class ControlledVocabulary(Mapping[str, Any]):
             variant_label does not match the CV-defined pattern.
         """
 
-        dataset = _dataset_dict(dataset)
         for key in _RIPF_KEYS:
-            value = dataset.get(key)
+            value = getattr(dataset, key)
             if value in (None, ""):
                 continue
             value_str = str(value)
@@ -616,7 +604,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         cv_vl_def = self.definition_for("variant_label")
         cv_constrains_vl = isinstance(cv_vl_def, list) and len(cv_vl_def) > 0
 
-        variant_label = dataset.get("variant_label")
+        variant_label = dataset.variant_label_value
         if variant_label and cv_constrains_vl:
             vl_str = str(variant_label)
             if not re.fullmatch(r"r\d+i\d+p\d+f\d+", vl_str):
@@ -630,7 +618,7 @@ class ControlledVocabulary(Mapping[str, Any]):
 
         # Assemble variant_label from individual RIPF indices when all four
         # are present.  Validate the result only when the CV constrains it.
-        assembled = _variant_label(dataset)
+        assembled = _metadata_variant_label(dataset)
         if assembled and cv_constrains_vl:
             if not re.fullmatch(r"r\d+i\d+p\d+f\d+", assembled):
                 raise ControlledVocabularyError(
@@ -638,9 +626,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                     "does not match the required pattern 'r<N>i<N>p<N>f<N>'."
                 )
 
-    def validate_dataset_values(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> None:
+    def validate_dataset_values(self, dataset: DatasetMetadata) -> None:
         """Validate controlled values without requiring every global attr.
 
         Parameters
@@ -655,8 +641,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             allowed.
         """
 
-        dataset = _dataset_dict(dataset)
-        for key, value in dataset.items():
+        for key, value in dataset.to_dict().items():
             if key.startswith("_") or key in {
                 "outpath",
                 "output_file_template",
@@ -692,7 +677,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         # above, so this only fires when no CV definition exists.  It prevents
         # obviously malformed labels (hyphens, wrong starting character, etc.)
         # from passing silently when the CV is incomplete or absent.
-        gl = dataset.get("grid_label")
+        gl = dataset.grid_label
         if gl not in (None, "") and self.definition_for("grid_label") is None:
             if not _GRID_LABEL_RE.fullmatch(str(gl)):
                 raise ControlledVocabularyError(
@@ -704,9 +689,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                     "Define grid_label in the project CV to allow a custom set."
                 )
 
-    def validate_required_global_attributes(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> None:
+    def validate_required_global_attributes(self, dataset: DatasetMetadata) -> None:
         """Require every CV-listed global attribute that CMOR4 can write.
 
         Parameters
@@ -721,7 +704,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             missing.
         """
 
-        dataset = _dataset_dict(dataset)
+        dataset_values = dataset.to_dict()
         # Attributes whose CV definition is a POSIX BRE regex array cannot be
         # auto-generated by CMOR4.  For CMIP6 this includes 'license' (among
         # others).  Rather than requiring the user to supply these manually in
@@ -737,7 +720,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         missing = [
             name
             for name in self.required_global_attributes()
-            if name not in dataset or dataset.get(name) in (None, "")
+            if name not in dataset_values or dataset_values.get(name) in (None, "")
             if name not in bre_required
         ]
         if missing:
@@ -760,9 +743,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             return ()
         return tuple(str(value) for value in required)
 
-    def validate_experiment(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> None:
+    def validate_experiment(self, dataset: DatasetMetadata) -> None:
         """Validate experiment-specific CV attributes.
 
         Parameters
@@ -777,7 +758,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             are inconsistent.
         """
 
-        dataset = _dataset_dict(dataset)
+        dataset_values = dataset.to_dict()
         experiment_entry = self.experiment_entry(dataset)
         if experiment_entry is None:
             return
@@ -792,26 +773,26 @@ class ControlledVocabulary(Mapping[str, Any]):
                 "source_type",
             }:
                 continue
-            if not _is_table_value(expected) or key not in dataset:
+            if not _is_table_value(expected) or key not in dataset_values:
                 continue
-            if not _metadata_value_matches(dataset[key], expected):
+            if not _metadata_value_matches(dataset_values[key], expected):
                 raise ControlledVocabularyError(
-                    f"{key}={dataset[key]!r} does not match "
-                    f"experiment_id={dataset.get('experiment_id')!r} "
+                    f"{key}={dataset_values[key]!r} does not match "
+                    f"experiment_id={dataset.experiment_id!r} "
                     f"CV value {expected!r}."
                 )
         expected_activity = experiment_entry.get("activity_id")
-        if _is_table_value(expected_activity) and "activity_id" in dataset:
-            if not _metadata_value_matches(dataset["activity_id"], expected_activity):
+        if _is_table_value(expected_activity) and dataset.activity_id is not None:
+            if not _metadata_value_matches(dataset.activity_id, expected_activity):
                 raise ControlledVocabularyError(
-                    f"activity_id={dataset['activity_id']!r} does not match "
-                    f"experiment_id={dataset.get('experiment_id')!r} "
+                    f"activity_id={dataset.activity_id!r} does not match "
+                    f"experiment_id={dataset.experiment_id!r} "
                     f"CV value {expected_activity!r}."
                 )
 
     def validate_source_type(
         self,
-        dataset: DatasetMetadata | Mapping[str, Any],
+        dataset: DatasetMetadata,
         experiment_entry: Mapping[str, Any],
     ) -> None:
         """Validate experiment-specific required source_type tokens.
@@ -830,7 +811,6 @@ class ControlledVocabulary(Mapping[str, Any]):
             or disallowed.
         """
 
-        dataset = _dataset_dict(dataset)
         required = _cv_values(
             experiment_entry.get("required_source_type")
             or experiment_entry.get("required_model_components")
@@ -840,7 +820,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         )
         if not required and not additional:
             return
-        source_type = dataset.get("source_type")
+        source_type = dataset.source_type
         if source_type in (None, ""):
             # Only require source_type when the experiment defines a
             # required_source_type (CMIP7 key).  CMIP6 experiments use
@@ -864,12 +844,10 @@ class ControlledVocabulary(Mapping[str, Any]):
                 raise ControlledVocabularyError(
                     f"source_type={source_type!r} contains source type "
                     f"{token!r} that is not allowed by experiment_id="
-                    f"{dataset.get('experiment_id')!r}."
+                    f"{dataset.experiment_id!r}."
                 )
 
-    def validate_source_attributes(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> None:
+    def validate_source_attributes(self, dataset: DatasetMetadata) -> None:
         """Validate source_id-specific CV attributes.
 
         Parameters
@@ -884,28 +862,26 @@ class ControlledVocabulary(Mapping[str, Any]):
             is inconsistent.
         """
 
-        dataset = _dataset_dict(dataset)
+        dataset_values = dataset.to_dict()
         source_entries = self.get("source_id")
-        source_id = dataset.get("source_id")
+        source_id = dataset.source_id
         if not isinstance(source_entries, Mapping) or source_id in (None, ""):
             return
         source_entry = source_entries.get(str(source_id))
         if not isinstance(source_entry, Mapping):
             return
         for key, expected in source_entry.items():
-            if key == "source_id" or key not in dataset:
+            if key == "source_id" or key not in dataset_values:
                 continue
             if _is_table_value(expected) and not _metadata_value_matches(
-                dataset[key], expected
+                dataset_values[key], expected
             ):
                 raise ControlledVocabularyError(
-                    f"{key}={dataset[key]!r} does not match "
+                    f"{key}={dataset_values[key]!r} does not match "
                     f"source_id={source_id!r} CV value {expected!r}."
                 )
 
-    def validate_parent_attributes(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> None:
+    def validate_parent_attributes(self, dataset: DatasetMetadata) -> None:
         """Validate CMIP-style parent experiment attributes.
 
         Parameters
@@ -920,7 +896,6 @@ class ControlledVocabulary(Mapping[str, Any]):
             or inconsistent.
         """
 
-        dataset = _dataset_dict(dataset)
         experiment_entry = self.experiment_entry(dataset)
         if experiment_entry is None:
             return
@@ -944,23 +919,25 @@ class ControlledVocabulary(Mapping[str, Any]):
             "branch_time_in_parent",
         )
         if not expected_parent_experiments:
-            if "parent_experiment_id" in dataset:
+            if dataset.parent_experiment_id is not None:
                 raise ControlledVocabularyError(
-                    f"experiment_id={dataset.get('experiment_id')!r} does not "
+                    f"experiment_id={dataset.experiment_id!r} does not "
                     "allow parent_experiment_id."
                 )
-            unexpected = [name for name in parent_attrs if name in dataset]
+            unexpected = [
+                name for name in parent_attrs if getattr(dataset, name) is not None
+            ]
             if unexpected:
                 raise ControlledVocabularyError(
-                    f"experiment_id={dataset.get('experiment_id')!r} does not "
+                    f"experiment_id={dataset.experiment_id!r} does not "
                     "allow parent attributes: " + ", ".join(unexpected) + "."
                 )
             return
 
-        parent_experiment_id = dataset.get("parent_experiment_id")
+        parent_experiment_id = dataset.parent_experiment_id
         if parent_experiment_id in (None, ""):
             raise ControlledVocabularyError(
-                f"experiment_id={dataset.get('experiment_id')!r} requires "
+                f"experiment_id={dataset.experiment_id!r} requires "
                 "parent_experiment_id."
             )
         if str(parent_experiment_id) not in {
@@ -969,7 +946,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             raise ControlledVocabularyError(
                 f"parent_experiment_id={parent_experiment_id!r} "
                 "does not match "
-                f"experiment_id={dataset.get('experiment_id')!r} CV values "
+                f"experiment_id={dataset.experiment_id!r} CV values "
                 f"{expected_parent_experiments!r}."
             )
         self.validate_required_parent_value(
@@ -977,7 +954,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             "parent_activity_id",
             experiment_entry.get("parent_activity_id"),
         )
-        parent_source_id = dataset.get("parent_source_id")
+        parent_source_id = dataset.parent_source_id
         if parent_source_id in (None, ""):
             raise ControlledVocabularyError("parent_source_id is required.")
         source_entries = self.get("source_id")
@@ -988,14 +965,14 @@ class ControlledVocabulary(Mapping[str, Any]):
             raise ControlledVocabularyError(
                 f"parent_source_id={parent_source_id!r} is not in the CV."
             )
-        expected_parent_mip_era = str(dataset.get("mip_era") or "")
-        if expected_parent_mip_era and dataset.get("parent_mip_era") not in (
+        expected_parent_mip_era = str(dataset.mip_era or "")
+        if expected_parent_mip_era and dataset.parent_mip_era not in (
             expected_parent_mip_era,
             None,
             "",
         ):
             raise ControlledVocabularyError(
-                f"parent_mip_era={dataset.get('parent_mip_era')!r} does not "
+                f"parent_mip_era={dataset.parent_mip_era!r} does not "
                 f"match {expected_parent_mip_era!r}."
             )
         for key in (
@@ -1003,27 +980,28 @@ class ControlledVocabulary(Mapping[str, Any]):
             "parent_time_units",
             "parent_variant_label",
         ):
-            if dataset.get(key) in (None, ""):
+            if getattr(dataset, key) in (None, ""):
                 raise ControlledVocabularyError(f"{key} is required.")
         if not re.fullmatch(
             r"days\s+since\s+\d{4}-\d{1,2}-\d{1,2}.*",
-            str(dataset["parent_time_units"]),
+            str(dataset.parent_time_units),
         ):
             raise ControlledVocabularyError(
-                f"parent_time_units={dataset['parent_time_units']!r} is invalid."
+                f"parent_time_units={dataset.parent_time_units!r} is invalid."
             )
-        if not re.fullmatch(r"r\d+i\d+p\d+f\d+", str(dataset["parent_variant_label"])):
+        if not re.fullmatch(r"r\d+i\d+p\d+f\d+", str(dataset.parent_variant_label)):
             raise ControlledVocabularyError(
-                f"parent_variant_label={dataset['parent_variant_label']!r} is invalid."
+                f"parent_variant_label={dataset.parent_variant_label!r} is invalid."
             )
         for key in ("branch_time_in_child", "branch_time_in_parent"):
-            if key not in dataset:
+            value = getattr(dataset, key)
+            if value is None:
                 raise ControlledVocabularyError(f"{key} is required.")
             try:
-                float(dataset[key])
+                float(value)
             except (TypeError, ValueError) as exc:
                 raise ControlledVocabularyError(
-                    f"{key}={dataset[key]!r} must be numeric."
+                    f"{key}={value!r} must be numeric."
                 ) from exc
 
     def value_allowed(
@@ -1031,7 +1009,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         key: str,
         value: Any,
         allowed: Any,
-        dataset: DatasetMetadata | Mapping[str, Any],
+        dataset: DatasetMetadata,
     ) -> bool:
         """Return whether a value is allowed by a CV definition.
 
@@ -1052,7 +1030,6 @@ class ControlledVocabulary(Mapping[str, Any]):
             ``True`` when the value is accepted by the CV definition.
         """
 
-        dataset = _dataset_dict(dataset)
         if (
             key == "license"
             and isinstance(allowed, Mapping)
@@ -1069,18 +1046,13 @@ class ControlledVocabulary(Mapping[str, Any]):
                     separator = "-"
                 case _:
                     separator = None
-            tokens = (
-                dataset.to_dict()
-                if isinstance(dataset, DatasetMetadata)
-                else dict(dataset)
-            )
-            return value == _render_template(allowed, tokens, separator)
+            return value == _render_template(allowed, dataset.to_dict(), separator)
         if key in {"license_url", "license_type"}:
             license_info = None
             license_cv = self.get("license")
             if isinstance(license_cv, Mapping):
                 license_entries = license_cv.get("license_id")
-                license_id = dataset.get("license_id")
+                license_id = dataset.license_id
                 if isinstance(license_entries, Mapping) and license_id not in (
                     None,
                     "",
@@ -1122,9 +1094,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             return license_cv.get("license_id")
         return None
 
-    def experiment_entry(
-        self, dataset: DatasetMetadata | Mapping[str, Any]
-    ) -> Mapping[str, Any] | None:
+    def experiment_entry(self, dataset: DatasetMetadata) -> Mapping[str, Any] | None:
         """Return the CV entry for the dataset experiment.
 
         Parameters
@@ -1138,9 +1108,14 @@ class ControlledVocabulary(Mapping[str, Any]):
             Matching experiment CV entry, or ``None`` when unavailable.
         """
 
-        dataset = _dataset_dict(dataset)
+        return self._experiment_entry_for_id(dataset.experiment_id)
+
+    def _experiment_entry_for_id(
+        self, experiment_id: Any
+    ) -> Mapping[str, Any] | None:
+        """Return an experiment CV entry for a scalar identifier."""
+
         experiment_entries = self.get("experiment_id")
-        experiment_id = dataset.get("experiment_id")
         if not isinstance(experiment_entries, Mapping) or experiment_id in (
             None,
             "",
@@ -1151,7 +1126,7 @@ class ControlledVocabulary(Mapping[str, Any]):
 
     def validate_required_parent_value(
         self,
-        dataset: DatasetMetadata | Mapping[str, Any],
+        dataset: DatasetMetadata,
         key: str,
         expected: Any,
     ) -> None:
@@ -1173,23 +1148,14 @@ class ControlledVocabulary(Mapping[str, Any]):
             inconsistent with the CV.
         """
 
-        dataset = _dataset_dict(dataset)
-        value = dataset.get(key)
+        value = getattr(dataset, key)
         if value in (None, ""):
             raise ControlledVocabularyError(f"{key} is required.")
         if _is_table_value(expected) and not _metadata_value_matches(value, expected):
             raise ControlledVocabularyError(
                 f"{key}={value!r} does not match experiment_id="
-                f"{dataset.get('experiment_id')!r} CV value {expected!r}."
+                f"{dataset.experiment_id!r} CV value {expected!r}."
             )
-
-
-def _dataset_dict(
-    dataset: DatasetMetadata | Mapping[str, Any],
-) -> dict[str, Any]:
-    """Return a mutable metadata snapshot at the mapping-oriented CV boundary."""
-
-    return dataset.to_dict() if isinstance(dataset, DatasetMetadata) else dict(dataset)
 
 
 # POSIX regex metacharacter patterns that identify CMIP6-style validation regex arrays.
@@ -1282,6 +1248,23 @@ def _variant_label(dataset: Mapping[str, Any]) -> str | None:
             pieces.append(f"{prefix}{value_str}")
         else:
             pieces.append(value_str)
+    return "".join(pieces)
+
+
+def _metadata_variant_label(dataset: DatasetMetadata) -> str | None:
+    """Return an explicit or RIPF-derived label from typed metadata."""
+
+    if dataset.variant_label_value:
+        return dataset.variant_label_value
+    pieces: list[str] = []
+    for key, prefix in zip(_RIPF_KEYS, ("r", "i", "p", "f"), strict=True):
+        value = getattr(dataset, key)
+        if not _is_table_value(value):
+            return None
+        value_str = str(value)
+        pieces.append(
+            f"{prefix}{value_str}" if re.fullmatch(r"\d+", value_str) else value_str
+        )
     return "".join(pieces)
 
 

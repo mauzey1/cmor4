@@ -115,7 +115,7 @@ class MetadataModel(BaseModel):
         ``extra`` field contents are inlined at the top level.
         """
         result = {
-            name: value
+            str(field.serialization_alias or field.alias or name): value
             for name, field in type(self).model_fields.items()
             if name != "extra"
             and not getattr(field, "exclude", False)

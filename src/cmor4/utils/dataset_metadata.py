@@ -6,9 +6,9 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Self
 
-from pydantic import ConfigDict, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
-from .metadata import MetadataModel
+from .metadata import BoolCoerced, MetadataModel
 
 # Keys that must not appear in NetCDF global attributes
 INTERNAL_DATASET_KEYS: frozenset[str] = frozenset({
@@ -66,6 +66,43 @@ class DatasetMetadata(MetadataModel):
     nominal_resolution: str | None = None
     outpath: str | None = None
     version: str | None = None
+    variant_label_value: str | None = Field(
+        default=None,
+        alias="variant_label",
+        serialization_alias="variant_label",
+    )
+    realm: str | None = None
+    source_type: str | None = None
+    forcing: str | None = None
+    member_id: str | None = None
+    region: str | None = None
+
+    # Output and template controls
+    create_subdirectories: BoolCoerced = None
+    output_file_template: str | None = None
+    output_path_template: str | None = None
+    tracking_prefix: str | None = None
+
+    # Variable-derived dataset metadata
+    variable_id: str | None = None
+    branded_variable: str | None = None
+    branding_suffix: str | None = None
+    temporal_label: str | None = None
+    vertical_label: str | None = None
+    horizontal_label: str | None = None
+    area_label: str | None = None
+    table_id: str | None = None
+    table_info: str | None = None
+
+    # Parent-experiment metadata
+    parent_experiment_id: str | None = None
+    parent_activity_id: str | None = None
+    parent_mip_era: str | None = None
+    parent_source_id: str | None = None
+    parent_time_units: str | None = None
+    parent_variant_label: str | None = None
+    branch_time_in_child: float | None = None
+    branch_time_in_parent: float | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -78,6 +115,11 @@ class DatasetMetadata(MetadataModel):
         explicit_extra = data.pop("extra", None)
         extra = dict(explicit_extra) if isinstance(explicit_extra, dict) else {}
         known = set(cls.model_fields)
+        known.update(
+            str(field.alias)
+            for field in cls.model_fields.values()
+            if field.alias is not None
+        )
         for key in tuple(data):
             if key not in known:
                 extra.setdefault(key, data.pop(key))
@@ -139,11 +181,9 @@ class DatasetMetadata(MetadataModel):
 
     def variant_label(self) -> str:
         """Return the explicit or RIPF-derived variant label."""
-        metadata = self.to_dict()
-        vl = metadata.get("variant_label")
-        if vl:
-            return str(vl)
-        vals = [metadata.get(k) for k in RIPF_KEYS]
+        if self.variant_label_value:
+            return self.variant_label_value
+        vals = [getattr(self, key) for key in RIPF_KEYS]
         if all(v not in (None, "") for v in vals):
             return "".join(str(v) for v in vals)
         return "r1i1p1f1"

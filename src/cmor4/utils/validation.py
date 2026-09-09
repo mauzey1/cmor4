@@ -812,9 +812,8 @@ def _validate_time_interval(
     var_freq = (
         str(getattr(variable, "frequency", "") or "") if variable is not None else ""
     )
-    dataset_values = dataset.to_dict() if dataset is not None else {}
     frequency = (
-        str(dataset_values.get("frequency", var_freq))
+        str(dataset.frequency or var_freq)
         if dataset is not None
         else var_freq
     )
@@ -837,7 +836,8 @@ def _validate_time_interval(
     units = str(axis.units or "days since ?")
     calendar = str(
         axis.attrs.get("calendar")
-        or dataset_values.get("calendar", "standard")
+        or (dataset.calendar if dataset is not None else None)
+        or "standard"
     )
     interval_days = _time_interval_days(flat, units, calendar)
     if interval_days.size == 0:
@@ -875,9 +875,8 @@ def _interval_spec(
     var_freq = (
         str(getattr(variable, "frequency", "") or "") if variable is not None else ""
     )
-    dataset_values = dataset.to_dict() if dataset is not None else {}
     frequency = (
-        str(dataset_values.get("frequency", var_freq))
+        str(dataset.frequency or var_freq)
         if dataset is not None
         else var_freq
     )
@@ -977,7 +976,7 @@ _MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset({"all_leap", "366_day"}
 
 def _validate_calendar(dataset: DatasetMetadata) -> None:
     """Validate the calendar declared in the dataset metadata."""
-    calendar = str(dataset.to_dict().get("calendar", "") or "").strip()
+    calendar = str(dataset.calendar or "").strip()
     if not calendar:
         return
     try:
