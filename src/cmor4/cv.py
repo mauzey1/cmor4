@@ -10,7 +10,6 @@ import uuid
 import warnings
 
 from .utils.dataset_metadata import DatasetMetadata
-from .utils.constraints import has_value as _is_table_value
 from .utils.templates import (
     is_unresolved_template as _is_unresolved_template,
     render_template as _render_template,
@@ -324,7 +323,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         if not isinstance(source_entry, Mapping):
             return
         for key, value in source_entry.items():
-            if key == "source_id" or not _is_table_value(value):
+            if key == "source_id" or value in (None, ""):
                 continue
             default = _single_cv_default(value)
             if default is not None:
@@ -411,7 +410,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             if key in dataset:
                 continue
             value = self.definition_for(key)
-            if not _is_table_value(value):
+            if value in (None, ""):
                 default = None
             elif isinstance(value, Mapping):
                 keys = list(value)
@@ -770,7 +769,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                 "source_type",
             }:
                 continue
-            if not _is_table_value(expected) or key not in dataset_values:
+            if expected in (None, "") or key not in dataset_values:
                 continue
             value = dataset_values[key]
             if isinstance(expected, list):
@@ -784,7 +783,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                     f"CV value {expected!r}."
                 )
         expected_activity = experiment_entry.get("activity_id")
-        if _is_table_value(expected_activity) and dataset.activity_id is not None:
+        if expected_activity not in (None, "") and dataset.activity_id is not None:
             if isinstance(expected_activity, list):
                 matches = str(dataset.activity_id) in {
                     str(item) for item in expected_activity
@@ -886,7 +885,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                 matches = str(value) in {str(item) for item in expected}
             else:
                 matches = str(value) == str(expected)
-            if _is_table_value(expected) and not matches:
+            if expected not in (None, "") and not matches:
                 raise ControlledVocabularyError(
                     f"{key}={dataset_values[key]!r} does not match "
                     f"source_id={source_id!r} CV value {expected!r}."
@@ -1166,7 +1165,7 @@ class ControlledVocabulary(Mapping[str, Any]):
             matches = str(value) in {str(item) for item in expected}
         else:
             matches = str(value) == str(expected)
-        if _is_table_value(expected) and not matches:
+        if expected not in (None, "") and not matches:
             raise ControlledVocabularyError(
                 f"{key}={value!r} does not match experiment_id="
                 f"{dataset.experiment_id!r} CV value {expected!r}."
@@ -1216,7 +1215,7 @@ def _is_posix_bre_list(value: Any) -> bool:
 
 
 def _single_cv_default(value: Any) -> Any:
-    if not _is_table_value(value):
+    if value in (None, ""):
         return None
     if isinstance(value, Mapping):
         return None
@@ -1228,10 +1227,10 @@ def _single_cv_default(value: Any) -> Any:
 
 
 def _cv_values(value: Any) -> tuple[Any, ...]:
-    if not _is_table_value(value):
+    if value in (None, ""):
         return ()
     if isinstance(value, list):
-        return tuple(item for item in value if _is_table_value(item))
+        return tuple(item for item in value if item not in (None, ""))
     return (value,)
 
 
@@ -1249,12 +1248,12 @@ def _variant_label(dataset: Mapping[str, Any]) -> str | None:
       ``cmor_addRIPF`` that checks ``^[[:digit:]]{1,}$`` to decide whether to
       prepend the prefix.
     """
-    if _is_table_value(dataset.get("variant_label")):
+    if dataset.get("variant_label") not in (None, ""):
         return str(dataset["variant_label"])
     pieces = []
     for key, prefix in zip(_RIPF_KEYS, ("r", "i", "p", "f")):
         value = dataset.get(key)
-        if not _is_table_value(value):
+        if value in (None, ""):
             return None
         value_str = str(value)
         # Bare integer (digits only) → prepend the letter prefix.
@@ -1274,7 +1273,7 @@ def _metadata_variant_label(dataset: DatasetMetadata) -> str | None:
     pieces: list[str] = []
     for key, prefix in zip(_RIPF_KEYS, ("r", "i", "p", "f"), strict=True):
         value = getattr(dataset, key)
-        if not _is_table_value(value):
+        if value in (None, ""):
             return None
         value_str = str(value)
         pieces.append(

@@ -22,7 +22,6 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .constraints import has_value as is_table_value
 from .dataset_metadata import DatasetMetadata
 from .table_models import (
     CoordinateTableDocument,
@@ -273,7 +272,7 @@ class CoordinateTable:
             "tolerance",
         ):
             val = getattr(entry, key)
-            if is_table_value(val):
+            if val is not None:
                 data.setdefault(key, val)
         data.setdefault("out_name", entry_name)
         if "values" not in data:
@@ -310,7 +309,7 @@ class CoordinateTable:
             "valid_max",
         ):
             val = getattr(entry, key)
-            if is_table_value(val):
+            if val is not None:
                 data.setdefault(key, val)
         data.setdefault("out_name", entry_name)
         bname = data.get("bounds_name")
@@ -320,7 +319,7 @@ class CoordinateTable:
                 ba = dict(data.get("bounds_attrs") or {})
                 for key in ("units", "standard_name", "long_name"):
                     val = getattr(be, key)
-                    if is_table_value(val):
+                    if val is not None:
                         ba.setdefault(key, val)
                 if ba:
                     data["bounds_attrs"] = ba
@@ -346,7 +345,7 @@ class CoordinateTable:
             narrowed = [
                 (n, e)
                 for n, e in matches
-                if is_table_value(getattr(e, key))
+                if getattr(e, key) is not None
                 and (
                     " since " in str(val)
                     if str(getattr(e, key)).endswith(" since ?")
@@ -482,11 +481,11 @@ class FormulaTable:
         )
         for key in ("out_name", "units", "standard_name", "long_name"):
             val = getattr(entry, key)
-            if is_table_value(val):
+            if val is not None:
                 data.setdefault(key, val)
         for key in ("valid_min", "valid_max", "ok_min_mean_abs", "ok_max_mean_abs"):
             val = getattr(entry, key)
-            if is_table_value(val):
+            if val is not None:
                 data.setdefault(key, val)
         if "dimensions" not in data and entry.dimensions:
             data["dimensions"] = entry.runtime_dimensions
@@ -501,7 +500,7 @@ class FormulaTable:
                 ba = dict(data.get("bounds_attrs") or {})
                 for key in ("units", "standard_name", "long_name"):
                     val = getattr(be, key)
-                    if is_table_value(val):
+                    if val is not None:
                         ba.setdefault(key, val)
                 if ba:
                     data["bounds_attrs"] = ba
@@ -615,7 +614,7 @@ class GridTable:
         entry = gm_entry
         for key in ("mapping_name", "grid_mapping_name", "mapping_var"):
             val = getattr(entry, key)
-            if is_table_value(val):
+            if val is not None:
                 data.setdefault(key, val)
         if entry.coordinates:
             data.setdefault("coordinates", list(entry.coordinates))
@@ -627,7 +626,7 @@ class GridTable:
             data["params"] = mp
         params = dict(data.get("params") or {})
         for key, param_name in (entry.model_extra or {}).items():
-            if not key.startswith("parameter") or not is_table_value(param_name):
+            if not key.startswith("parameter") or param_name is None:
                 continue
             params.setdefault(str(param_name), data.get(str(param_name), 0.0))
         if params:
@@ -866,11 +865,11 @@ class VariableTable:
         if not keys:
             return entry
 
-        updates: dict[str, str] = {}
+        updates: dict[str, str | None] = {}
         for attr, remap_table in self._contextual_remaps.items():
             found, value = remap_table.lookup(keys)
             if found:
-                updates[attr] = str(value)
+                updates[attr] = None if value == "" else str(value)
 
         if not updates:
             return entry
@@ -885,9 +884,9 @@ class VariableTable:
         """Overlay contextual entry metadata onto *variable*.
 
         Only attributes listed in ``entry.contextual_attrs`` are copied. Empty
-        string remap values are converted to ``None`` so the resulting NetCDF
-        variable omits the attribute while validation still knows the effective
-        table expected an explicit empty value.
+        Empty remap values are already normalized to ``None``, so the resulting
+        NetCDF variable omits the attribute while ``contextual_attrs`` still
+        records that the table explicitly cleared it.
         """
 
         if not entry.contextual_attrs:
@@ -896,7 +895,7 @@ class VariableTable:
         updates: dict[str, str | None] = {}
         for attr in entry.contextual_attrs:
             value = getattr(entry, attr)
-            updates[attr] = None if value == "" else str(value)
+            updates[attr] = None if value is None else str(value)
         return variable.model_copy(update=updates)
 
     def _remapping_keys(
@@ -968,9 +967,9 @@ class VariableTable:
             )
         for key in ("valid_min", "valid_max", "ok_min_mean_abs", "ok_max_mean_abs"):
             value = getattr(entry, key)
-            if not is_table_value(value) and entry.table_header:
+            if value is None and entry.table_header:
                 value = getattr(entry.table_header, key)
-            if is_table_value(value):
+            if value is not None:
                 data.setdefault(key, value)
         for key in (
             "units",
@@ -984,7 +983,7 @@ class VariableTable:
             "flag_meanings",
         ):
             value = getattr(entry, key)
-            if value not in (None, ""):
+            if value is not None:
                 data[key] = value
         return data
 
@@ -1030,7 +1029,7 @@ class VariableTable:
         table_units = entry.units
         user_units = variable.units
         if (
-            is_table_value(table_units)
+            table_units is not None
             and str(table_units) != "?"
             and user_units not in (None, "")
             and str(user_units) != str(table_units)
@@ -1050,7 +1049,7 @@ class VariableTable:
         ):
             expected = getattr(entry, key)
             user_val = getattr(variable, key, None)
-            if expected in (None, ""):
+            if expected is None:
                 if key in contextual_attrs and user_val not in (None, ""):
                     raise TableValidationError(
                         f"{key}={user_val!r} does not match "
@@ -1067,7 +1066,7 @@ class VariableTable:
         user_pos = variable.positive
         if (
             user_pos not in (None, "")
-            and is_table_value(table_pos)
+            and table_pos is not None
             and str(user_pos).lower() != str(table_pos).lower()
         ):
             raise TableValidationError(
@@ -1076,7 +1075,7 @@ class VariableTable:
             )
         if (
             "positive" in required
-            and is_table_value(table_pos)
+            and table_pos is not None
             and user_pos in (None, "")
         ):
             raise TableValidationError(
@@ -1086,14 +1085,15 @@ class VariableTable:
         vdict = variable.to_dict()
         for attr in required - {"positive"}:
             tval = getattr(entry, attr, None)
-            if is_table_value(tval) and vdict.get(attr) in (None, ""):
+            if tval is not None and vdict.get(attr) in (None, ""):
                 raise TableValidationError(
                     f"variable {entry.table_id}:{entry.name} requires attribute "
                     f"{attr!r} (expected {tval!r})."
                 )
         tfv = entry.flag_values
         tfm = entry.flag_meanings
-        hfv, hfm = is_table_value(tfv), is_table_value(tfm)
+        hfv = tfv is not None
+        hfm = tfm is not None
         if hfv != hfm:
             missing = "flag_meanings" if hfv else "flag_values"
             present = "flag_values" if hfv else "flag_meanings"
@@ -1120,7 +1120,7 @@ class VariableTable:
             else:
                 matches = str(user_val) == str(expected)
             if (
-                expected not in (None, "")
+                expected is not None
                 and user_val is not None
                 and not matches
             ):
@@ -1148,7 +1148,7 @@ def _build_generic_level_index(
     index: dict[str, dict[str, AxisEntry]] = {}
     for name, entry in coordinate_entries.items():
         generic = entry.generic_level_name
-        if is_table_value(generic):
+        if generic is not None:
             index.setdefault(str(generic), {})[name] = entry
     return index
 

@@ -42,6 +42,18 @@ class TableModel(BaseModel):
         populate_by_name=True,
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_empty_strings(cls, data: Any) -> Any:
+        """Represent empty table values consistently as missing values."""
+
+        if not isinstance(data, dict):
+            return data
+        return {
+            key: None if isinstance(value, str) and value == "" else value
+            for key, value in data.items()
+        }
+
 
 class TableHeader(TableModel):
     """Known table-header fields, with project extensions retained by Pydantic."""
@@ -85,7 +97,7 @@ class NamedTableEntry(TableModel):
             else:
                 matches = str(user_value) == expected_text
             if (
-                expected not in (None, "")
+                expected is not None
                 and user_value not in (None, "")
                 and not matches
             ):
@@ -143,12 +155,12 @@ class CoordinateTableEntry(DimensionedTableEntry):
 
     @property
     def is_scalar(self) -> bool:
-        return self.value not in (None, "")
+        return self.value is not None
 
     @property
     def runtime_values(self) -> list[Any] | None:
-        value = self.requested if self.requested not in (None, "") else self.value
-        if value in (None, ""):
+        value = self.requested if self.requested is not None else self.value
+        if value is None:
             return None
         values = value if isinstance(value, (list, tuple)) else [value]
         return [_numeric_table_value(item) for item in values]
@@ -156,9 +168,9 @@ class CoordinateTableEntry(DimensionedTableEntry):
     @property
     def runtime_bounds(self) -> list[list[Any]] | None:
         value = self.requested_bounds
-        if value in (None, ""):
+        if value is None:
             value = self.bounds_values
-        if value in (None, ""):
+        if value is None:
             return None
         values = value if isinstance(value, (list, tuple)) else str(value).split()
         parsed = [_numeric_table_value(item) for item in values]
@@ -214,7 +226,7 @@ class GridMappingTableEntry(NamedTableEntry):
     def _tokens(*values: Any) -> tuple[str, ...]:
         result: list[str] = []
         for value in values:
-            if value in (None, ""):
+            if value is None:
                 continue
             if isinstance(value, str):
                 candidates: Iterable[Any] = re.split(r"[\s,]+", value)
@@ -234,7 +246,7 @@ class GridMappingTableEntry(NamedTableEntry):
         numbered: list[tuple[int, str]] = []
         for key, value in (self.model_extra or {}).items():
             match = re.fullmatch(r"parameter(\d+)", key)
-            if match and value not in (None, ""):
+            if match and value is not None:
                 numbered.append((int(match.group(1)), str(value)))
         return tuple(value for _, value in sorted(numbered))
 

@@ -32,6 +32,26 @@ def test_coordinate_document_normalizes_runtime_values_and_dimensions() -> None:
     assert entry.runtime_bounds == [[0, 1.5], [1.5, 3]]
 
 
+def test_table_documents_normalize_empty_strings_to_none() -> None:
+    document = VariableTableDocument.model_validate({
+        "Header": {"table_id": "Amon", "valid_min": ""},
+        "variable_entry": {
+            "tas": {
+                "out_name": "",
+                "units": "K",
+                "valid_min": "",
+            }
+        },
+    })
+
+    entry = document.variable_entry["tas"]
+    assert document.header is not None
+    assert document.header.valid_min is None
+    assert entry.out_name is None
+    assert entry.valid_min is None
+    assert entry.units == "K"
+
+
 def test_all_table_documents_reject_non_mapping_rows() -> None:
     documents_and_sections = (
         (CoordinateTableDocument, "axis_entry"),

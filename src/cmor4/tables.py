@@ -8,7 +8,6 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 from pydantic import ValidationError
 
-from .utils.constraints import has_value as _is_table_value
 from .utils.templates import is_unresolved_template as _is_unresolved_template
 from .utils.tables import (
     CoordinateTable,
@@ -963,7 +962,7 @@ class ProjectTables:
                 ):
                     expected = getattr(entry, key)
                     if (
-                        _is_table_value(expected)
+                        expected is not None
                         and user_val is not None
                         and str(user_val) != str(expected)
                     ):
@@ -992,7 +991,7 @@ class ProjectTables:
             table_units = entry.units
             user_units = zfactor.units
             if (
-                _is_table_value(table_units)
+                table_units is not None
                 and str(table_units) != "?"
                 and user_units not in (None, "")
                 and str(user_units) != str(table_units)
@@ -1082,7 +1081,7 @@ class ProjectTables:
         header = variable_entry.table_header
         for key in ("Conventions", "data_specs_version"):
             value = getattr(header, key, None)
-            if _is_table_value(value):
+            if value is not None:
                 dataset.setdefault(key, value)
 
         if "table_info" not in dataset and variable_entry.table_file is not None:
@@ -1114,7 +1113,7 @@ class ProjectTables:
                     dataset[key] = labels[key]
         for key in ("frequency", "realm", "table_id"):
             value = getattr(variable, key, None)
-            if _is_table_value(value):
+            if value not in (None, ""):
                 dataset.setdefault(
                     key,
                     value[0] if isinstance(value, list) and len(value) == 1 else value,
