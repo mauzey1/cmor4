@@ -459,7 +459,7 @@ class ProjectTablesTest(unittest.TestCase):
         project = cmip7_project("tables/CMIP7_ocean.json")
 
         self.assertIsInstance(project.cv, cmor4.ControlledVocabulary)
-        self.assertIn("activity_id", project.cv)
+        self.assertIn("activity_id", project.cv.rules)
         self.assertIn("tos_tavg-u-hxy-sea", project.variable_table.entries)
         self.assertIn("latitude", project.coordinate_table._all_coord)
         self.assertIn("x", project.coordinate_table._all_coord)
@@ -495,8 +495,8 @@ class ProjectTablesTest(unittest.TestCase):
 
             cv = cmor4.ControlledVocabulary.from_file(cv_file)
 
-            self.assertEqual(cv["activity_id"], ["CMIP"])
-            self.assertEqual(cv.required_global_attributes(), ("activity_id",))
+            self.assertEqual(cv.rules["activity_id"].allowed_values, ("CMIP",))
+            self.assertEqual(cv.required_attributes, ("activity_id",))
             cv.validate_dataset_info(_metadata({"activity_id": "CMIP"}))
             with self.assertRaises(cmor4.ControlledVocabularyError):
                 cv.validate_dataset_info(
@@ -696,6 +696,7 @@ class ProjectTablesTest(unittest.TestCase):
     def test_dataset_info_merges_authoritative_variable_metadata(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
+        self.assertIsNotNone(project.cv.license)
         dataset = {
             "activity_id": "obs4MIPs",
             "contact": "submissions-obs4mips@wcrp-cmip.org",
@@ -703,7 +704,7 @@ class ProjectTablesTest(unittest.TestCase):
             "grid_label": "gnz",
             "has_aux_unc": "FALSE",
             "institution_id": "DLR-BIRA",
-            "license": project.cv["license"],
+            "license": project.cv.license.default_text,
             "nominal_resolution": "500 km",
             "processing_code_location": (
                 "dataset_guides/obs4mips/example-data-tools/example.py"
@@ -894,7 +895,7 @@ class ProjectTablesTest(unittest.TestCase):
         }
         for key, value in expected.items():
             self.assertEqual(ds.attrs[key], value)
-        for key in project.cv.required_global_attributes():
+        for key in project.cv.required_attributes:
             self.assertIn(key, ds.attrs)
         self.assertIn("Name: CMIP7_ocean.json;", ds.attrs["table_info"])
         # table_info should also contain a creation date and MD5 hash
@@ -1154,7 +1155,9 @@ class ProjectTablesTest(unittest.TestCase):
     def test_obs4mips_uses_project_cv_and_o3zm_table_entry(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
-        cv_license = project.cv["license"]
+        self.assertIsNotNone(project.cv.license)
+        cv_license = project.cv.license.default_text
+        self.assertIsNotNone(cv_license)
         with tempfile.TemporaryDirectory() as tmp_dir:
             dataset = {
                 "activity_id": "obs4MIPs",
@@ -1226,12 +1229,13 @@ class ProjectTablesTest(unittest.TestCase):
     def test_obs4mips_rejects_frequency_that_does_not_match_table(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
+        self.assertIsNotNone(project.cv.license)
         dataset = {
             "activity_id": "obs4MIPs",
             "frequency": "day",
             "grid_label": "gn",
             "institution_id": "NOAA-NCEI",
-            "license": project.cv["license"],
+            "license": project.cv.license.default_text,
             "nominal_resolution": "250 km",
             "product": "observations",
             "source_id": "CMAP-V1902",
@@ -1270,7 +1274,7 @@ class ConstructorTest(unittest.TestCase):
     def test_cv_is_loaded_as_controlled_vocabulary(self):
         project = _build_project(self.tmp)
         self.assertIsInstance(project.cv, ControlledVocabulary)
-        self.assertIn("activity_id", project.cv)
+        self.assertIn("activity_id", project.cv.rules)
 
     def test_variable_entries_populated_from_table(self):
         project = _build_project(self.tmp)
@@ -3354,12 +3358,12 @@ class RequiredGlobalAttributesTest(unittest.TestCase):
 
     def test_returns_tuple(self):
         project = _build_project(self.tmp)
-        result = project.cv.required_global_attributes()
+        result = project.cv.required_attributes
         self.assertIsInstance(result, tuple)
 
     def test_returns_expected_attribute_names(self):
         project = _build_project(self.tmp)
-        result = project.cv.required_global_attributes()
+        result = project.cv.required_attributes
         self.assertIn("activity_id", result)
         self.assertIn("institution_id", result)
 
@@ -3369,11 +3373,11 @@ class RequiredGlobalAttributesTest(unittest.TestCase):
         _write(cv_file, {"CV": {}})
         _write(vtable, {"Header": {"table_id": "t"}, "variable_entry": {}})
         project = ProjectTables(cv_file, [vtable])
-        self.assertEqual(project.cv.required_global_attributes(), ())
+        self.assertEqual(project.cv.required_attributes, ())
 
     def test_all_items_are_strings(self):
         project = _build_project(self.tmp)
-        for name in project.cv.required_global_attributes():
+        for name in project.cv.required_attributes:
             self.assertIsInstance(name, str)
 
 

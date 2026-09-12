@@ -883,19 +883,16 @@ def _interval_spec(
     if not frequency:
         return None
     project = getattr(dataset, "project", None)
-    cv_frequency = getattr(project, "cv", {}).get("frequency", {})
-    if isinstance(cv_frequency, Mapping):
-        entry = cv_frequency.get(frequency)
-        if isinstance(entry, Mapping):
-            value = _numeric_or_none(entry.get("approx_interval"))
-            if value is not None:
-                return _IntervalSpec(
-                    days=value,
-                    warning=_numeric_or_none(entry.get("approx_interval_warning"))
-                    or DEFAULT_INTERVAL_WARNING,
-                    error=_numeric_or_none(entry.get("approx_interval_error"))
-                    or DEFAULT_INTERVAL_ERROR,
-                )
+    cv = getattr(project, "cv", None)
+    frequency_component = getattr(cv, "frequency", None)
+    if frequency_component is not None:
+        entry = frequency_component.interval_for(frequency)
+        if entry is not None and entry.approx_interval is not None:
+            return _IntervalSpec(
+                days=entry.approx_interval,
+                warning=entry.approx_interval_warning or DEFAULT_INTERVAL_WARNING,
+                error=entry.approx_interval_error or DEFAULT_INTERVAL_ERROR,
+            )
     value = DEFAULT_FREQUENCY_INTERVALS.get(frequency.lower())
     return _IntervalSpec(days=value) if value is not None else None
 

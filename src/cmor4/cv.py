@@ -1,19 +1,28 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
 from datetime import datetime
 import json
 from pathlib import Path
 import re
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 import uuid
 import warnings
 
-from .utils.dataset_metadata import DatasetMetadata
-from .utils.templates import (
-    is_unresolved_template as _is_unresolved_template,
-    render_template as _render_template,
+from .utils.cv_models import (
+    AttributeRule,
+    DefaultValuesComponent,
+    DRSComponent,
+    ExperimentComponent,
+    ForcingComponent,
+    FrequencyComponent,
+    InstitutionComponent,
+    LicenseComponent,
+    SourceComponent,
+    SourceTypeComponent,
+    TrackingIdComponent,
+    ControlledVocabularyModel,
 )
+from .utils.dataset_metadata import DatasetMetadata
 from .exceptions import ControlledVocabularyError
 
 # Variant label index keys and their allowed integer range.
@@ -36,21 +45,6 @@ _RIPF_PREFIXES: dict[str, str] = {
 }
 _RIPF_MAX: int = 2**31 - 1  # INT32_MAX — matches CMOR3's upper bound
 
-# CV keys excluded from the generic two-level nested-attribute injection in
-# _add_nested_defaults.  Dedicated handlers already process the first group;
-# the second group contains keys whose nested dicts are internal validation
-# data rather than output attributes.
-_NESTED_INJECTION_SKIP_KEYS: frozenset[str] = frozenset({
-    # Handled by dedicated _add_*_defaults methods:
-    "institution_id",
-    "source_id",
-    "experiment_id",
-    "license_id",
-    "license",
-    # Internal validation data — must not leak into output files:
-    "frequency",  # approx_interval / approx_interval_error used by axis validator
-})
-
 # Fallback regex for grid_label when the CV does not define an allowed set.
 # Mirrors CMOR3's built-in check: labels must start with 'g', 'c', or 'r'
 # (the three grid families) and contain only lowercase letters and digits —
@@ -62,21 +56,51 @@ _NESTED_INJECTION_SKIP_KEYS: frozenset[str] = frozenset({
 _GRID_LABEL_RE: re.Pattern[str] = re.compile(r"^[gcr][a-z0-9]*$")
 
 
-class ControlledVocabulary(Mapping[str, Any]):
+class ControlledVocabulary:
     """Project controlled vocabulary with defaulting and validation helpers.
 
     Parameters
     ----------
-    data:
+    data : Mapping[str, Any]
         Controlled-vocabulary data, either as a raw CV mapping or a mapping
         containing a top-level ``CV`` key.
-    path:
+    path : str or pathlib.Path, optional
         Path to the source CV file, if loaded from disk.
+
+    Notes
+    -----
+    Validation behavior is exposed through typed attributes such as ``rules``,
+    ``defaults``, ``drs``, ``license``, ``sources``, and ``experiments``.
     """
+
+    rules: dict[str, AttributeRule]
+    defaults: DefaultValuesComponent
+    drs: DRSComponent | None
+    institutions: InstitutionComponent | None
+    license: LicenseComponent | None
+    sources: SourceComponent | None
+    experiments: ExperimentComponent | None
+    source_types: SourceTypeComponent
+    forcing: ForcingComponent | None
+    frequency: FrequencyComponent | None
+    tracking_id: TrackingIdComponent
+    required_attributes: tuple[str, ...]
 
     def __init__(self, data: Mapping[str, Any], path: str | Path | None = None):
         self.path = Path(path) if path is not None else None
-        self._data = dict(data.get("CV", data))
+        parsed = ControlledVocabularyModel.from_mapping(data)
+        self.rules = parsed.attributes
+        self.defaults = parsed.defaults
+        self.drs = parsed.drs
+        self.institutions = parsed.institutions
+        self.license = parsed.license
+        self.sources = parsed.sources
+        self.experiments = parsed.experiments
+        self.source_types = parsed.source_types
+        self.forcing = parsed.forcing
+        self.frequency = parsed.frequency
+        self.tracking_id = parsed.tracking_id
+        self.required_attributes = parsed.required_global_attributes
         self._warn_double_nested_entries()
 
     def _warn_double_nested_entries(self) -> None:
@@ -94,10 +118,8 @@ class ControlledVocabulary(Mapping[str, Any]):
 
             "nominal_resolution": ["0.5 km", "1 km", …]
 
-        When this happens, :meth:`validate_dataset_values` receives the inner
-        dict as the ``allowed`` value, and :meth:`value_allowed` silently
-        passes any submitted value because ``str(value) in allowed`` checks
-        membership in the inner dict's keys rather than the intended list.
+        When this happens the parsed lookup rule contains the attribute name
+        itself as its only allowed key, rather than the intended values.
 
         This check mirrors the CMOR3 issue reported at
         github.com/PCMDI/cmor/issues/829.
@@ -111,10 +133,8 @@ class ControlledVocabulary(Mapping[str, Any]):
         """Return a list of structural issues found in this CV.
 
         Currently detects double-nested entries — those where the value is a
-        mapping whose only key is the entry's own name.  When present,
-        :meth:`validate_dataset_values` silently skips enforcement for that
-        attribute because the expected constraint is buried one level too
-        deep.
+        mapping whose only key is the entry's own name.  When present, the
+        expected constraint is buried one level too deep.
 
         Returns
         -------
@@ -138,8 +158,8 @@ class ControlledVocabulary(Mapping[str, Any]):
         """
 
         issues: list[str] = []
-        for key, value in self._data.items():
-            if isinstance(value, Mapping) and len(value) == 1 and key in value:
+        for key, rule in self.rules.items():
+            if rule.is_double_nested:
                 issues.append(
                     f"CV entry {key!r} in {self.filename} appears to be "
                     f"double-nested: its value is a mapping containing only "
@@ -170,15 +190,6 @@ class ControlledVocabulary(Mapping[str, Any]):
             data = json.load(handle)
         return cls(data, path=cv_path)
 
-    def __getitem__(self, key: str) -> Any:
-        return self._data[key]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
-
-    def __len__(self) -> int:
-        return len(self._data)
-
     @property
     def filename(self) -> str:
         """Return the display name for this controlled vocabulary.
@@ -190,31 +201,6 @@ class ControlledVocabulary(Mapping[str, Any]):
         """
 
         return self.path.name if self.path is not None else "CV"
-
-    def drs_templates(self) -> tuple[str | None, str | None]:
-        """Return the DRS path and filename templates defined in the CV.
-
-        The CV ``DRS`` section may specify ``directory_path_template`` and
-        ``filename_template`` that projects want CMOR to use by default.
-        These override the compiled-in defaults but are themselves overridden
-        by any template the user supplies in their dataset metadata.
-
-        Returns
-        -------
-        tuple[str | None, str | None]
-            ``(directory_path_template, filename_template)``.
-            Either element is ``None`` when the CV does not define it.
-        """
-
-        drs = self.get("DRS")
-        if not isinstance(drs, Mapping):
-            return None, None
-        path_tmpl = drs.get("directory_path_template")
-        file_tmpl = drs.get("filename_template")
-        return (
-            str(path_tmpl) if isinstance(path_tmpl, str) and path_tmpl else None,
-            str(file_tmpl) if isinstance(file_tmpl, str) and file_tmpl else None,
-        )
 
     def get_dataset_info(self, dataset: DatasetMetadata) -> DatasetMetadata:
         """Get dataset info with CV defaults.
@@ -245,14 +231,7 @@ class ControlledVocabulary(Mapping[str, Any]):
     def _add_scalar_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill scalar CV defaults that are not templated."""
 
-        for key, value in self.items():
-            templated = isinstance(value, str) and ("<" in value or ">" in value)
-            if (
-                key not in dataset
-                and not templated
-                and isinstance(value, (str, int, float))
-            ):
-                dataset[key] = value
+        dataset.update(self.defaults.scalar_defaults_for(dataset))
 
     def _add_nested_defaults(self, dataset: dict[str, Any]) -> None:
         """Inject leaf attributes from two-level nested CV entries.
@@ -289,113 +268,43 @@ class ControlledVocabulary(Mapping[str, Any]):
         ``setdefault`` values always take precedence.
         """
 
-        for cv_key, cv_value in self.items():
-            if cv_key in _NESTED_INJECTION_SKIP_KEYS:
-                continue
-            if not isinstance(cv_value, Mapping):
-                continue
-
-            user_value = dataset.get(cv_key)
-            if user_value in (None, ""):
-                continue
-
-            entry = cv_value.get(str(user_value))
-            if not isinstance(entry, Mapping):
-                continue
-
-            # Only inject when every value in the looked-up entry is a
-            # scalar.  Entries with nested Mappings/lists are structural
-            # CV tables, not attribute injection blocks.
-            if not all(isinstance(v, (str, int, float)) for v in entry.values()):
-                continue
-
-            for attr_key, attr_val in entry.items():
-                dataset.setdefault(attr_key, attr_val)
+        dataset.update(self.defaults.nested_defaults_for(dataset))
 
     def _add_source_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill attributes supplied by a source_id CV entry."""
 
-        source_entries = self.get("source_id")
-        source_id = dataset.get("source_id")
-        if not isinstance(source_entries, Mapping) or source_id in (None, ""):
+        if self.sources is None:
             return
-        source_entry = source_entries.get(str(source_id))
-        if not isinstance(source_entry, Mapping):
-            return
-        for key, value in source_entry.items():
-            if key == "source_id" or value in (None, ""):
-                continue
-            default = _single_cv_default(value)
-            if default is not None:
-                dataset.setdefault(key, default)
+        for key, value in self.sources.defaults_for(dataset.get("source_id")).items():
+            dataset.setdefault(key, value)
 
     def _add_institution_default(self, dataset: dict[str, Any]) -> None:
         """Fill institution text from institution_id."""
 
         if "institution" in dataset:
             return
-        institution_entries = self.get("institution_id")
-        institution_id = dataset.get("institution_id")
-        if not isinstance(institution_entries, Mapping) or institution_id in (
-            None,
-            "",
-        ):
+        if self.institutions is None:
             return
-        institution = institution_entries.get(str(institution_id))
-        if isinstance(institution, str) and institution:
+        institution = self.institutions.name_for(dataset.get("institution_id"))
+        if institution is not None:
             dataset["institution"] = institution
 
     def _add_experiment_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill scalar attributes supplied by an experiment_id CV entry."""
 
-        experiment_entry = self._experiment_entry_for_id(dataset.get("experiment_id"))
-        if experiment_entry is None:
+        if self.experiments is None:
             return
-        for key, value in experiment_entry.items():
-            # keys in experiment entry to exclude
-            if key in {
-                "additional_allowed_model_components",
-                "end_year",
-                "min_number_yrs_per_sim",
-                "parent_activity_id",
-                "parent_experiment_id",
-                "required_source_type",
-                "source_type",
-                "start_year",
-                "tier",
-            }:
-                continue
-            default = _single_cv_default(value)
-            if default is not None:
-                dataset.setdefault(key, default)
+        for key, value in self.experiments.defaults_for(
+            dataset.get("experiment_id")
+        ).items():
+            dataset.setdefault(key, value)
 
     def _add_runtime_global_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill required globals that CMOR normally creates while writing."""
 
-        required = self.required_global_attributes()
+        required = self.required_attributes
         if "Conventions" in required:
-            conventions = self.get("Conventions")
-            # Default to CF-1.12 to match CMOR3 output. The CV lists multiple
-            # accepted versions; we pick CF-1.12 as the stable target unless
-            # the user has already set Conventions explicitly.
-            # CMIP6 CVs store a single POSIX-regex entry like
-            # "^CF-1.7 CMIP-6.[0-2]\\( UGRID-1.0\\)\\{0,\\}$"; in that case
-            # we fall back to a known-good value accepted by the regex.
-            if isinstance(conventions, list) and "CF-1.12" in conventions:
-                default_conventions = "CF-1.12"
-            elif isinstance(conventions, list) and conventions:
-                # If the only entry looks like a regex (contains metacharacters)
-                # use a known-good CMIP6 value; otherwise use the entry verbatim.
-                candidate = str(conventions[-1])
-                if re.search(r"[\\^$\[\]{,}()|]", candidate):
-                    default_conventions = "CF-1.7 CMIP-6.2"
-                else:
-                    default_conventions = candidate
-            elif isinstance(conventions, str) and conventions:
-                default_conventions = conventions
-            else:
-                default_conventions = "CF-1.12"
-            dataset.setdefault("Conventions", default_conventions)
+            dataset.setdefault("Conventions", self.defaults.conventions)
         if "creation_date" in required:
             dataset.setdefault(
                 "creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -405,50 +314,20 @@ class ControlledVocabulary(Mapping[str, Any]):
             if variant_label:
                 dataset.setdefault("variant_label", variant_label)
         if "tracking_id" in required and "tracking_id" not in dataset:
-            dataset["tracking_id"] = _new_tracking_id(dataset, self)
+            dataset["tracking_id"] = _new_tracking_id(dataset, self.tracking_id)
         for key in required:
             if key in dataset:
                 continue
-            value = self.definition_for(key)
-            if value in (None, ""):
-                default = None
-            elif isinstance(value, Mapping):
-                keys = list(value)
-                default = keys[0] if len(keys) == 1 else None
-            else:
-                default = _single_cv_default(value)
-            # Do not inject POSIX BRE regex patterns (e.g. from CMIP6 CV) as
-            # attribute values.  These strings are validation constraints, not
-            # default values — injecting them would cause them to fail their
-            # own validation check.  Use the same detector as validate_dataset_values.
-            if _is_posix_bre_list(value):
-                default = None
-            elif isinstance(default, str) and re.search(r"[\\^$\[\]{,}()|]", default):
-                default = None
+            default = self.defaults.required.get(key)
             if default is not None:
                 dataset[key] = default
 
     def _add_license_text(self, dataset: dict[str, Any]) -> None:
-        license_cv = self.get("license")
-        if "license" in dataset or not isinstance(license_cv, Mapping):
+        if "license" in dataset or self.license is None:
             return
-        license_id = dataset.get("license_id")
-        if license_id in (None, ""):
-            return
-        license_entries = license_cv.get("license_id")
-        license_template = license_cv.get("license_template")
-        if not isinstance(license_entries, Mapping) or not isinstance(
-            license_template, str
-        ):
-            return
-        license_info = license_entries.get(str(license_id))
-        if not isinstance(license_info, Mapping):
-            return
-        tokens = {
-            **{str(key): value for key, value in dataset.items()},
-            **{str(key): value for key, value in license_info.items()},
-        }
-        dataset["license"] = _render_template(license_template, tokens)
+        rendered = self.license.render(dataset)
+        if rendered is not None:
+            dataset["license"] = rendered
 
     def validate_dataset_info(self, dataset: DatasetMetadata) -> None:
         """Validate user-supplied controlled values against the project CV.
@@ -504,37 +383,15 @@ class ControlledVocabulary(Mapping[str, Any]):
             the CV's forcing enumeration.
         """
 
-        forcing_cv = self.get("forcing")
-        # Only validate when the CV provides an enumeration.
-        if not isinstance(forcing_cv, (list, Mapping)):
+        if self.forcing is None:
             return
-
-        forcing_text = str(dataset.forcing or "")
-        if not forcing_text.strip():
-            return
-
-        # Step 1: replace commas with spaces.
-        cleaned = forcing_text.replace(",", " ")
-        # Step 2: truncate at the first '(' — everything from that point
-        # onwards is a human-readable annotation, not a forcing code.
-        paren_pos = cleaned.find("(")
-        if paren_pos != -1:
-            cleaned = cleaned[:paren_pos]
-        # Step 3: tokenise on whitespace, discarding empty strings.
-        tokens = [t for t in cleaned.split() if t]
-        if not tokens:
-            return
-
-        valid: set[str] = (
-            set(forcing_cv) if isinstance(forcing_cv, (list, Mapping)) else set()
-        )
-        for token in tokens:
-            if token not in valid:
-                raise ControlledVocabularyError(
-                    f"forcing term {token!r} is not valid. "
-                    f"Valid values are: {sorted(valid)!r}. "
-                    f"Check {self.filename}."
-                )
+        invalid = self.forcing.invalid_token(dataset.forcing)
+        if invalid is not None:
+            raise ControlledVocabularyError(
+                f"forcing term {invalid!r} is not valid. "
+                f"Valid values are: {sorted(self.forcing.values)!r}. "
+                f"Check {self.filename}."
+            )
 
     def validate_variant_indices(self, dataset: DatasetMetadata) -> None:
         """Validate variant index integers and the derived variant_label format.
@@ -597,8 +454,10 @@ class ControlledVocabulary(Mapping[str, Any]):
         # a constraint (a list of allowed values or regex patterns).  When the
         # CV merely lists variant_label as a required attribute with no values
         # (e.g. obs4MIPs), accept any user-supplied string.
-        cv_vl_def = self.definition_for("variant_label")
-        cv_constrains_vl = isinstance(cv_vl_def, list) and len(cv_vl_def) > 0
+        variant_rule = self.rules.get("variant_label")
+        cv_constrains_vl = (
+            variant_rule is not None and variant_rule.is_choice_constraint
+        )
 
         variant_label = dataset.variant_label_value
         if variant_label and cv_constrains_vl:
@@ -649,7 +508,7 @@ class ControlledVocabulary(Mapping[str, Any]):
                 "forcing",
             }:
                 continue
-            allowed = self.definition_for(str(key))
+            rule = self.rules.get(str(key))
             # CMIP6 CVs express several constraints as POSIX BRE regex arrays
             # (single-element lists whose entry contains BRE metacharacters like
             # \{, [[:digit:]], or ^ anchors).  CMOR4 uses Python re which has
@@ -659,10 +518,10 @@ class ControlledVocabulary(Mapping[str, Any]):
             # like BRE patterns.  The same attributes are validated implicitly
             # by other checks (variant_label format, grid_label enumeration,
             # etc.) that use the CV's enumeration entries.
-            if _is_posix_bre_list(allowed):
+            if rule is not None and rule.skips_generic_validation:
                 continue
-            if allowed is not None and not self.value_allowed(
-                str(key), value, allowed, dataset
+            if self.controls(str(key)) and not self.value_allowed(
+                str(key), value, dataset
             ):
                 raise ControlledVocabularyError(
                     f"{key}={value!r} is not allowed by {self.filename}."
@@ -674,7 +533,7 @@ class ControlledVocabulary(Mapping[str, Any]):
         # obviously malformed labels (hyphens, wrong starting character, etc.)
         # from passing silently when the CV is incomplete or absent.
         gl = dataset.grid_label
-        if gl not in (None, "") and self.definition_for("grid_label") is None:
+        if gl not in (None, "") and "grid_label" not in self.rules:
             if not _GRID_LABEL_RE.fullmatch(str(gl)):
                 raise ControlledVocabularyError(
                     f"grid_label={gl!r} does not match the required format. "
@@ -709,13 +568,14 @@ class ControlledVocabulary(Mapping[str, Any]):
         # lenient behaviour for test models like PCMDI-test-1-0.
         bre_required = {
             name
-            for name in self.required_global_attributes()
-            if _is_posix_bre_list(self.definition_for(name))
+            for name in self.required_attributes
+            if (rule := self.rules.get(name)) is not None
+            and rule.skips_generic_validation
         }
 
         missing = [
             name
-            for name in self.required_global_attributes()
+            for name in self.required_attributes
             if name not in dataset_values or dataset_values.get(name) in (None, "")
             if name not in bre_required
         ]
@@ -724,20 +584,6 @@ class ControlledVocabulary(Mapping[str, Any]):
             raise ControlledVocabularyError(
                 f"Required global attributes are missing: {missing_text}."
             )
-
-    def required_global_attributes(self) -> tuple[str, ...]:
-        """Return CV-listed required global attributes.
-
-        Returns
-        -------
-        tuple[str, ...]
-            Required global attribute names.
-        """
-
-        required = self.get("required_global_attributes", ())
-        if not isinstance(required, Sequence) or isinstance(required, str):
-            return ()
-        return tuple(str(value) for value in required)
 
     def validate_experiment(self, dataset: DatasetMetadata) -> None:
         """Validate experiment-specific CV attributes.
@@ -754,48 +600,13 @@ class ControlledVocabulary(Mapping[str, Any]):
             are inconsistent.
         """
 
-        dataset_values = dataset.to_dict()
-        experiment_entry = self.experiment_entry(dataset)
-        if experiment_entry is None:
+        if self.experiments is None:
             return
-        self.validate_source_type(dataset, experiment_entry)
-        for key, expected in experiment_entry.items():
-            if key in {
-                "additional_allowed_model_components",
-                "description",
-                "parent_activity_id",
-                "parent_experiment_id",
-                "required_source_type",
-                "source_type",
-            }:
-                continue
-            if expected in (None, "") or key not in dataset_values:
-                continue
-            value = dataset_values[key]
-            if isinstance(expected, list):
-                matches = str(value) in {str(item) for item in expected}
-            else:
-                matches = str(value) == str(expected)
-            if not matches:
-                raise ControlledVocabularyError(
-                    f"{key}={dataset_values[key]!r} does not match "
-                    f"experiment_id={dataset.experiment_id!r} "
-                    f"CV value {expected!r}."
-                )
-        expected_activity = experiment_entry.get("activity_id")
-        if expected_activity not in (None, "") and dataset.activity_id is not None:
-            if isinstance(expected_activity, list):
-                matches = str(dataset.activity_id) in {
-                    str(item) for item in expected_activity
-                }
-            else:
-                matches = str(dataset.activity_id) == str(expected_activity)
-            if not matches:
-                raise ControlledVocabularyError(
-                    f"activity_id={dataset.activity_id!r} does not match "
-                    f"experiment_id={dataset.experiment_id!r} "
-                    f"CV value {expected_activity!r}."
-                )
+        error = self.experiments.validation_error(
+            dataset.experiment_id, dataset.to_dict(), self.source_types
+        )
+        if error is not None:
+            raise ControlledVocabularyError(error)
 
     def validate_source_type(
         self,
@@ -818,41 +629,13 @@ class ControlledVocabulary(Mapping[str, Any]):
             or disallowed.
         """
 
-        required = _cv_values(
-            experiment_entry.get("required_source_type")
-            or experiment_entry.get("required_model_components")
+        error = self.source_types.validation_error(
+            dataset.source_type,
+            experiment_entry,
+            experiment_id=dataset.experiment_id,
         )
-        additional = _cv_values(
-            experiment_entry.get("additional_allowed_model_components")
-        )
-        if not required and not additional:
-            return
-        source_type = dataset.source_type
-        if source_type in (None, ""):
-            # Only require source_type when the experiment defines a
-            # required_source_type (CMIP7 key).  CMIP6 experiments use
-            # required_model_components which describes component composition
-            # rather than the source_type attribute — skip the hard requirement
-            # in that case to avoid false positives.
-            if _cv_values(experiment_entry.get("required_source_type")):
-                raise ControlledVocabularyError("source_type is required.")
-            return
-        source_type_text = str(source_type)
-        tokens = source_type_text.split()
-        for expected in required:
-            if not _source_type_pattern_matches(source_type_text, expected):
-                raise ControlledVocabularyError(
-                    f"source_type={source_type!r} is missing required "
-                    f"source type {expected!r}."
-                )
-        allowed = (*required, *additional)
-        for token in tokens:
-            if not any(_source_type_pattern_matches(token, item) for item in allowed):
-                raise ControlledVocabularyError(
-                    f"source_type={source_type!r} contains source type "
-                    f"{token!r} that is not allowed by experiment_id="
-                    f"{dataset.experiment_id!r}."
-                )
+        if error is not None:
+            raise ControlledVocabularyError(error)
 
     def validate_source_attributes(self, dataset: DatasetMetadata) -> None:
         """Validate source_id-specific CV attributes.
@@ -869,27 +652,11 @@ class ControlledVocabulary(Mapping[str, Any]):
             is inconsistent.
         """
 
-        dataset_values = dataset.to_dict()
-        source_entries = self.get("source_id")
-        source_id = dataset.source_id
-        if not isinstance(source_entries, Mapping) or source_id in (None, ""):
+        if self.sources is None:
             return
-        source_entry = source_entries.get(str(source_id))
-        if not isinstance(source_entry, Mapping):
-            return
-        for key, expected in source_entry.items():
-            if key == "source_id" or key not in dataset_values:
-                continue
-            value = dataset_values[key]
-            if isinstance(expected, list):
-                matches = str(value) in {str(item) for item in expected}
-            else:
-                matches = str(value) == str(expected)
-            if expected not in (None, "") and not matches:
-                raise ControlledVocabularyError(
-                    f"{key}={dataset_values[key]!r} does not match "
-                    f"source_id={source_id!r} CV value {expected!r}."
-                )
+        error = self.sources.validation_error(dataset.source_id, dataset.to_dict())
+        if error is not None:
+            raise ControlledVocabularyError(error)
 
     def validate_parent_attributes(self, dataset: DatasetMetadata) -> None:
         """Validate CMIP-style parent experiment attributes.
@@ -906,122 +673,21 @@ class ControlledVocabulary(Mapping[str, Any]):
             or inconsistent.
         """
 
-        experiment_entry = self.experiment_entry(dataset)
-        if experiment_entry is None:
+        if self.experiments is None:
             return
-        expected_parent_experiments = _cv_values(
-            experiment_entry.get("parent_experiment_id")
+        error = self.experiments.parent_validation_error(
+            dataset.experiment_id, dataset.to_dict(), self.sources
         )
-        # CMIP6 CVs use "no parent" as a sentinel value to signal that the
-        # experiment has no parent, while CMIP7 uses an empty list [].
-        # Treat a list consisting solely of "no parent" the same as an empty
-        # list so that no parent attributes are required.
-        _NO_PARENT_SENTINEL = "no parent"
-        if all(str(v) == _NO_PARENT_SENTINEL for v in expected_parent_experiments):
-            expected_parent_experiments = ()
-        parent_attrs = (
-            "parent_activity_id",
-            "parent_mip_era",
-            "parent_source_id",
-            "parent_time_units",
-            "parent_variant_label",
-            "branch_time_in_child",
-            "branch_time_in_parent",
-        )
-        if not expected_parent_experiments:
-            if dataset.parent_experiment_id is not None:
-                raise ControlledVocabularyError(
-                    f"experiment_id={dataset.experiment_id!r} does not "
-                    "allow parent_experiment_id."
-                )
-            unexpected = [
-                name for name in parent_attrs if getattr(dataset, name) is not None
-            ]
-            if unexpected:
-                raise ControlledVocabularyError(
-                    f"experiment_id={dataset.experiment_id!r} does not "
-                    "allow parent attributes: " + ", ".join(unexpected) + "."
-                )
-            return
-
-        parent_experiment_id = dataset.parent_experiment_id
-        if parent_experiment_id in (None, ""):
-            raise ControlledVocabularyError(
-                f"experiment_id={dataset.experiment_id!r} requires "
-                "parent_experiment_id."
-            )
-        if str(parent_experiment_id) not in {
-            str(value) for value in expected_parent_experiments
-        }:
-            raise ControlledVocabularyError(
-                f"parent_experiment_id={parent_experiment_id!r} "
-                "does not match "
-                f"experiment_id={dataset.experiment_id!r} CV values "
-                f"{expected_parent_experiments!r}."
-            )
-        self.validate_required_parent_value(
-            dataset,
-            "parent_activity_id",
-            experiment_entry.get("parent_activity_id"),
-        )
-        parent_source_id = dataset.parent_source_id
-        if parent_source_id in (None, ""):
-            raise ControlledVocabularyError("parent_source_id is required.")
-        source_entries = self.get("source_id")
-        if (
-            isinstance(source_entries, Mapping)
-            and str(parent_source_id) not in source_entries
-        ):
-            raise ControlledVocabularyError(
-                f"parent_source_id={parent_source_id!r} is not in the CV."
-            )
-        expected_parent_mip_era = str(dataset.mip_era or "")
-        if expected_parent_mip_era and dataset.parent_mip_era not in (
-            expected_parent_mip_era,
-            None,
-            "",
-        ):
-            raise ControlledVocabularyError(
-                f"parent_mip_era={dataset.parent_mip_era!r} does not "
-                f"match {expected_parent_mip_era!r}."
-            )
-        for key in (
-            "parent_mip_era",
-            "parent_time_units",
-            "parent_variant_label",
-        ):
-            if getattr(dataset, key) in (None, ""):
-                raise ControlledVocabularyError(f"{key} is required.")
-        if not re.fullmatch(
-            r"days\s+since\s+\d{4}-\d{1,2}-\d{1,2}.*",
-            str(dataset.parent_time_units),
-        ):
-            raise ControlledVocabularyError(
-                f"parent_time_units={dataset.parent_time_units!r} is invalid."
-            )
-        if not re.fullmatch(r"r\d+i\d+p\d+f\d+", str(dataset.parent_variant_label)):
-            raise ControlledVocabularyError(
-                f"parent_variant_label={dataset.parent_variant_label!r} is invalid."
-            )
-        for key in ("branch_time_in_child", "branch_time_in_parent"):
-            value = getattr(dataset, key)
-            if value is None:
-                raise ControlledVocabularyError(f"{key} is required.")
-            try:
-                float(value)
-            except (TypeError, ValueError) as exc:
-                raise ControlledVocabularyError(
-                    f"{key}={value!r} must be numeric."
-                ) from exc
+        if error is not None:
+            raise ControlledVocabularyError(error)
 
     def value_allowed(
         self,
         key: str,
         value: Any,
-        allowed: Any,
         dataset: DatasetMetadata,
     ) -> bool:
-        """Return whether a value is allowed by a CV definition.
+        """Return whether a value is allowed by its typed CV component.
 
         Parameters
         ----------
@@ -1029,209 +695,34 @@ class ControlledVocabulary(Mapping[str, Any]):
             Dataset attribute name being validated.
         value:
             Dataset attribute value to check.
-        allowed:
-            CV definition for the attribute.
         dataset:
             Full dataset metadata, used to resolve templated CV values.
 
         Returns
         -------
         bool
-            ``True`` when the value is accepted by the CV definition.
+            ``True`` when the value is accepted by the component.
         """
 
-        if (
-            key == "license"
-            and isinstance(allowed, Mapping)
-            and isinstance(allowed.get("license_template"), str)
-        ):
+        metadata = dataset.to_dict()
+        if key in {"license", "license_id", "license_url", "license_type"}:
+            if self.license is not None:
+                return self.license.accepts(key, value, metadata)
+        if key == "source_type":
+            return self.source_types.accepts(value)
+        rule = self.rules.get(key)
+        return rule is None or rule.accepts(value, metadata)
+
+    def controls(self, key: str) -> bool:
+        """Return whether a typed component constrains *key*."""
+
+        if key in self.rules:
             return True
-        if isinstance(allowed, str) and str(value) == allowed:
-            return True
-        # Check if allowed is a template (contains tokens like <variable_id>)
-        if _is_unresolved_template(allowed):
-            separator: str | None
-            match key:
-                case "branding_suffix":
-                    separator = "-"
-                case _:
-                    separator = None
-            return value == _render_template(allowed, dataset.to_dict(), separator)
-        if key in {"license_url", "license_type"}:
-            license_info = None
-            license_cv = self.get("license")
-            if isinstance(license_cv, Mapping):
-                license_entries = license_cv.get("license_id")
-                license_id = dataset.license_id
-                if isinstance(license_entries, Mapping) and license_id not in (
-                    None,
-                    "",
-                ):
-                    candidate = license_entries.get(str(license_id))
-                    if isinstance(candidate, Mapping):
-                        license_info = candidate
-            if license_info is not None and key in license_info:
-                return str(value) == str(license_info[key])
-            return True
-        if isinstance(allowed, Mapping):
-            if key in {"realm", "source_type"}:
-                return all(token in allowed for token in str(value).split() if token)
-            return str(value) in allowed
-        if isinstance(allowed, str):
-            return str(value) == allowed
-        if isinstance(allowed, list):
-            return any(_allowed_list_item(str(value), item) for item in allowed)
-        return True
-
-    def definition_for(self, key: str) -> Any:
-        """Return the CV definition for a dataset attribute.
-
-        Parameters
-        ----------
-        key:
-            Dataset attribute name.
-
-        Returns
-        -------
-        Any
-            CV definition for ``key``, or ``None`` when the key is unknown.
-        """
-
-        if key in self:
-            return self[key]
-        license_cv = self.get("license")
-        if isinstance(license_cv, Mapping) and key == "license_id":
-            return license_cv.get("license_id")
-        return None
-
-    def experiment_entry(self, dataset: DatasetMetadata) -> Mapping[str, Any] | None:
-        """Return the CV entry for the dataset experiment.
-
-        Parameters
-        ----------
-        dataset:
-            Dataset metadata containing ``experiment_id``.
-
-        Returns
-        -------
-        Mapping[str, Any] | None
-            Matching experiment CV entry, or ``None`` when unavailable.
-        """
-
-        return self._experiment_entry_for_id(dataset.experiment_id)
-
-    def _experiment_entry_for_id(
-        self, experiment_id: Any
-    ) -> Mapping[str, Any] | None:
-        """Return an experiment CV entry for a scalar identifier."""
-
-        experiment_entries = self.get("experiment_id")
-        if not isinstance(experiment_entries, Mapping) or experiment_id in (
-            None,
-            "",
-        ):
-            return None
-        entry = experiment_entries.get(str(experiment_id))
-        return entry if isinstance(entry, Mapping) else None
-
-    def validate_required_parent_value(
-        self,
-        dataset: DatasetMetadata,
-        key: str,
-        expected: Any,
-    ) -> None:
-        """Validate one required parent experiment attribute.
-
-        Parameters
-        ----------
-        dataset:
-            Dataset metadata containing the parent attribute.
-        key:
-            Parent attribute name to validate.
-        expected:
-            Expected CV value for the parent attribute.
-
-        Returns
-        -------
-        None
-            Raises ``ControlledVocabularyError`` if the value is missing or
-            inconsistent with the CV.
-        """
-
-        value = getattr(dataset, key)
-        if value in (None, ""):
-            raise ControlledVocabularyError(f"{key} is required.")
-        if isinstance(expected, list):
-            matches = str(value) in {str(item) for item in expected}
-        else:
-            matches = str(value) == str(expected)
-        if expected not in (None, "") and not matches:
-            raise ControlledVocabularyError(
-                f"{key}={value!r} does not match experiment_id="
-                f"{dataset.experiment_id!r} CV value {expected!r}."
-            )
-
-
-# POSIX regex metacharacter patterns that identify CMIP6-style validation regex arrays.
-# CMIP6 CVs use both BRE (realization_index, Conventions) and ERE (license) patterns.
-_BRE_INDICATORS: tuple[str, ...] = (
-    "\\{",  # POSIX BRE quantifier: \{n,m\}
-    "[[:digit:]]",
-    "[[:space:]]",
-    "[[:alpha:]]",
-)
-# ERE patterns use .* with ^ anchors
-_ERE_INDICATOR_RE = re.compile(r"^\^.*\.\*")
-
-
-def _is_posix_bre_list(value: Any) -> bool:
-    """Return True when *value* looks like a POSIX regex-array from CMIP6.
-
-    CMIP6 CVs encode several constraints as single-element lists of POSIX
-    regex strings — some in BRE dialect (``realization_index``,
-    ``Conventions``) and some in ERE dialect (``license``).  Python's ``re``
-    module interprets the same syntax differently and cannot reliably validate
-    against these patterns without a full BRE/ERE-to-Python conversion.
-
-    This helper detects such lists so callers can skip validation and defer to
-    other checks (grid_label enumeration, variant_label format, etc.).
-
-    The detection is intentionally conservative: a list is flagged only when
-    it contains a single string that carries recognisable POSIX regex markers,
-    i.e. ``\\{...\\}`` BRE quantifiers, POSIX character classes like
-    ``[[:digit:]]``, or an anchored pattern starting with ``^`` that contains
-    ``.*`` wildcards.
-    """
-    if not isinstance(value, list) or len(value) != 1:
-        return False
-    item = value[0]
-    if not isinstance(item, str):
-        return False
-    if any(indicator in item for indicator in _BRE_INDICATORS):
-        return True
-    if _ERE_INDICATOR_RE.match(item):
-        return True
-    return False
-
-
-def _single_cv_default(value: Any) -> Any:
-    if value in (None, ""):
-        return None
-    if isinstance(value, Mapping):
-        return None
-    if isinstance(value, list):
-        if len(value) != 1:
-            return None
-        return value[0]
-    return value
-
-
-def _cv_values(value: Any) -> tuple[Any, ...]:
-    if value in (None, ""):
-        return ()
-    if isinstance(value, list):
-        return tuple(item for item in value if item not in (None, ""))
-    return (value,)
+        if self.license is None:
+            return False
+        if key == "license_id":
+            return bool(self.license.licenses)
+        return key in {"license_url", "license_type"}
 
 
 def _variant_label(dataset: Mapping[str, Any]) -> str | None:
@@ -1282,55 +773,10 @@ def _metadata_variant_label(dataset: DatasetMetadata) -> str | None:
     return "".join(pieces)
 
 
-def _new_tracking_id(dataset: Mapping[str, Any], cv: Mapping[str, Any]) -> str:
-    identifier = str(uuid.uuid4())
-    prefix = dataset.get("tracking_prefix")
-    if prefix in (None, ""):
-        tracking_prefix = cv.get("tracking_id_prefix")
-        if isinstance(tracking_prefix, list) and len(tracking_prefix) == 1:
-            prefix = tracking_prefix[0]
-        elif isinstance(tracking_prefix, str):
-            prefix = tracking_prefix
-    if prefix in (None, ""):
-        # CMIP6-style CVs define tracking_id as a regex pattern like
-        # "hdl:21.14100/.*", and CMIP7 uses "^hdl:21.14107/[a-fA-F0-9]{8}-…".
-        # Extract the literal prefix before the first regex character class or
-        # wildcard so we can form a conforming tracking_id.
-        tracking_id_def = cv.get("tracking_id")
-        if isinstance(tracking_id_def, list) and tracking_id_def:
-            candidate = str(tracking_id_def[0]).lstrip("^").rstrip("$")
-            # CMIP6 pattern: "hdl:21.14100/.*" → split on ".*"
-            if ".*" in candidate:
-                prefix = candidate.split(".*")[0]
-            else:
-                # CMIP7 pattern: take the leading literal portion before the
-                # first character class or quantifier, un-escaping \. → .
-                m = re.match(r"^([^[({*+?]+)", candidate)
-                if m:
-                    # The group contains POSIX-escaped dots (\. = literal dot).
-                    # In the Python string this is a single backslash followed
-                    # by a period; replace that 2-char sequence with just ".".
-                    prefix = m.group(1).replace("\\.", ".")
-    if prefix in (None, ""):
-        return identifier
-    # Ensure the prefix is separated from the UUID by a "/" if neither the
-    # prefix already ends with one nor the UUID begins with one.
-    assert prefix is not None  # Type narrowing for mypy
-    if not prefix.endswith("/"):
-        prefix = prefix + "/"
-    return f"{prefix}{identifier}"
-
-
-def _allowed_list_item(value: str, item: Any) -> bool:
-    if value == str(item):
-        return True
-    if not isinstance(item, str):
-        return False
-    pattern = _posix_regex_to_python(item)
-    try:
-        return re.fullmatch(pattern, value) is not None
-    except re.error:
-        return False
+def _new_tracking_id(
+    dataset: Mapping[str, Any], component: TrackingIdComponent
+) -> str:
+    return component.format(str(uuid.uuid4()), dataset.get("tracking_prefix"))
 
 
 def _posix_regex_to_python(pattern: str) -> str:
@@ -1358,11 +804,3 @@ def _posix_regex_to_python(pattern: str) -> str:
         # In Python re, \( and \) also denote literal parentheses, so we keep them.
         # NOTE: We do NOT convert \( -> ( because ( is a group marker in Python re.
     )
-
-
-def _source_type_pattern_matches(value: str, pattern: Any) -> bool:
-    pattern_text = _posix_regex_to_python(str(pattern))
-    try:
-        return re.search(pattern_text, value) is not None
-    except re.error:
-        return value == str(pattern)

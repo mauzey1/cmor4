@@ -1069,12 +1069,13 @@ class TestDrsTemplates(unittest.TestCase):
     """
 
     # -----------------------------------------------------------------------
-    # ControlledVocabulary.drs_templates() unit tests
+    # DRSComponent template unit tests
     # -----------------------------------------------------------------------
 
     def test_drs_templates_returns_both_when_defined(self):
         cv = ControlledVocabulary(_CV_WITH_DRS)
-        path_tmpl, file_tmpl = cv.drs_templates()
+        self.assertIsNotNone(cv.drs)
+        path_tmpl, file_tmpl = cv.drs.templates()
         self.assertEqual(
             path_tmpl,
             "<mip_era><activity_id><institution_id><source_id><experiment_id>"
@@ -1088,7 +1089,7 @@ class TestDrsTemplates(unittest.TestCase):
 
     def test_drs_templates_returns_none_when_no_drs_section(self):
         cv = ControlledVocabulary(_CV_WITHOUT_DRS)
-        path_tmpl, file_tmpl = cv.drs_templates()
+        path_tmpl, file_tmpl = cv.drs.templates() if cv.drs else (None, None)
         self.assertIsNone(path_tmpl)
         self.assertIsNone(file_tmpl)
 
@@ -1099,7 +1100,8 @@ class TestDrsTemplates(unittest.TestCase):
                 "DRS": {"directory_path_example": "example/only/no/templates"},
             }
         })
-        path_tmpl, file_tmpl = cv_partial.drs_templates()
+        self.assertIsNotNone(cv_partial.drs)
+        path_tmpl, file_tmpl = cv_partial.drs.templates()
         self.assertIsNone(path_tmpl)
         self.assertIsNone(file_tmpl)
 
@@ -1107,7 +1109,7 @@ class TestDrsTemplates(unittest.TestCase):
         cv_bad = ControlledVocabulary({
             "CV": {**_MINIMAL_CV["CV"], "DRS": "not-a-dict"}
         })
-        path_tmpl, file_tmpl = cv_bad.drs_templates()
+        path_tmpl, file_tmpl = cv_bad.drs.templates() if cv_bad.drs else (None, None)
         self.assertIsNone(path_tmpl)
         self.assertIsNone(file_tmpl)
 
@@ -1211,7 +1213,8 @@ class TestDrsTemplates(unittest.TestCase):
         from table_helpers import cmip7_project
 
         project = cmip7_project()
-        cv_path_tmpl, cv_file_tmpl = project.cv.drs_templates()
+        self.assertIsNotNone(project.cv.drs)
+        cv_path_tmpl, cv_file_tmpl = project.cv.drs.templates()
 
         # CMIP7 DRS section defines both templates.
         self.assertIsNotNone(cv_path_tmpl)
@@ -1225,17 +1228,20 @@ class TestDrsTemplates(unittest.TestCase):
         from table_helpers import drcdp_project
 
         project = drcdp_project()
-        cv_path_tmpl, cv_file_tmpl = project.cv.drs_templates()
+        self.assertIsNotNone(project.cv.drs)
+        cv_path_tmpl, cv_file_tmpl = project.cv.drs.templates()
 
         self.assertIsNotNone(cv_path_tmpl)
         self.assertIsNotNone(cv_file_tmpl)
 
     def test_obs4mips_project_has_no_drs_templates(self):
-        """obs4MIPs has no DRS section; drs_templates() returns (None, None)."""
+        """obs4MIPs has no typed DRS component."""
         from table_helpers import obs4mips_project
 
         project = obs4mips_project()
-        cv_path_tmpl, cv_file_tmpl = project.cv.drs_templates()
+        cv_path_tmpl, cv_file_tmpl = (
+            project.cv.drs.templates() if project.cv.drs else (None, None)
+        )
 
         self.assertIsNone(cv_path_tmpl)
         self.assertIsNone(cv_file_tmpl)

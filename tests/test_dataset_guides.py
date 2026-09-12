@@ -341,11 +341,13 @@ class DatasetGuideProjectTest(unittest.TestCase):
     def test_obs4mips_monthly_gridded_precipitation_template(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             project = self.obs4mips_amon_project
+            self.assertIsNotNone(project.cv.license)
+            self.assertIsNotNone(project.cv.license.default_text)
             raw_info = obs4mips_info(
                 Path(tmp_dir),
                 "CMAP-V1902",
                 "NOAA-NCEI",
-                project.cv["license"],
+                project.cv.license.default_text,
             )
             raw_info["grid"] = "1x1 degree latitude x longitude"
             variable = project.variable(
@@ -383,11 +385,13 @@ class DatasetGuideProjectTest(unittest.TestCase):
     def test_obs4mips_point_site_precipitation_dataset(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             project = self.obs4mips_a1hrpt_project
+            self.assertIsNotNone(project.cv.license)
+            self.assertIsNotNone(project.cv.license.default_text)
             raw_info = obs4mips_info(
                 Path(tmp_dir),
                 "ARMBE-atm-c1-1-8",
                 "DOE-ARM",
-                project.cv["license"],
+                project.cv.license.default_text,
             )
             raw_info.update({
                 "grid": "site",
@@ -426,11 +430,13 @@ class DatasetGuideProjectTest(unittest.TestCase):
     def test_obs4mips_zonal_mean_o3zm_writes_o3_variable(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             project = self.obs4mips_amon_project
+            self.assertIsNotNone(project.cv.license)
+            self.assertIsNotNone(project.cv.license.default_text)
             raw_info = obs4mips_info(
                 Path(tmp_dir),
                 "BSVertOzone-v1-0",
                 "DLR-BIRA",
-                project.cv["license"],
+                project.cv.license.default_text,
                 grid_label="gnz",
             )
             raw_info.update({
