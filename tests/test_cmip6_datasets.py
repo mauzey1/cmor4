@@ -48,6 +48,7 @@ test_python_CMIP6_CV_nomipera.py          → TestMipEraValidation
 from __future__ import annotations
 
 import re
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -936,14 +937,19 @@ class TestOutputAttributes(unittest.TestCase):
 
     def test_tracking_id_satisfies_cv_regex(self) -> None:
         """The generated tracking_id matches the CV-defined regex pattern."""
-        import json
-        import cmor4.cv as cv_module
 
         with open(CMIP6_TABLE_ROOT / CMIP6_CV_FILE) as fh:
             cv_data = json.load(fh)
         pattern_list = cv_data["CV"].get("tracking_id", [])
         self.assertTrue(pattern_list, "CMIP6 CV should define a tracking_id pattern")
-        python_pattern = cv_module._posix_regex_to_python(pattern_list[0])
+        # Convert POSIX ERE to Python regex pattern
+        python_pattern = (
+            pattern_list[0]
+            .replace("[[:digit:]]", r"\d")
+            .replace("[[:space:]]", r"\s")
+            .replace("\\{", "{")
+            .replace("\\}", "}")
+        )
 
         with tempfile.TemporaryDirectory() as tmp:
             info = self.project.dataset_info(_amip_attrs(tmp))

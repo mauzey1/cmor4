@@ -96,11 +96,7 @@ class NamedTableEntry(TableModel):
                 matches = re.fullmatch(pattern, str(user_value)) is not None
             else:
                 matches = str(user_value) == expected_text
-            if (
-                expected is not None
-                and user_value not in (None, "")
-                and not matches
-            ):
+            if expected is not None and user_value not in (None, "") and not matches:
                 raise TableValidationError(
                     f"{entity_type} {self.name!r} {key}={user_value!r} "
                     f"does not match table value {expected!r}."

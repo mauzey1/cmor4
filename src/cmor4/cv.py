@@ -314,7 +314,9 @@ class ControlledVocabulary:
             if variant_label:
                 dataset.setdefault("variant_label", variant_label)
         if "tracking_id" in required and "tracking_id" not in dataset:
-            dataset["tracking_id"] = _new_tracking_id(dataset, self.tracking_id)
+            dataset["tracking_id"] = self.tracking_id.format(
+                str(uuid.uuid4()), dataset.get("tracking_prefix")
+            )
         for key in required:
             if key in dataset:
                 continue
@@ -771,36 +773,3 @@ def _metadata_variant_label(dataset: DatasetMetadata) -> str | None:
             f"{prefix}{value_str}" if re.fullmatch(r"\d+", value_str) else value_str
         )
     return "".join(pieces)
-
-
-def _new_tracking_id(
-    dataset: Mapping[str, Any], component: TrackingIdComponent
-) -> str:
-    return component.format(str(uuid.uuid4()), dataset.get("tracking_prefix"))
-
-
-def _posix_regex_to_python(pattern: str) -> str:
-    """Convert a POSIX Extended Regular Expression to a Python ``re`` pattern.
-
-    POSIX ERE and Python ``re`` differ in how several constructs are expressed:
-
-    * ``[[:digit:]]`` → ``\\d``, ``[[:space:]]`` → ``\\s``
-    * POSIX ``\\{n,m\\}`` quantifiers → Python ``{n,m}`` quantifiers
-    * POSIX ``\\(`` / ``\\)`` means *literal* parenthesis (in ERE, unescaped
-      ``(``/``)`` are group markers); Python ``re`` uses ``\\(``/``\\)`` for
-      the same meaning, so these are left as-is.
-
-    The CMIP6 CV license pattern uses unescaped ``(...)`` for capturing groups
-    and ``\\.`` (backslash-dot) for literal periods.  Both translate directly
-    to Python ``re`` without modification.
-    """
-    return (
-        pattern
-        .replace("[[:digit:]]", r"\d")
-        .replace("[[:space:]]", r"\s")
-        .replace("\\{", "{")
-        .replace("\\}", "}")
-        # In POSIX ERE, \( and \) denote literal parentheses.
-        # In Python re, \( and \) also denote literal parentheses, so we keep them.
-        # NOTE: We do NOT convert \( -> ( because ( is a group marker in Python re.
-    )

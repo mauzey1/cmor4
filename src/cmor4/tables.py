@@ -194,9 +194,7 @@ class ProjectTables:
         """
 
         user_info = (
-            dataset.to_dict()
-            if isinstance(dataset, DatasetMetadata)
-            else dict(dataset)
+            dataset.to_dict() if isinstance(dataset, DatasetMetadata) else dict(dataset)
         )
         try:
             metadata = DatasetMetadata.from_mapping(user_info)
@@ -651,10 +649,7 @@ class ProjectTables:
             )
         """
         requested = str(
-            values.get("table_entry")
-            or values.get("mapping_entry")
-            or name
-            or ""
+            values.get("table_entry") or values.get("mapping_entry") or name or ""
         )
         gm_entry = self.grid_table.resolve_mapping(requested) if requested else None
 

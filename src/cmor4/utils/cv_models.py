@@ -118,11 +118,7 @@ class OpenMatcher(_CVModel):
 
 
 ValueMatcher = (
-    ExactMatcher
-    | TemplateMatcher
-    | ChoiceMatcher
-    | LookupMatcher
-    | OpenMatcher
+    ExactMatcher | TemplateMatcher | ChoiceMatcher | LookupMatcher | OpenMatcher
 )
 
 
@@ -224,9 +220,7 @@ class DRSComponent(_CVModel):
 class NestedDefaultComponent(_CVModel):
     """Scalar attributes contributed by selected two-level CV entries."""
 
-    entries: dict[str, dict[str, dict[str, ScalarValue]]] = Field(
-        default_factory=dict
-    )
+    entries: dict[str, dict[str, dict[str, ScalarValue]]] = Field(default_factory=dict)
 
     @classmethod
     def from_mapping(cls, cv: Mapping[str, Any]) -> "NestedDefaultComponent":
@@ -375,9 +369,7 @@ class LicenseComponent(_CVModel):
             return self.rule.matcher.expected
         return None
 
-    def accepts(
-        self, name: str, value: Any, metadata: Mapping[str, Any]
-    ) -> bool:
+    def accepts(self, name: str, value: Any, metadata: Mapping[str, Any]) -> bool:
         """Validate a license-related attribute against the selected license."""
 
         if name == "license":
@@ -677,9 +669,7 @@ class SourceTypeComponent(_CVModel):
 
         if not self.values:
             return True
-        return all(
-            token in self.values for token in str(source_type).split() if token
-        )
+        return all(token in self.values for token in str(source_type).split() if token)
 
     def validation_error(
         self,
@@ -690,9 +680,7 @@ class SourceTypeComponent(_CVModel):
     ) -> str | None:
         """Return an experiment composition error, or ``None`` when valid."""
 
-        required_source_types = _values(
-            experiment_entry.get("required_source_type")
-        )
+        required_source_types = _values(experiment_entry.get("required_source_type"))
         required = required_source_types or _values(
             experiment_entry.get("required_model_components")
         )
@@ -862,9 +850,7 @@ class ControlledVocabularyModel(_CVModel):
             required_global_attributes=required_values,
             defaults=DefaultValuesComponent.from_mapping(cv),
             drs=DRSComponent.from_definition(cv.get("DRS")),
-            institutions=InstitutionComponent.from_definition(
-                cv.get("institution_id")
-            ),
+            institutions=InstitutionComponent.from_definition(cv.get("institution_id")),
             license=(
                 LicenseComponent.from_definition(cv["license"])
                 if "license" in cv
@@ -887,7 +873,8 @@ def _choice_accepts(value: str, choice: str) -> bool:
     if value == choice:
         return True
     pattern = (
-        choice.replace("[[:digit:]]", r"\d")
+        choice
+        .replace("[[:digit:]]", r"\d")
         .replace("[[:space:]]", r"\s")
         .replace("[[:alpha:]]", r"[A-Za-z]")
         .replace("\\{", "{")
@@ -982,6 +969,9 @@ def _required_value_error(
 
 
 def _pattern_matches(value: str, pattern: Any) -> bool:
+    """
+    Check if a string matches the pattern in POSIX Extended Regular Expression format
+    """
     pattern_text = (
         str(pattern)
         .replace("[[:digit:]]", r"\d")

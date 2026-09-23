@@ -58,9 +58,7 @@ def _sample_cv() -> ControlledVocabulary:
                 ),
             },
             "mip_era": "CMIP7",
-            "profile": {
-                "standard": {"contact": "support@example.test", "priority": 1}
-            },
+            "profile": {"standard": {"contact": "support@example.test", "priority": 1}},
             "required_global_attributes": [
                 "Conventions",
                 "activity_id",

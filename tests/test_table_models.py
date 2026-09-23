@@ -67,12 +67,14 @@ def test_all_table_documents_reject_non_mapping_rows() -> None:
 
 def test_variable_document_attaches_source_provenance(tmp_path) -> None:
     path = tmp_path / "variables.json"
-    path.write_text(json.dumps({
-        "Header": {"table_id": "Table Amon"},
-        "variable_entry": {
-            "tas": {"out_name": "tas", "dimensions": "lon lat time", "units": "K"}
-        },
-    }))
+    path.write_text(
+        json.dumps({
+            "Header": {"table_id": "Table Amon"},
+            "variable_entry": {
+                "tas": {"out_name": "tas", "dimensions": "lon lat time", "units": "K"}
+            },
+        })
+    )
 
     document = VariableTableDocument.model_validate_json(path.read_text())
     entry = document.resolved_entries(path)["tas"]

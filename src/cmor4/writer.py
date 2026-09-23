@@ -733,9 +733,7 @@ class DatasetWriter:
         chunk_time_len: int,
     ) -> None:
         if data.ndim != len(self._ctx.dims):
-            expected_dims = (
-                " x ".join(self._ctx.dims) if self._ctx.dims else "scalar"
-            )
+            expected_dims = " x ".join(self._ctx.dims) if self._ctx.dims else "scalar"
             raise ValueError(
                 f"Data for {self._ctx.variable.names()[0]!r} has {data.ndim} "
                 f"dimensions, but variable dimensions resolve to {expected_dims!r}."
@@ -815,9 +813,7 @@ class DatasetWriter:
             for zfactor in self._ctx.zfactors
             for alias in (zfactor.name, zfactor.out_name or zfactor.name)
         }
-        unknown = sorted(
-            str(name) for name in zfactor_values if str(name) not in known
-        )
+        unknown = sorted(str(name) for name in zfactor_values if str(name) not in known)
         if unknown:
             raise ValueError(f"Unknown zfactor chunk(s): {unknown!r}.")
 

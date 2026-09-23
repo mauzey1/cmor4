@@ -498,8 +498,7 @@ def validate_grid_mapping(
             if not isinstance(value, str):
                 label = entry_name or cf_mapping_name or "<unknown>"
                 raise TableValidationError(
-                    f"grid mapping {label!r} parameter {name!r} must "
-                    "be a string."
+                    f"grid mapping {label!r} parameter {name!r} must be a string."
                 )
             continue
         arr = np.asarray(value)
@@ -510,8 +509,7 @@ def validate_grid_mapping(
             except (TypeError, ValueError) as exc:
                 label = entry_name or cf_mapping_name or "<unknown>"
                 raise TableValidationError(
-                    f"grid mapping {label!r} parameter {name!r} must "
-                    "be numeric."
+                    f"grid mapping {label!r} parameter {name!r} must be numeric."
                 ) from exc
 
     required_axes = entry.required_axis_names() if entry is not None else ()
@@ -812,11 +810,7 @@ def _validate_time_interval(
     var_freq = (
         str(getattr(variable, "frequency", "") or "") if variable is not None else ""
     )
-    frequency = (
-        str(dataset.frequency or var_freq)
-        if dataset is not None
-        else var_freq
-    )
+    frequency = str(dataset.frequency or var_freq) if dataset is not None else var_freq
     if not frequency:
         if dataset is not None:
             raise AxisValidationError(
@@ -875,11 +869,7 @@ def _interval_spec(
     var_freq = (
         str(getattr(variable, "frequency", "") or "") if variable is not None else ""
     )
-    frequency = (
-        str(dataset.frequency or var_freq)
-        if dataset is not None
-        else var_freq
-    )
+    frequency = str(dataset.frequency or var_freq) if dataset is not None else var_freq
     if not frequency:
         return None
     project = getattr(dataset, "project", None)

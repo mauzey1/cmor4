@@ -66,9 +66,9 @@ class CoordinateTable:
         grid_axis_entries: Mapping[str, Any],
         grid_coord_entries: Mapping[str, Any],
     ) -> None:
-        coord_entries = CoordinateTableDocument.model_validate(
-            {"axis_entry": dict(coord_entries)}
-        ).axis_entry
+        coord_entries = CoordinateTableDocument.model_validate({
+            "axis_entry": dict(coord_entries)
+        }).axis_entry
         grid_document = GridTableDocument.model_validate({
             "axis_entry": dict(grid_axis_entries),
             "variable_entry": dict(grid_coord_entries),
@@ -85,9 +85,7 @@ class CoordinateTable:
             **grid_axis_entries,
         }
         self.scalar_entries: dict[str, AxisEntry] = {
-            name: entry
-            for name, entry in self._all_coord.items()
-            if entry.is_scalar
+            name: entry for name, entry in self._all_coord.items() if entry.is_scalar
         }
         self.generic_level_entries: dict[str, dict[str, AxisEntry]] = (
             _build_generic_level_index(self._all_coord)
@@ -136,9 +134,7 @@ class CoordinateTable:
     # Resolution
     # ------------------------------------------------------------------
 
-    def resolve_coord(
-        self, request: Axis | Mapping[str, Any]
-    ) -> AxisEntry | None:
+    def resolve_coord(self, request: Axis | Mapping[str, Any]) -> AxisEntry | None:
         """Return the best-matching coordinate :class:`AxisEntry`, or ``None``.
 
         Tries, in order: direct name, generic-level (raises if ambiguous),
@@ -183,9 +179,7 @@ class CoordinateTable:
 
         return None
 
-    def resolve_grid_coord(
-        self, request: Axis | Mapping[str, Any]
-    ) -> AxisEntry | None:
+    def resolve_grid_coord(self, request: Axis | Mapping[str, Any]) -> AxisEntry | None:
         """Return the best-matching grid-coordinate :class:`AxisEntry`, or ``None``."""
         data = request.to_dict() if isinstance(request, Axis) else dict(request)
         requested = str(
@@ -360,9 +354,7 @@ class CoordinateTable:
                 matches = narrowed
         return matches
 
-    def _match_by_attrs(
-        self, data: dict[str, Any]
-    ) -> list[tuple[str, AxisEntry]]:
+    def _match_by_attrs(self, data: dict[str, Any]) -> list[tuple[str, AxisEntry]]:
         out_name = data.get("out_name")
         std_name = data.get("standard_name")
         if not out_name and not std_name:
@@ -423,9 +415,7 @@ class FormulaTable:
     # Resolution
     # ------------------------------------------------------------------
 
-    def resolve(
-        self, request: ZFactor | Mapping[str, Any]
-    ) -> ZFactorEntry | None:
+    def resolve(self, request: ZFactor | Mapping[str, Any]) -> ZFactorEntry | None:
         """Return the matching :class:`ZFactorEntry`, or ``None``.
 
         Tries direct name match first, then ``out_name`` match.
@@ -816,9 +806,7 @@ class VariableTable:
 
         # Fall back to out_name matching
         matches = [
-            e
-            for e in self.entries.values()
-            if str(e.out_name or e.name) == requested
+            e for e in self.entries.values() if str(e.out_name or e.name) == requested
         ]
         if len(matches) == 1:
             return matches[0]
@@ -1073,11 +1061,7 @@ class VariableTable:
                 f"positive={user_pos!r} does not match "
                 f"{entry.table_id}:{entry.name} value {table_pos!r}."
             )
-        if (
-            "positive" in required
-            and table_pos is not None
-            and user_pos in (None, "")
-        ):
+        if "positive" in required and table_pos is not None and user_pos in (None, ""):
             raise TableValidationError(
                 f"variable {entry.table_id}:{entry.name} requires 'positive' "
                 f"(expected {table_pos!r})."
@@ -1119,11 +1103,7 @@ class VariableTable:
                 matches = str(user_val) in {str(item) for item in expected}
             else:
                 matches = str(user_val) == str(expected)
-            if (
-                expected is not None
-                and user_val is not None
-                and not matches
-            ):
+            if expected is not None and user_val is not None and not matches:
                 raise TableValidationError(
                     f"{key}={user_val!r} does not match "
                     f"{entry.table_id}:{entry.name} value {expected!r}."

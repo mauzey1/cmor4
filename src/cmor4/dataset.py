@@ -414,9 +414,7 @@ def write_netcdf(
     # Default is True for backwards-compatibility with CMOR4's original
     # always-create behaviour.
     create_subdirs = (
-        True
-        if dataset.create_subdirectories is None
-        else dataset.create_subdirectories
+        True if dataset.create_subdirectories is None else dataset.create_subdirectories
     )
     if create_subdirs:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -600,14 +598,10 @@ def build_output_path(
         cv_path_tmpl, cv_file_tmpl = cv.drs.templates()
 
     path_template = str(
-        dataset.output_path_template
-        or cv_path_tmpl
-        or DEFAULT_OUTPUT_PATH_TEMPLATE
+        dataset.output_path_template or cv_path_tmpl or DEFAULT_OUTPUT_PATH_TEMPLATE
     )
     file_template = str(
-        dataset.output_file_template
-        or cv_file_tmpl
-        or DEFAULT_OUTPUT_FILE_TEMPLATE
+        dataset.output_file_template or cv_file_tmpl or DEFAULT_OUTPUT_FILE_TEMPLATE
     )
 
     if (
