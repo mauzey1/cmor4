@@ -573,7 +573,7 @@ Add your own validation logic:
 
    # Use before cmorize
    validate_data(data, variable)
-   path = cmor4.cmorize(data, dataset, variable, axes)
+   path = cmor4.cmorize(dataset, variable, axes, data)
 
 Parallel Processing
 -------------------
@@ -609,7 +609,7 @@ Process Multiple Variables in Parallel
        variable = project.variable(var_name, table_id="atmos")
        data = load_data(var_name)
 
-       path = cmor4.cmorize(data, dataset, variable, axes)
+       path = cmor4.cmorize(dataset, variable, axes, data)
     
        return path
 
@@ -662,7 +662,7 @@ Post-Processing CMOR Output
 .. code-block:: python
 
    # Create CMOR file
-   path = cmor4.cmorize(data, dataset, variable, axes)
+   path = cmor4.cmorize(dataset, variable, axes, data)
 
    # Open and post-process
    ds = xr.open_dataset(path)

@@ -1,7 +1,7 @@
 CMOR4 Documentation
 ===================
 
-CMOR4 is a Python package for creating CF-compliant climate model output in NetCDF format. It validates metadata against project tables (CMIP7, obs4MIPs, DRCDP) and constructs xarray datasets from Python metadata objects, streamlining the production of standards-compliant climate datasets.
+CMOR4 is a Python package for creating CF-compliant climate model output in NetCDF format. It validates metadata against project tables (CMIP7, obs4MIPs, DRCDP) and writes standards-compliant NetCDF files from Python metadata and data objects.
 
 .. toctree::
    :maxdepth: 2
