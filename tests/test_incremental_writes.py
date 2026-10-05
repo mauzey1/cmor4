@@ -158,7 +158,7 @@ class DatasetWriterTest(unittest.TestCase):
             writer_axes = [time_axis(self.project), *horizontal_axes(self.project)]
             data = np.arange(8, dtype="f4").reshape(2, 2, 2)
 
-            expected, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -176,10 +176,9 @@ class DatasetWriterTest(unittest.TestCase):
                 time_values=[15.0, 45.0],
                 time_bounds=[[0.0, 30.0], [30.0, 60.0]],
             )
-            actual, path = writer.close()
+            path = writer.close()
 
             self.assertEqual(path, tmp_path / "writer.nc")
-            xr.testing.assert_identical(equivalent(actual), equivalent(expected))
             assert_files_equivalent(self, path, expected_path)
 
     def test_multiple_writes_match_cmorize(self) -> None:
@@ -196,7 +195,7 @@ class DatasetWriterTest(unittest.TestCase):
             writer_axes = [time_axis(self.project), *horizontal_axes(self.project)]
             data = np.arange(8, dtype="f4").reshape(2, 2, 2)
 
-            expected, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -220,10 +219,9 @@ class DatasetWriterTest(unittest.TestCase):
                 time_bounds=[[30.0, 60.0]],
             )
 
-            actual, _ = writer.close()
+            path = writer.close()
 
-            xr.testing.assert_identical(equivalent(actual), equivalent(expected))
-            assert_files_equivalent(self, tmp_path / "writer.nc", expected_path)
+            assert_files_equivalent(self, path, expected_path)
 
     def test_chunked_zfactor_writes_match_cmorize(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -257,7 +255,7 @@ class DatasetWriterTest(unittest.TestCase):
                 axis=0,
             )
 
-            _, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -285,15 +283,14 @@ class DatasetWriterTest(unittest.TestCase):
                 zfactors={"ps": ps[1:]},
             )
 
-            actual, path = writer.close()
+            path = writer.close()
 
             with xr.open_dataset(
-                expected_path,
+                path,
                 decode_times=False,
                 mask_and_scale=False,
-            ) as expected_open:
-                expected = expected_open.load()
-            xr.testing.assert_identical(equivalent(actual), equivalent(expected))
+            ) as actual_open:
+                actual = actual_open.load()
             assert_files_equivalent(self, path, expected_path)
             self.assertEqual(
                 actual["lev"].attrs["formula_terms"],
@@ -473,8 +470,7 @@ class DatasetWriterTest(unittest.TestCase):
                 return original_getitem(array, selection)
 
             with mock.patch.object(zarr_type, "__getitem__", guarded_getitem):
-                ds, path = writer.close()
-                ds.close()
+                path = writer.close()
 
             self.assertTrue(path.exists())
             self.assertEqual(full_reads, [])
@@ -504,8 +500,7 @@ class DatasetWriterTest(unittest.TestCase):
 
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
-                ds, _ = writer.close()
-                ds.close()
+                _ = writer.close()
 
             messages = [str(warning.message) for warning in caught]
             self.assertFalse(
@@ -643,8 +638,7 @@ class DatasetWriterTest(unittest.TestCase):
                 time_bounds=[[0.0, 30.0]],
                 zfactors={"ps": ps1},
             )
-            ds1, path1 = writer.close(preserve_definition=True)
-            ds1.close()
+            path1 = writer.close(preserve_definition=True)
 
             # Write second file segment with different data
             data2 = np.arange(8, 16, dtype="f4").reshape(1, 2, 2, 2)
@@ -655,8 +649,7 @@ class DatasetWriterTest(unittest.TestCase):
                 time_bounds=[[30.0, 60.0]],
                 zfactors={"ps": ps2},
             )
-            ds2, path2 = writer.close()
-            ds2.close()
+            path2 = writer.close()
 
             # Verify both files exist and have correct zfactor data
             with xr.open_dataset(path1, decode_times=False) as file1:

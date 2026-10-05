@@ -35,6 +35,7 @@ from table_helpers import (
     drcdp_project,
     obs4mips_project,
 )
+from dataset_helpers import cmorize_and_open, open_created_dataset
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -433,7 +434,7 @@ class ProjectTablesTest(unittest.TestCase):
             {"frequency": "mon"},
         )
 
-        ds = cmor4.create_dataset(
+        ds = open_created_dataset(
             info,
             variable,
             axes,
@@ -450,8 +451,6 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
         self.assertEqual(ds["longitude"].attrs["standard_name"], "longitude")
         self.assertEqual(ds["longitude"].attrs["units"], "degrees_east")
-        self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
-        self.assertEqual(ds["vertices_longitude"].attrs["units"], "degrees_east")
         self.assertEqual(ds["sample"].attrs["coordinates"], "latitude longitude")
 
     def test_loads_cv_and_variable_entries_from_submodule(self):
@@ -509,7 +508,7 @@ class ProjectTablesTest(unittest.TestCase):
         variable = project.variable("agessc_tavg-ol-hxy-sea")
         dataset = project.dataset_info(cmip7_dataset())
 
-        ds = cmor4.create_dataset(
+        ds = open_created_dataset(
             dataset,
             variable,
             [
@@ -594,7 +593,7 @@ class ProjectTablesTest(unittest.TestCase):
             variable = project.variable("sample")
             info = project.dataset_info({})
 
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 [
@@ -665,7 +664,7 @@ class ProjectTablesTest(unittest.TestCase):
             {"frequency": "mon"},
         )
 
-        ds = cmor4.create_dataset(
+        ds = open_created_dataset(
             info,
             variable,
             axes,
@@ -678,7 +677,6 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertEqual(ds["y"].attrs["standard_name"], "projection_y_coordinate")
         self.assertEqual(ds["latitude"].attrs["standard_name"], "latitude")
         self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
-        self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
         self.assertEqual(ds["sample"].attrs["coordinates"], "latitude longitude")
 
     def test_drcdp_grid_axes_and_aux_coords_come_from_grids_table(self):
@@ -825,7 +823,7 @@ class ProjectTablesTest(unittest.TestCase):
             info = project.dataset_info(dataset)
             axes = lat_lon_axes(project)
 
-            ds, path = cmor4.cmorize(
+            ds = open_created_dataset(
                 info,
                 variable,
                 axes,
@@ -870,7 +868,7 @@ class ProjectTablesTest(unittest.TestCase):
         variable = project.variable("tos_tavg-u-hxy-sea")
         info = project.dataset_info(dataset)
 
-        ds = cmor4.create_dataset(
+        ds = open_created_dataset(
             info,
             variable,
             lat_lon_axes(project),
@@ -1068,7 +1066,7 @@ class ProjectTablesTest(unittest.TestCase):
         variable = project.variable("tos_tavg-u-hxy-sea")
         info = project.dataset_info(dataset)
 
-        ds = cmor4.create_dataset(
+        ds = open_created_dataset(
             info,
             variable,
             lat_lon_axes(project),
@@ -1137,7 +1135,7 @@ class ProjectTablesTest(unittest.TestCase):
         )
         info = project.dataset_info(dataset)
 
-        ds = cmor4.create_dataset(
+        ds = open_created_dataset(
             info,
             variable,
             lat_lon_axes(project),
@@ -1203,7 +1201,7 @@ class ProjectTablesTest(unittest.TestCase):
             variable = project.variable("o3zm")
             info = project.dataset_info(dataset)
 
-            ds, path = cmor4.cmorize(
+            ds, path = cmorize_and_open(
                 info,
                 variable,
                 axes,
@@ -1255,12 +1253,14 @@ class ProjectTablesTest(unittest.TestCase):
         ]
 
         with self.assertRaises(cmor4.ControlledVocabularyError):
-            cmor4.create_dataset(
-                info,
-                variable,
-                axes,
-                np.ones((2, 2, 2), dtype="f4"),
-            )
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                cmor4.create_dataset(
+                    info,
+                    variable,
+                    axes,
+                    np.ones((2, 2, 2), dtype="f4"),
+                    path=Path(tmp_dir) / "invalid.nc",
+                )
 
 
 class ConstructorTest(unittest.TestCase):

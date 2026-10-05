@@ -42,7 +42,7 @@ def _coords(axes: list[Axis]) -> dict:
 def test_generated_file_contains_derived_leadtime(tmp_path):
     axes = [_time(), _reftime()]
 
-    _, path = cmorize(
+    path = cmorize(
         DatasetInfo(calendar="standard", frequency="6hr"),
         Variable(name="tas", dimensions=("time",), units="K"),
         axes,
@@ -72,7 +72,7 @@ def test_generated_file_supports_size_one_nonscalar_reftime(tmp_path):
         ),
     ]
 
-    _, path = cmorize(
+    path = cmorize(
         DatasetInfo(calendar="standard", frequency="mon"),
         Variable(name="tas", dimensions=("time", "reftime1"), units="K"),
         axes,
@@ -108,8 +108,7 @@ def test_dataset_writer_derives_leadtime_across_chunked_writes(tmp_path):
         time_bounds=[[75.0, 105.0], [105.0, 135.0]],
     )
 
-    result, path = writer.close()
-    result.close()
+    path = writer.close()
 
     assert path.is_file()
     with Dataset(path) as output:
@@ -146,7 +145,7 @@ def test_generated_file_retains_valid_explicit_leadtime(tmp_path):
     )
     axes = [_time(), _reftime(), leadtime]
 
-    _, path = cmorize(
+    path = cmorize(
         DatasetInfo(calendar="standard", frequency="6hr"),
         Variable(name="tas", dimensions=("time",), units="K"),
         axes,
@@ -182,7 +181,7 @@ def test_generated_file_uses_the_requested_calendar(tmp_path):
         _time(values=(0.0, 30.0), units="days since 2001-01-01"),
         _reftime(values=(0.0,), units="days since 2000-12-01"),
     ]
-    _, path = cmorize(
+    path = cmorize(
         DatasetInfo(calendar="360_day", frequency="mon"),
         Variable(name="tas", dimensions=("time",), units="K"),
         axes,

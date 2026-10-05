@@ -69,7 +69,7 @@ Simple 3D Dataset (time, lat, lon)
    data = np.random.randn(len(time_values), 180, 360) * 10 + 288.0
 
    # Write to NetCDF
-   ds, output_path = cmor4.cmorize(
+   output_path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -78,7 +78,6 @@ Simple 3D Dataset (time, lat, lon)
 
    print(f"Wrote {output_path}")
    print(f"File size: {ds.nbytes / 1e6:.1f} MB")
-   ds.close()
 
 4D Dataset with Height Levels
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -124,7 +123,7 @@ Simple 3D Dataset (time, lat, lon)
    # Create 4D data (time, plev, lat, lon)
    data = np.random.randn(1, len(plev_values), 90, 180) * 15 + 250.0
 
-   ds, output_path = cmor4.cmorize(
+   output_path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -132,7 +131,6 @@ Simple 3D Dataset (time, lat, lon)
    )
 
    print(f"Wrote {output_path}")
-   ds.close()
 
 Custom Compression Settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -152,7 +150,7 @@ Control NetCDF encoding and compression:
        }
    }
 
-   ds, output_path = cmor4.cmorize(
+   output_path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -173,7 +171,7 @@ Add custom metadata to your output files:
        "references": "doi:10.1234/example",
    }
 
-   ds, output_path = cmor4.cmorize(
+   output_path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -195,7 +193,7 @@ Handle missing values properly:
    mask = np.random.random((12, 180, 360)) < 0.1  # 10% missing
    masked_data = ma.masked_array(data, mask=mask)
 
-   ds, output_path = cmor4.cmorize(
+   output_path = cmor4.cmorize(
        data=masked_data,
        dataset=dataset,
        variable=variable,
@@ -217,7 +215,7 @@ Process multiple variables or experiments:
        # Generate appropriate data for this variable
        data = generate_data_for_variable(var_name)
 
-       ds, output_path = cmor4.cmorize(
+       output_path = cmor4.cmorize(
            data=data,
            dataset=dataset,
            variable=variable,
@@ -225,8 +223,7 @@ Process multiple variables or experiments:
        )
 
        print(f"Wrote {var_name}: {output_path}")
-       ds.close()
-
+    
 Error Handling
 --------------
 
@@ -235,7 +232,7 @@ Handle validation errors gracefully:
 .. code-block:: python
 
    try:
-       ds, output_path = cmor4.cmorize(
+       output_path = cmor4.cmorize(
            data=data,
            dataset=dataset,
            variable=variable,

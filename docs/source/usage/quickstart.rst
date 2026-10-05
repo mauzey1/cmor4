@@ -70,7 +70,7 @@ Here's a minimal example of creating a CMOR-compliant NetCDF file:
    data = np.random.randn(3, 2, 2) * 5 + 290.0  # Ocean temperature in K
 
    # Write to NetCDF
-   ds, output_path = cmor4.cmorize(
+   output_path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -78,7 +78,6 @@ Here's a minimal example of creating a CMOR-compliant NetCDF file:
    )
 
    print(f"Created: {output_path}")
-   ds.close()
 
 What Just Happened?
 -------------------

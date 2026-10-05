@@ -61,7 +61,7 @@ For non-rectangular grids (e.g., tripolar ocean grids):
    variable = project.variable("tos", table_id="ocean")
 
    # Create dataset with 2D spatial grid
-   ds, path = cmor4.cmorize(
+   path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -202,7 +202,7 @@ For atmospheric model levels:
 
    variable = project.variable("ta", table_id="atmos")
 
-   ds, path = cmor4.cmorize(
+   path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -321,7 +321,7 @@ CMOR4 automatically derives forecast coordinates for forecast/initialized model 
 
    # CMOR4 automatically generates leadtime coordinate
    # leadtime[i] = time[i] - reftime
-   ds, path = cmor4.cmorize(
+   path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -424,7 +424,7 @@ Variables with no spatial dimensions:
 
    data = np.random.randn(len(time_axis.values)) * 0.5 + 288.0
 
-   ds, path = cmor4.cmorize(
+   path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -456,7 +456,7 @@ Data at specific locations:
 
    data = np.random.randn(1, 3) * 5 + 288.0  # (time, site)
 
-   ds, path = cmor4.cmorize(
+   path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -492,7 +492,7 @@ Processing Multiple Variants
        # Load ensemble member data
        data = load_ensemble_data(variant)
 
-       ds, path = cmor4.cmorize(
+       path = cmor4.cmorize(
            data=data,
            dataset=dataset_info,
            variable=variable,
@@ -500,8 +500,7 @@ Processing Multiple Variants
        )
 
        print(f"Wrote {variant}: {path}")
-       ds.close()
-
+    
 Multiple Experiments
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -525,7 +524,7 @@ Multiple Experiments
        # Load experiment-specific data
        data = load_experiment_data(experiment)
 
-       ds, path = cmor4.cmorize(
+       path = cmor4.cmorize(
            data=data,
            dataset=dataset_info,
            variable=variable,
@@ -533,8 +532,7 @@ Multiple Experiments
        )
 
        print(f"Wrote {experiment}: {path}")
-       ds.close()
-
+    
 Custom Validation
 -----------------
 
@@ -575,7 +573,7 @@ Add your own validation logic:
 
    # Use before cmorize
    validate_data(data, variable)
-   ds, path = cmor4.cmorize(data, dataset, variable, axes)
+   path = cmor4.cmorize(data, dataset, variable, axes)
 
 Parallel Processing
 -------------------
@@ -611,9 +609,8 @@ Process Multiple Variables in Parallel
        variable = project.variable(var_name, table_id="atmos")
        data = load_data(var_name)
 
-       ds, path = cmor4.cmorize(data, dataset, variable, axes)
-       ds.close()
-
+       path = cmor4.cmorize(data, dataset, variable, axes)
+    
        return path
 
    # Process in parallel
@@ -652,7 +649,7 @@ Starting from Xarray Datasets
        project.axis("longitude", values=lon_values.tolist()),
    ]
 
-   ds_out, path = cmor4.cmorize(
+   path = cmor4.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -665,8 +662,7 @@ Post-Processing CMOR Output
 .. code-block:: python
 
    # Create CMOR file
-   ds, path = cmor4.cmorize(data, dataset, variable, axes)
-   ds.close()
+   path = cmor4.cmorize(data, dataset, variable, axes)
 
    # Open and post-process
    ds = xr.open_dataset(path)
@@ -705,7 +701,7 @@ Observational Data
    # Process observational data
    variable = project.variable("ta", table_id="satellite")
 
-   ds, path = cmor4.cmorize(
+   path = cmor4.cmorize(
        data=obs_data,
        dataset=dataset,
        variable=variable,

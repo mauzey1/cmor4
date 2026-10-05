@@ -51,10 +51,12 @@ def create_dataset(
     *,
     zfactors: Sequence[ZFactor] | None = None,
     grid: Grid | None = None,
+    path: str | Path | None = None,
     attrs: Mapping[str, Any] | None = None,
     encoding: Mapping[str, Any] | None = None,
-) -> xr.Dataset:
-    """Create an xarray dataset from metadata objects.
+    **to_netcdf_kwargs: Any,
+) -> Path:
+    """Create and write a CMOR-like NetCDF file from metadata objects.
 
     When ``dataset`` was created by :meth:`ProjectTables.dataset_info`, this
     function uses the associated project tables to fill dataset-level defaults,
@@ -83,18 +85,22 @@ def create_dataset(
         Optional hybrid-coordinate formula-term variables.
     grid:
         Optional runtime grid dimensions and grid-mapping metadata.
+    path:
+        Explicit output path. If omitted, the CMOR-like path is rendered from
+        metadata.
     attrs:
         Extra global attributes.
     encoding:
         Optional encoding parameters (chunksizes, compression, etc.) to apply
         to variables. For CMIP7 datasets, user-provided chunksizes are validated
         for compliance.
+    **to_netcdf_kwargs:
+        Additional keyword arguments forwarded to ``xarray.Dataset.to_netcdf``.
 
     Returns
     -------
-    xr.Dataset
-        Dataset containing the requested variable, coordinates, bounds,
-        formula terms, grid mapping, and global attributes.
+    pathlib.Path
+        Path to the written NetCDF file.
 
     Raises
     ------
@@ -112,14 +118,16 @@ def create_dataset(
         requested metadata, or if CMIP7 chunking requirements are not met.
     """
 
+    dataset, variable = _dataset_for_variable(dataset, variable)
     ctx = validate_metadata(dataset, variable, axes, zfactors, grid)
     data_array = validate_data_chunk(ctx, data)
-    return create_dataset_from_validated_data(
+    ds = create_dataset_from_validated_data(
         ctx,
         data_array,
         attrs=attrs,
         encoding=encoding,
     )
+    return write_netcdf(ds, dataset, variable, path=path, **to_netcdf_kwargs)
 
 
 def create_dataset_from_validated_data(
@@ -443,7 +451,7 @@ def cmorize(
     attrs: Mapping[str, Any] | None = None,
     encoding: Mapping[str, Any] | None = None,
     **to_netcdf_kwargs: Any,
-) -> tuple[xr.Dataset, Path]:
+) -> Path:
     """Create and write a CMOR-like NetCDF file from metadata objects.
 
     For CMIP7 datasets, CMIP7-compliant chunking is automatically applied unless
@@ -477,23 +485,21 @@ def cmorize(
 
     Returns
     -------
-    tuple[xr.Dataset, pathlib.Path]
-        The in-memory dataset and path to the written NetCDF file.
+    pathlib.Path
+        Path to the written NetCDF file.
     """
 
     dataset, variable = _dataset_for_variable(dataset, variable)
-    ds = create_dataset(
-        dataset,
-        variable,
-        axes,
-        data,
-        zfactors=zfactors,
-        grid=grid,
+    ctx = validate_metadata(dataset, variable, axes, zfactors, grid)
+    data_array = validate_data_chunk(ctx, data)
+    ds = create_dataset_from_validated_data(
+        ctx,
+        data_array,
         attrs=attrs,
         encoding=encoding,
     )
     output_path = write_netcdf(ds, dataset, variable, path=path, **to_netcdf_kwargs)
-    return ds, output_path
+    return output_path
 
 
 def open_dataset(path: str | Path, **kwargs: Any) -> xr.Dataset:
@@ -611,7 +617,7 @@ def build_output_path(
     ):
         file_template += "<time_range>"
 
-    directory = render_template(path_template, tokens, "/")
+    directory = render_template(path_template, tokens, "/").strip("/")
     filename = render_template(file_template, tokens, "_") + ".nc"
 
     return root / directory / filename

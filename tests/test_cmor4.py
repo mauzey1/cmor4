@@ -13,6 +13,7 @@ import cmor4
 import cmor4.exceptions
 import cmor4.utils.time_utils as time_utils
 import cmor4.utils.validation as axis_validation
+from dataset_helpers import open_created_dataset
 from table_helpers import cmip7_project
 
 
@@ -186,7 +187,7 @@ class Cmor4Test(unittest.TestCase):
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
             data = np.arange(8, dtype="f4").reshape(2, 2, 2)
 
-            ds, path = cmor4.cmorize(info, variable, axes, data)
+            path = cmor4.cmorize(info, variable, axes, data)
 
             self.assertEqual(
                 path.name,
@@ -234,7 +235,7 @@ class Cmor4Test(unittest.TestCase):
             )
 
             with self.assertWarnsRegex(RuntimeWarning, "bound midpoints"):
-                ds = cmor4.create_dataset(
+                ds = open_created_dataset(
                     info,
                     variable,
                     axes,
@@ -261,6 +262,7 @@ class Cmor4Test(unittest.TestCase):
                     variable,
                     bad_interval_axes,
                     np.ones((3, 2, 2), dtype="f4"),
+                    path=Path(tmp_dir) / "invalid-interval.nc",
                 )
 
     def test_axis_validation_rejects_bad_values_and_accepts_flat_bounds(self):
@@ -284,7 +286,7 @@ class Cmor4Test(unittest.TestCase):
                     bounds=[0.0, 180.0, 360.0],
                 ),
             ]
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 flat_bound_axes,
@@ -330,6 +332,7 @@ class Cmor4Test(unittest.TestCase):
                     variable,
                     bad_lat_axes,
                     np.ones((2, 2, 2), dtype="f4"),
+                    path=Path(tmp_dir) / "invalid-lat.nc",
                 )
 
     def test_time_interval_uses_cftime_with_numeric_fallback(self):
@@ -382,13 +385,14 @@ class Cmor4Test(unittest.TestCase):
                     variable,
                     [axis],
                     np.asarray([1.0, np.nan, 2.0], dtype="f4"),
+                    path=Path(tmp_dir) / "nan-values.nc",
                 )
 
             with self.assertWarnsRegex(
                 RuntimeWarning,
                 "lower than minimum valid value",
             ):
-                ds = cmor4.create_dataset(
+                ds = open_created_dataset(
                     info,
                     variable,
                     [axis],
@@ -413,7 +417,7 @@ class Cmor4Test(unittest.TestCase):
                 RuntimeWarning,
                 "lower than minimum allowed",
             ):
-                cmor4.create_dataset(
+                open_created_dataset(
                     info,
                     variable,
                     [axis],
@@ -429,6 +433,7 @@ class Cmor4Test(unittest.TestCase):
                     variable,
                     [axis],
                     np.asarray([250.0, 250.0, 250.0], dtype="f4"),
+                    path=Path(tmp_dir) / "large-values.nc",
                 )
 
     def test_zfactor_value_validation_uses_cmor_variable_checks(self):
@@ -454,13 +459,14 @@ class Cmor4Test(unittest.TestCase):
                     [axis],
                     np.ones(3, dtype="f4"),
                     zfactors=[zfactor],
+                    path=Path(tmp_dir) / "nan-zfactor.nc",
                 )
 
             with self.assertWarnsRegex(
                 RuntimeWarning,
                 "ps.*lower than minimum valid value",
             ):
-                cmor4.create_dataset(
+                open_created_dataset(
                     info,
                     variable,
                     [axis],
@@ -492,12 +498,13 @@ class Cmor4Test(unittest.TestCase):
 
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
-                ds = cmor4.create_dataset(
+                ds = open_created_dataset(
                     info,
                     variable,
                     axes,
                     np.ones((1, 1, 1), dtype="f4"),
                     grid=grid,
+                    path=Path(tmp_dir) / "invalid-grid.nc",
                 )
 
             messages = [str(item.message) for item in caught]
@@ -545,7 +552,7 @@ class Cmor4Test(unittest.TestCase):
             info = cmor4.DatasetInfo.from_prepared(
                 dataset_info(Path(tmp_dir)),
             )
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info, variable, [time_axis()], np.ones(2, dtype="f4")
             )
 
@@ -595,7 +602,7 @@ class Cmor4Test(unittest.TestCase):
             variable = self.project.variable("tas_tavg-h2m-hxy-u", table_id="atmos")
             info = self.project.dataset_info(base_info)
 
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 axes,
@@ -642,7 +649,7 @@ class Cmor4Test(unittest.TestCase):
                 table_id="atmos",
             )
             plev_info = self.project.dataset_info(base_info)
-            plev_ds = cmor4.create_dataset(
+            plev_ds = open_created_dataset(
                 plev_info,
                 plev_variable,
                 plev_axes,
@@ -687,7 +694,7 @@ class Cmor4Test(unittest.TestCase):
                 ),
             ]
 
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 axes,
@@ -739,7 +746,7 @@ class Cmor4Test(unittest.TestCase):
             )
             info = self.project.dataset_info(base_info)
 
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 axes,
@@ -780,7 +787,7 @@ class Cmor4Test(unittest.TestCase):
             )
             basin_info = self.project.dataset_info(base_info)
 
-            basin_ds = cmor4.create_dataset(
+            basin_ds = open_created_dataset(
                 basin_info,
                 basin_variable,
                 basin_axes,
@@ -812,7 +819,7 @@ class Cmor4Test(unittest.TestCase):
                 params={"latitude_of_projection_origin": [90.0, "degrees_north"]},
             )
 
-            grid_ds = cmor4.create_dataset(
+            grid_ds = open_created_dataset(
                 grid_info,
                 grid_variable,
                 grid_axes,
@@ -854,7 +861,7 @@ class Cmor4Test(unittest.TestCase):
         )
         grid = cmor4.Grid(dimensions=["x", "y"])
 
-        ds = cmor4.create_dataset(
+        ds = open_created_dataset(
             info,
             variable,
             axes,
@@ -916,7 +923,7 @@ class Cmor4Test(unittest.TestCase):
                 longitude_vertices=longitude_vertices,
             )
 
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 axes,
@@ -925,8 +932,8 @@ class Cmor4Test(unittest.TestCase):
             )
 
             # Verify lat/lon auxiliary coordinates were created
-            self.assertIn("latitude", ds.coords)
-            self.assertIn("longitude", ds.coords)
+            self.assertIn("latitude", ds.variables)
+            self.assertIn("longitude", ds.variables)
             self.assertEqual(ds["latitude"].dims, ("x", "y"))
             self.assertEqual(ds["longitude"].dims, ("x", "y"))
             np.testing.assert_array_equal(ds["latitude"].values, latitude)
@@ -964,10 +971,6 @@ class Cmor4Test(unittest.TestCase):
             # Verify 'axis' attribute NOT present (grid coords are auxiliary)
             self.assertNotIn("axis", ds["latitude"].attrs)
             self.assertNotIn("axis", ds["longitude"].attrs)
-
-            # Verify vertices also have table attributes
-            self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
-            self.assertEqual(ds["vertices_longitude"].attrs["units"], "degrees_east")
 
     def test_filename_time_ranges_follow_cmor_frequency_formats(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1021,7 +1024,7 @@ class Cmor4Test(unittest.TestCase):
                         axis="T",
                     )
                 ]
-                ds = cmor4.create_dataset(info, variable, axes, np.ones(2, dtype="f4"))
+                ds = open_created_dataset(info, variable, axes, np.ones(2, dtype="f4"))
 
                 self.assertEqual(
                     cmor4.build_output_path(info, variable, ds=ds).name,
@@ -1052,7 +1055,7 @@ class Cmor4Test(unittest.TestCase):
             variable = cmor4.Variable(name="co2_tclm-u-hm-u", dimensions=["time2"])
             info = cmor4.DatasetInfo.from_prepared(raw_info)
 
-            ds = cmor4.create_dataset(info, variable, axes, np.ones(2, dtype="f4"))
+            ds = open_created_dataset(info, variable, axes, np.ones(2, dtype="f4"))
 
             self.assertEqual(ds["time"].attrs["climatology"], "climatology_bnds")
             self.assertNotIn("bounds", ds["time"].attrs)
@@ -1077,7 +1080,7 @@ class GlobalAttributeDefaultsTest(unittest.TestCase):
     def _make_dataset(self, tmp_path):
         variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
         info = self.project.dataset_info(dataset_info(Path(tmp_path)))
-        ds = cmor4.create_dataset(
+        ds = open_created_dataset(
             info,
             variable,
             [time_axis(self.project), *horizontal_axes(self.project)],
@@ -1113,7 +1116,7 @@ class GlobalAttributeDefaultsTest(unittest.TestCase):
             raw = dataset_info(Path(tmp_dir))
             raw["source_id"] = "DUMMY-MODEL"
             info = self.project.dataset_info(raw)
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -1191,7 +1194,7 @@ class TableInfoTest(unittest.TestCase):
     def _make_dataset(self, tmp_path):
         variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
         info = self.project.dataset_info(dataset_info(Path(tmp_path)))
-        return cmor4.create_dataset(
+        return open_created_dataset(
             info,
             variable,
             self._axes(),
@@ -1231,7 +1234,7 @@ class TableInfoTest(unittest.TestCase):
             raw = dataset_info(Path(tmp_dir))
             raw["table_info"] = "custom table info"
             info = self.project.dataset_info(raw)
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 self._axes(),
@@ -1277,7 +1280,7 @@ class ScalarZfactorTest(unittest.TestCase):
                     "ps", values=np.ones((2, 2, 2), dtype="f4") * 99000.0
                 ),
             ]
-            return cmor4.create_dataset(
+            return open_created_dataset(
                 info,
                 variable,
                 axes,

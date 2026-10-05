@@ -170,7 +170,7 @@ class DatasetWriter:
     See Also
     --------
     cmorize : Single-pass dataset creation for data that fits in memory.
-    create_dataset : Lower-level function for constructing xarray datasets.
+    create_dataset : Single-pass NetCDF creation returning the output path.
 
     Notes
     -----
@@ -225,7 +225,7 @@ class DatasetWriter:
     ...     encoding=encoding,
     ... )
     >>> writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
-    >>> ds, path = writer.close()
+    >>> path = writer.close()
 
     **Writing multiple file segments:**
 
@@ -233,10 +233,10 @@ class DatasetWriter:
     ...     dataset, variable, axes, path="segment-1.nc"
     ... )
     >>> writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
-    >>> ds1, path1 = writer.close(preserve_definition=True)
+    >>> path1 = writer.close(preserve_definition=True)
     >>> writer.path = Path("segment-2.nc")
     >>> writer.write(data2, time_values=[115.0], time_bounds=[[100.0, 130.0]])
-    >>> ds2, path2 = writer.close()
+    >>> path2 = writer.close()
 
     **Incremental zfactor writes (hybrid coordinates):**
 
@@ -482,7 +482,7 @@ class DatasetWriter:
         self,
         *,
         preserve_definition: bool = False,
-    ) -> tuple[xr.Dataset, Path]:
+    ) -> Path:
         """Finalize the staged data and write the NetCDF file.
 
         Streams data from the Zarr staging store to the final NetCDF file using
@@ -498,10 +498,7 @@ class DatasetWriter:
 
         Returns
         -------
-        dataset : xarray.Dataset
-            The written dataset, opened from the output file. This is a loaded
-            dataset (not lazy) suitable for inspection or further processing.
-        path : Path
+        pathlib.Path
             Absolute path to the written NetCDF file.
 
         Raises
@@ -525,7 +522,7 @@ class DatasetWriter:
         3. Constructs an xarray Dataset with proper metadata and attributes
         4. Streams data chunk-by-chunk to the NetCDF file via xarray
         5. Cleans up the temporary Zarr staging directory
-        6. Opens and loads the final NetCDF file for return
+        6. Returns the final NetCDF file path
 
         Memory usage during close is bounded by chunk size plus ~20-70 MB
         for metadata and coordinate arrays.
@@ -537,9 +534,10 @@ class DatasetWriter:
         >>> writer = cmor4.DatasetWriter(dataset, variable, axes)
         >>> writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
         >>> writer.write(data2, time_values=[45.0], time_bounds=[[30.0, 60.0]])
-        >>> ds, path = writer.close()
+        >>> path = writer.close()
         >>> print(f"Wrote {path}")
-        >>> print(f"Time range: {ds.time.values}")
+        >>> with cmor4.open_dataset(path, decode_times=False) as ds:
+        ...     print(f"Time range: {ds.time.values}")
 
         **With context manager (automatic close):**
 
@@ -547,12 +545,12 @@ class DatasetWriter:
         ...     writer.write(data, time_values=times, time_bounds=bounds)
         ...     # close() called automatically on context exit
 
-        **Inspect returned dataset:**
+        **Inspect written dataset:**
 
-        >>> ds, path = writer.close()
-        >>> print(ds.data_vars)  # Show variables
-        >>> print(ds.attrs)      # Show global attributes
-        >>> ds.close()           # Close when done inspecting
+        >>> path = writer.close()
+        >>> with cmor4.open_dataset(path) as ds:
+        ...     print(ds.data_vars)  # Show variables
+        ...     print(ds.attrs)      # Show global attributes
 
         See Also
         --------
@@ -603,11 +601,6 @@ class DatasetWriter:
                     path=output_path,
                     **self.to_netcdf_kwargs,
                 )
-            result = xr.open_dataset(
-                output_path,
-                decode_times=False,
-                mask_and_scale=False,
-            )
         except Exception:
             raise
         else:
@@ -616,7 +609,7 @@ class DatasetWriter:
             else:
                 self._closed = True
                 self._staging.cleanup()
-            return result, output_path
+            return output_path
 
     def __enter__(self) -> DatasetWriter:
         return self

@@ -17,6 +17,7 @@ import numpy as np
 import xarray as xr
 
 import cmor4
+from dataset_helpers import load_dataset
 from table_helpers import cmip7_project
 
 
@@ -141,7 +142,7 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
             ]
 
             # Create expected output with cmorize
-            expected, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 full_axes,
@@ -161,10 +162,8 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
                     time_values=[15.0, 45.0],
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
                 )
-                actual, actual_path = writer.close()
+                actual_path = writer.close()
 
-            # Compare
-            xr.testing.assert_identical(equivalent(actual), equivalent(expected))
             assert_files_equivalent(self, actual_path, expected_path)
 
     def test_int16_dtype_preserved(self) -> None:
@@ -187,7 +186,7 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
             ]
             writer_axes = [time_axis(self.project), *horizontal_axes(self.project)]
 
-            expected, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 full_axes,
@@ -206,9 +205,10 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
                     time_values=[15.0, 45.0],
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
                 )
-                actual, actual_path = writer.close()
+                actual_path = writer.close()
 
-            # Check dtype
+            actual = load_dataset(actual_path)
+            expected = load_dataset(expected_path)
             self.assertEqual(actual["tos"].dtype, expected["tos"].dtype)
             xr.testing.assert_identical(equivalent(actual), equivalent(expected))
 
@@ -231,7 +231,7 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
             ]
             writer_axes = [time_axis(self.project), *horizontal_axes(self.project)]
 
-            expected, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 full_axes,
@@ -252,9 +252,8 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
                         time_values=[time_values[i]],
                         time_bounds=[time_bounds[i]],
                     )
-                actual, actual_path = writer.close()
+                actual_path = writer.close()
 
-            xr.testing.assert_identical(equivalent(actual), equivalent(expected))
             assert_files_equivalent(self, actual_path, expected_path)
 
     def test_360day_calendar_matches_cmorize(self) -> None:
@@ -282,7 +281,7 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
                 *horizontal_axes(self.project),
             ]
 
-            expected, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 full_axes,
@@ -301,9 +300,9 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
                     time_values=[15.0, 45.0],
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
                 )
-                actual, actual_path = writer.close()
+                actual_path = writer.close()
 
-            xr.testing.assert_identical(equivalent(actual), equivalent(expected))
+            assert_files_equivalent(self, actual_path, expected_path)
 
 
 class DatasetWriterValidationTests(unittest.TestCase):
@@ -332,8 +331,7 @@ class DatasetWriterValidationTests(unittest.TestCase):
                 time_values=[15.0],
                 time_bounds=[[0.0, 30.0]],
             )
-            first, first_path = writer.close(preserve_definition=True)
-            first.close()
+            first_path = writer.close(preserve_definition=True)
 
             writer.path = tmp_path / "writer-2.nc"
             writer.write(
@@ -341,13 +339,13 @@ class DatasetWriterValidationTests(unittest.TestCase):
                 time_values=[115.0],
                 time_bounds=[[100.0, 130.0]],
             )
-            second, second_path = writer.close()
+            second_path = writer.close()
 
             self.assertTrue(first_path.exists())
             self.assertTrue(second_path.exists())
+            second = load_dataset(second_path)
             self.assertEqual(len(second["time"]), 1)
             np.testing.assert_array_equal(second["time"].values, [115.0])
-            second.close()
 
     def test_time_bounds_must_be_contiguous_by_default(self) -> None:
         """Test that non-contiguous time bounds raise error by default."""
@@ -612,8 +610,9 @@ class DatasetWriterEdgeCaseTests(unittest.TestCase):
                     time_values=[15.0, 45.0],  # List, not array
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
                 )
-                ds, _ = writer.close()
+                path = writer.close()
 
+            ds = load_dataset(path)
             np.testing.assert_array_equal(ds["time"].values, [15.0, 45.0])
 
     def test_time_bounds_as_n_plus_one_edges(self) -> None:
@@ -636,10 +635,11 @@ class DatasetWriterEdgeCaseTests(unittest.TestCase):
                     time_values=[15.0, 45.0],
                     time_bounds=[0.0, 30.0, 60.0],  # N+1 format
                 )
-                ds, _ = writer.close()
+                path = writer.close()
 
             # Should be converted to Nx2 pairs
             expected_bounds = np.array([[0.0, 30.0], [30.0, 60.0]])
+            ds = load_dataset(path)
             np.testing.assert_array_equal(ds["time_bnds"].values, expected_bounds)
 
     def test_single_time_slice_works(self) -> None:
@@ -662,8 +662,9 @@ class DatasetWriterEdgeCaseTests(unittest.TestCase):
                     time_values=[15.0],
                     time_bounds=[[0.0, 30.0]],
                 )
-                ds, path = writer.close()
+                path = writer.close()
 
+            ds = load_dataset(path)
             self.assertEqual(len(ds["time"]), 1)
             self.assertTrue(path.exists())
 
@@ -683,7 +684,7 @@ class DatasetWriterEdgeCaseTests(unittest.TestCase):
                     time_values=[15.0, 45.0],
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
                 )
-                ds, path = writer.close()
+                path = writer.close()
 
             # Check that the path exists
             self.assertTrue(path.exists(), f"Output file not found: {path}")
@@ -705,8 +706,8 @@ class DatasetWriterEdgeCaseTests(unittest.TestCase):
             )
 
             # Verify the dataset actually contains the expected time range
+            ds = load_dataset(path)
             self.assertEqual(len(ds["time"]), 2)
-            ds.close()
 
 
 if __name__ == "__main__":

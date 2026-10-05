@@ -27,6 +27,7 @@ from typing import Any
 import numpy as np
 
 from cmor4 import Axis, Grid, Variable
+from dataset_helpers import open_created_dataset
 from cmor4.exceptions import TableValidationError
 from cmor4.utils.construction import add_grid_coords
 
@@ -597,7 +598,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         data = np.random.rand(1, nj, ni).astype("f4") + 273.15
         dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
 
-        ds = create_dataset(dataset, variable, [time_axis], data, grid=grid)
+        ds = open_created_dataset(dataset, variable, [time_axis], data, grid=grid)
 
         # Variable should have dims (time, j, i)
         self.assertIn("tos", ds.data_vars)
@@ -649,7 +650,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         data = np.random.rand(1, nj, ni).astype("f4") + 273.15
         dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
 
-        ds = create_dataset(dataset, variable, [time_axis], data, grid=grid)
+        ds = open_created_dataset(dataset, variable, [time_axis], data, grid=grid)
 
         # Bounds variables must be present
         self.assertIn("vertices_latitude", ds.data_vars)
@@ -686,7 +687,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
 
         # Pass j and i explicitly in the caller's axes list as well as via grid
-        ds = create_dataset(
+        ds = open_created_dataset(
             dataset, variable, [time_axis, j_axis, i_axis], data, grid=grid
         )
 

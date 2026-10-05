@@ -830,8 +830,8 @@ class ProjectTables:
             # Validate everything before attempting to create dataset
             project.validate_dataset(dataset, variable, axes)
 
-            # If validation passes, safe to create dataset
-            ds = create_dataset(dataset, variable, axes, data)
+            # If validation passes, safe to create the NetCDF file
+            path = create_dataset(dataset, variable, axes, data)
         """
 
         # must_call_cmor_grid fast-fail: if any axis in the user-provided axes

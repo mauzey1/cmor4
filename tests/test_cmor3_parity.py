@@ -57,6 +57,7 @@ import numpy as np
 import xarray as xr
 
 from cmor4 import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
+from dataset_helpers import open_created_dataset
 from cmor4.dataset import _collect_external_variables, create_dataset, build_output_path
 from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
 from cmor4.utils.dataset_metadata import DatasetMetadata
@@ -426,7 +427,7 @@ class TestExternalVariables(unittest.TestCase):
         lat_axis = project.axis("lat", values=[-45.0, 45.0])
         lon_axis = project.axis("lon", values=[0.0, 90.0])
         data = np.ones((2, 2, 2)) * 290.0
-        ds = create_dataset(
+        ds = open_created_dataset(
             dataset_info, variable, [time_axis, lat_axis, lon_axis], data
         )
         return ds.attrs
@@ -474,7 +475,7 @@ class TestExternalVariables(unittest.TestCase):
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
             data = np.ones((2, 2, 2)) * 290.0
-            ds = create_dataset(
+            ds = open_created_dataset(
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],
@@ -522,7 +523,7 @@ class TestExternalVariables(unittest.TestCase):
                 auxiliary=True,
             )
             data = np.ones((2, 2, 2)) * 290.0
-            ds = create_dataset(
+            ds = open_created_dataset(
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis, areacello_axis],
@@ -1547,7 +1548,7 @@ class TestHistoryAttribute(unittest.TestCase):
         lat_axis = project.axis("lat", values=[-45.0, 45.0])
         lon_axis = project.axis("lon", values=[0.0, 90.0])
         data = np.ones((2, 2, 2))
-        return create_dataset(
+        return open_created_dataset(
             dataset_info, variable, [time_axis, lat_axis, lon_axis], data
         )
 
@@ -1604,7 +1605,7 @@ class TestHistoryAttribute(unittest.TestCase):
             )
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
-            ds = create_dataset(
+            ds = open_created_dataset(
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],
@@ -1639,7 +1640,7 @@ class TestHistoryAttribute(unittest.TestCase):
             )
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
-            ds = create_dataset(
+            ds = open_created_dataset(
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],
@@ -1686,7 +1687,7 @@ class TestHistoryAttribute(unittest.TestCase):
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
             override = "Custom history override."
-            ds = create_dataset(
+            ds = open_created_dataset(
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],
@@ -1932,7 +1933,7 @@ class TestNestedCVAttributes(unittest.TestCase):
             )
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
-            ds = create_dataset(
+            ds = open_created_dataset(
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],
@@ -1966,7 +1967,7 @@ class TestNestedCVAttributes(unittest.TestCase):
             variable = project.variable("tas_tavg-h2m-hxy-u", table_id="atmos")
             raw = _tc4.dataset_info(tmp_path)
             info = project.dataset_info(raw)
-            ds = create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 [_tc4.time_axis(project), *_tc4.horizontal_axes(project)],
@@ -2184,7 +2185,7 @@ class TestCreateSubdirectories(unittest.TestCase):
         )
         lat_axis = project.axis("lat", values=[-45.0, 45.0])
         lon_axis = project.axis("lon", values=[0.0, 90.0])
-        ds = create_dataset(
+        ds = open_created_dataset(
             dataset_info,
             variable,
             [time_axis, lat_axis, lon_axis],
@@ -2324,7 +2325,7 @@ class TestCreateSubdirectories(unittest.TestCase):
             )
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
-            ds = create_dataset(
+            ds = open_created_dataset(
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],
@@ -2349,7 +2350,7 @@ class TestCreateSubdirectories(unittest.TestCase):
             )
             lat_axis = project.axis("lat", values=[-45.0, 45.0])
             lon_axis = project.axis("lon", values=[0.0, 90.0])
-            ds = create_dataset(
+            ds = open_created_dataset(
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],

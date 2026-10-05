@@ -141,13 +141,11 @@ For more control over finalization:
    writer.write(data2, time_values=[45.0], time_bounds=[[30.0, 60.0]])
 
    # Finalize and get result
-   ds, output_path = writer.close()
+   output_path = writer.close()
 
    print(f"Wrote {output_path}")
-   print(f"Time range: {ds.time.values[0]} to {ds.time.values[-1]}")
-
-   # Close the dataset when done
-   ds.close()
+   with cmor4.open_dataset(output_path, decode_times=False) as ds:
+       print(f"Time range: {ds.time.values[0]} to {ds.time.values[-1]}")
 
 Advanced Features
 -----------------
@@ -174,7 +172,7 @@ Create separate file segments with gaps between them:
        writer.write(data, time_values=time_vals, time_bounds=time_bnds)
 
    # Close with preserve_definition=True to reuse definition
-   ds1, path1 = writer.close(preserve_definition=True)
+   path1 = writer.close(preserve_definition=True)
    ds1.close()
 
    # Second segment: 1950-2000 (gap from 1900-1950)
@@ -184,7 +182,7 @@ Create separate file segments with gaps between them:
        data, time_vals, time_bnds = load_year(year)
        writer.write(data, time_values=time_vals, time_bounds=time_bnds)
 
-   ds2, path2 = writer.close()
+   path2 = writer.close()
    ds2.close()
 
 Custom Output Path
@@ -406,7 +404,7 @@ Handle Validation Errors
    try:
        writer = cmor4.DatasetWriter(dataset, variable, axes)
        writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
-       ds, path = writer.close()
+       path = writer.close()
    except cmor4.AxisValidationError as e:
        print(f"Time axis validation failed: {e}")
    except cmor4.VariableValidationError as e:
@@ -855,12 +853,12 @@ Here's a full example with error handling and progress monitoring:
            raise
 
        else:
-           ds, output_path = writer.close()
+           output_path = writer.close()
            print(f"✓ Success: {output_path}")
-           print(f"  Time range: {ds.time.values[0]} to {ds.time.values[-1]}")
+           with cmor4.open_dataset(output_path, decode_times=False) as ds:
+               print(f"  Time range: {ds.time.values[0]} to {ds.time.values[-1]}")
            print(f"  File size: {Path(output_path).stat().st_size / 1e6:.1f} MB")
-           ds.close()
-
+        
    # Run it
    write_model_output(1850, 2015, Path("./output"))
 

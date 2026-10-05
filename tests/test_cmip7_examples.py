@@ -171,8 +171,7 @@ class TestExample01UsualField(unittest.TestCase):
             ],
             dtype="f4",
         ).reshape(2, 3, 4)
-        ds = cmor4.create_dataset(dataset, variable, axes, data)
-        path = cmor4.write_netcdf(ds, dataset, variable)
+        path = cmor4.cmorize(dataset, variable, axes, data)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -318,8 +317,7 @@ class TestExample02PressureLevels(unittest.TestCase):
             2, 19, 3, 4
         )
         data[0, 0, 0, 0] = np.float32(1.0e20)
-        ds = cmor4.create_dataset(dataset, variable, axes, data)
-        path = cmor4.write_netcdf(ds, dataset, variable)
+        path = cmor4.cmorize(dataset, variable, axes, data)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -424,8 +422,7 @@ class TestExample03ScalarDimension(unittest.TestCase):
             "tas_tavg-h2m-hxy-u", table_id="atmos", missing_value=np.float32(1.0e20)
         )
         axes = [_time_axis(project), _lat_axis(project), _lon_axis(project)]
-        ds = cmor4.create_dataset(dataset, variable, axes, self._DATA)
-        path = cmor4.write_netcdf(ds, dataset, variable)
+        path = cmor4.cmorize(dataset, variable, axes, self._DATA)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -524,8 +521,7 @@ class TestExample04AuxiliaryCoordinates(unittest.TestCase):
         )
         basin_axis = project.axis("basin", values=self._BASINS)
         axes = [_time_axis(project), basin_axis, _lat_axis(project)]
-        ds = cmor4.create_dataset(dataset, variable, axes, self._DATA)
-        path = cmor4.write_netcdf(ds, dataset, variable)
+        path = cmor4.cmorize(dataset, variable, axes, self._DATA)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -783,14 +779,13 @@ class TestExample05ModelLevels(unittest.TestCase):
             ],
             dtype="f4",
         ).reshape(2, 5, 3, 4)
-        ds = cmor4.create_dataset(
+        path = cmor4.cmorize(
             dataset,
             variable,
             [time_axis, lev_axis, lat_axis, lon_axis],
             data,
             zfactors=[a_zfactor, b_zfactor, p0_zfactor, ps_zfactor],
         )
-        path = cmor4.write_netcdf(ds, dataset, variable)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -1013,8 +1008,7 @@ class TestExample06ComplexGrid(unittest.TestCase):
             ],
             dtype="f4",
         ).reshape(2, 3, 4)
-        ds = cmor4.create_dataset(dataset, variable, [time_axis], data, grid=grid)
-        path = cmor4.write_netcdf(ds, dataset, variable)
+        path = cmor4.cmorize(dataset, variable, [time_axis], data, grid=grid)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -1185,8 +1179,7 @@ class TestExample07FixedField(unittest.TestCase):
             "rootd_ti-u-hxy-lnd", table_id="land", missing_value=np.float32(1.0e20)
         )
         axes = [_lat_axis(project), _lon_axis(project)]
-        ds = cmor4.create_dataset(dataset, variable, axes, self._DATA)
-        path = cmor4.write_netcdf(ds, dataset, variable)
+        path = cmor4.cmorize(dataset, variable, axes, self._DATA)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -1277,8 +1270,7 @@ class TestExample08LongNameOverrides(unittest.TestCase):
         )
         axes = [time_axis]
         data = np.array([10.0e6, 11.0e6], dtype="f4")
-        ds = cmor4.create_dataset(dataset, variable, axes, data)
-        path = cmor4.write_netcdf(ds, dataset, variable)
+        path = cmor4.cmorize(dataset, variable, axes, data)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -1322,8 +1314,7 @@ class TestExample09CellMeasures(unittest.TestCase):
         )
         axes = [_time_axis(project), _lat_axis(project), _lon_axis(project)]
         data = np.linspace(0.1, 0.5, 2 * 3 * 4, dtype="f4").reshape(2, 3, 4)
-        ds = cmor4.create_dataset(dataset, variable, axes, data)
-        path = cmor4.write_netcdf(ds, dataset, variable)
+        path = cmor4.cmorize(dataset, variable, axes, data)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):

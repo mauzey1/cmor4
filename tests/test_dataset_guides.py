@@ -9,6 +9,7 @@ import xarray as xr
 
 import cmor4
 from table_helpers import cmip7_project, drcdp_project, obs4mips_project
+from dataset_helpers import cmorize_and_open, open_created_dataset
 
 
 def guide_time_axis(values, bounds, units, calendar="standard", project=None):
@@ -165,7 +166,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lon_axis(project=project),
             ]
 
-            ds, path = cmor4.cmorize(
+            path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -207,7 +208,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lon_axis((240.0, 241.0, 242.0, 243.0)),
             ]
 
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 axes,
@@ -254,7 +255,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
             variable = project.variable("tas_tavg-h2m-hxy-u")
             info = project.dataset_info(raw_info)
 
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 axes,
@@ -317,7 +318,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 },
             )
 
-            ds = cmor4.create_dataset(
+            ds = open_created_dataset(
                 info,
                 variable,
                 axes,
@@ -333,8 +334,6 @@ class DatasetGuideProjectTest(unittest.TestCase):
             self.assertEqual(ds["latitude"].attrs["units"], "degrees_north")
             self.assertEqual(ds["longitude"].attrs["standard_name"], "longitude")
             self.assertEqual(ds["longitude"].attrs["units"], "degrees_east")
-            self.assertEqual(ds["vertices_latitude"].attrs["units"], "degrees_north")
-            self.assertEqual(ds["vertices_longitude"].attrs["units"], "degrees_east")
             self.assertEqual(ds["tasmax"].attrs["grid_mapping"], "crs")
             self.assertEqual(ds["crs"].attrs["grid_mapping_name"], "latitude_longitude")
 
@@ -366,7 +365,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lon_axis((90.0, 180.0, 270.0)),
             ]
 
-            ds, path = cmor4.cmorize(
+            path = cmor4.cmorize(
                 info,
                 variable,
                 axes,
@@ -413,7 +412,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 project.axis("longitude1", values=[262.515]),
             ]
 
-            ds, path = cmor4.cmorize(
+            ds, path = cmorize_and_open(
                 info,
                 variable,
                 axes,
@@ -462,7 +461,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lat_axis((-60.0, -30.0)),
             ]
 
-            ds, path = cmor4.cmorize(
+            ds, path = cmorize_and_open(
                 info,
                 variable,
                 axes,

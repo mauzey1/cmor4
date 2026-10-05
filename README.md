@@ -103,7 +103,7 @@ axes = [
 data = np.random.randn(2, 180, 360) + 288.0
 
 # Write CMOR-compliant NetCDF file
-ds, path = cmor4.cmorize(dataset, variable, axes, data)
+path = cmor4.cmorize(dataset, variable, axes, data)
 print(f"Created: {path}")
 ```
 

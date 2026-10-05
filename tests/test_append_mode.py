@@ -8,6 +8,7 @@ import numpy as np
 import xarray as xr
 
 import cmor4
+from dataset_helpers import load_dataset
 from table_helpers import cmip7_project
 
 
@@ -193,7 +194,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 values=[15.0, 45.0, 75.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0], [60.0, 90.0]],
             )
-            expected, _ = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 [full_time, *horizontal_axes(self.project)],
@@ -225,9 +226,11 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[75.0],
                     time_bounds=[[60.0, 90.0]],
                 )
-                actual, path = writer.close()
+                path = writer.close()
 
             self.assertEqual(path, output_path)
+            actual = load_dataset(path)
+            expected = load_dataset(expected_path)
             self.assertEqual(len(actual["time"]), 3)
             np.testing.assert_array_equal(actual["time"].values, [15.0, 45.0, 75.0])
             np.testing.assert_array_equal(actual["tos"].values, full_data)
@@ -374,7 +377,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 values=[15.0, 45.0, 75.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0], [60.0, 90.0]],
             )
-            _, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 [full_time],
@@ -409,14 +412,10 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[75.0],
                     time_bounds=[[60.0, 90.0]],
                 )
-                actual, _ = writer.close()
+                _ = writer.close()
 
-            with xr.open_dataset(
-                expected_path,
-                decode_times=False,
-                mask_and_scale=False,
-            ) as expected_open:
-                expected = expected_open.load()
+            actual = load_dataset(output_path)
+            expected = load_dataset(expected_path)
             xr.testing.assert_identical(equivalent(actual), equivalent(expected))
             self.assertEqual(actual["hfls"].attrs["grid_mapping"], "crs")
             np.testing.assert_array_equal(
@@ -493,7 +492,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 values=[15.0, 45.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0]],
             )
-            _, expected_path = cmor4.cmorize(
+            expected_path = cmor4.cmorize(
                 info,
                 variable,
                 [full_time, hybrid_axis(self.project), *horizontal_axes(self.project)],
@@ -528,14 +527,10 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[45.0],
                     time_bounds=[[30.0, 60.0]],
                 )
-                actual, _ = writer.close()
+                _ = writer.close()
 
-            with xr.open_dataset(
-                expected_path,
-                decode_times=False,
-                mask_and_scale=False,
-            ) as expected_open:
-                expected = expected_open.load()
+            actual = load_dataset(output_path)
+            expected = load_dataset(expected_path)
             xr.testing.assert_identical(equivalent(actual), equivalent(expected))
             np.testing.assert_array_equal(actual["ps"].values, full_ps)
             self.assertIn("formula_terms", actual["lev"].attrs)
@@ -632,8 +627,9 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[105.0, 135.0],
                     time_bounds=[[90.0, 120.0], [120.0, 150.0]],
                 )
-                actual, _ = writer.close()
+                _ = writer.close()
 
+            actual = load_dataset(output_path)
             np.testing.assert_array_equal(
                 actual["time"].values,
                 [15.0, 45.0, 75.0, 105.0, 135.0],
@@ -687,8 +683,9 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[45.0],
                     time_bounds=[[30.0, 60.0]],
                 )
-                actual, _ = writer.close()
+                _ = writer.close()
 
+            actual = load_dataset(output_path)
             self.assertEqual(actual.attrs["history"], old_history)
             self.assertNotEqual(actual.attrs["creation_date"], old_creation_date)
             self.assertNotEqual(actual.attrs["tracking_id"], old_tracking_id)
@@ -761,8 +758,9 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[75.0],
                     time_bounds=[60.0, 90.0],
                 )
-                actual, _ = writer.close()
+                _ = writer.close()
 
+            actual = load_dataset(output_path)
             np.testing.assert_array_equal(
                 actual["time_bnds"].values,
                 [[0.0, 30.0], [30.0, 60.0], [60.0, 90.0]],

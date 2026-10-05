@@ -57,6 +57,7 @@ from typing import Any
 import numpy as np
 
 import cmor4
+from dataset_helpers import open_created_dataset
 from cmor4.dataset import _collect_external_variables
 
 # ---------------------------------------------------------------------------
@@ -994,7 +995,7 @@ class TestOutputAttributes(unittest.TestCase):
                 units="months since 2000-01-01",
             )
             data = np.random.random(3) * 1e18
-            ds, path = cmor4.cmorize(info, variable, [time_axis], data)
+            ds = open_created_dataset(info, variable, [time_axis], data)
             history = ds.attrs.get("history", "")
             self.assertIn("CMOR rewrote data to be consistent with", history)
             conventions = ds.attrs.get("Conventions", "CMIP")
@@ -1144,7 +1145,7 @@ class TestFxTable(unittest.TestCase):
                 units="degrees_east",
             )
             data = np.abs(lats[:, np.newaxis] * lons[np.newaxis, :]) + 1e8
-            ds, path = cmor4.cmorize(info, variable, [lat_axis, lon_axis], data)
+            ds = open_created_dataset(info, variable, [lat_axis, lon_axis], data)
             self.assertIn("areacella", ds)
             self.assertEqual(ds["areacella"].attrs.get("units"), "m2")
             self.assertIn("lat", ds)
@@ -1192,7 +1193,7 @@ class TestCmip6DatasetRoundtrip(unittest.TestCase):
             time_axis = self._time_axis()
             data = np.random.random(5) * 1e18
 
-            ds, path = cmor4.cmorize(info, variable, [time_axis], data)
+            ds = open_created_dataset(info, variable, [time_axis], data)
 
             self.assertIn("masso", ds)
             self.assertEqual(ds["masso"].attrs.get("units"), "kg")
@@ -1207,7 +1208,7 @@ class TestCmip6DatasetRoundtrip(unittest.TestCase):
             time_axis = self._time_axis()
             data = np.random.random(5) * 1e18
 
-            ds, path = cmor4.cmorize(info, variable, [time_axis], data)
+            ds = open_created_dataset(info, variable, [time_axis], data)
 
             for attr in (
                 "mip_era",
@@ -1250,7 +1251,7 @@ class TestCmip6DatasetRoundtrip(unittest.TestCase):
             )
             data = np.random.uniform(200.0, 320.0, (5, nlat, nlon)).astype("f4")
 
-            ds, path = cmor4.cmorize(
+            ds = open_created_dataset(
                 info, variable, [time_axis, lat_axis, lon_axis], data
             )
 
