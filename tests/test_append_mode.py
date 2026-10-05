@@ -412,7 +412,6 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[75.0],
                     time_bounds=[[60.0, 90.0]],
                 )
-                _ = writer.close()
 
             actual = load_dataset(output_path)
             expected = load_dataset(expected_path)
@@ -527,7 +526,6 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[45.0],
                     time_bounds=[[30.0, 60.0]],
                 )
-                _ = writer.close()
 
             actual = load_dataset(output_path)
             expected = load_dataset(expected_path)
@@ -627,7 +625,6 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[105.0, 135.0],
                     time_bounds=[[90.0, 120.0], [120.0, 150.0]],
                 )
-                _ = writer.close()
 
             actual = load_dataset(output_path)
             np.testing.assert_array_equal(
@@ -683,7 +680,6 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[45.0],
                     time_bounds=[[30.0, 60.0]],
                 )
-                _ = writer.close()
 
             actual = load_dataset(output_path)
             self.assertEqual(actual.attrs["history"], old_history)
@@ -758,7 +754,6 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_values=[75.0],
                     time_bounds=[60.0, 90.0],
                 )
-                _ = writer.close()
 
             actual = load_dataset(output_path)
             np.testing.assert_array_equal(
