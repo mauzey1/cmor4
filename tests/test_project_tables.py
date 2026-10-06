@@ -71,6 +71,7 @@ _RICH_CV: dict = {
             "historical": {
                 "experiment_id": "historical",
                 "activity_id": ["CMIP"],
+                "experiment": "historical simulation",
                 "required_source_type": ["AOGCM"],
                 "additional_allowed_model_components": ["AER", "BGC"],
                 "parent_experiment_id": ["piControl"],
@@ -79,10 +80,12 @@ _RICH_CV: dict = {
             "amip": {
                 "experiment_id": "amip",
                 "activity_id": ["CMIP"],
+                "experiment": "AMIP simulation",
             },
             "piControl": {
                 "experiment_id": "piControl",
                 "activity_id": ["CMIP"],
+                "experiment": "pre-industrial control",
                 "required_source_type": ["AOGCM"],
             },
         },
@@ -93,10 +96,12 @@ _RICH_CV: dict = {
         "source_id": {
             "CESM2": {
                 "institution_id": ["NCAR"],
+                "source": "CESM2 model",
                 "source_type": ["AOGCM"],
             },
             "DUMMY": {
                 "institution_id": ["NCAR"],
+                "source": "DUMMY model",
             },
         },
         "source_type": {
@@ -1572,6 +1577,61 @@ class DatasetInfoMethodTest(unittest.TestCase):
         })
         self.assertIn("institution", info.to_dict())
         self.assertIn("National Center", info.to_dict()["institution"])
+
+    def test_optional_derived_attributes_preserve_user_values(self):
+        info = self.project.dataset_info({
+            "activity_id": "CMIP",
+            "experiment": "user experiment",
+            "experiment_id": "amip",
+            "institution": "user institution",
+            "institution_id": "NCAR",
+            "source": "user source",
+            "source_id": "DUMMY",
+        })
+        values = info.to_dict()
+        self.assertEqual(values["source"], "user source")
+        self.assertEqual(values["experiment"], "user experiment")
+        self.assertEqual(values["institution"], "user institution")
+
+    def test_empty_derived_attributes_are_filled_from_cv(self):
+        info = self.project.dataset_info({
+            "activity_id": "CMIP",
+            "experiment": "",
+            "experiment_id": "amip",
+            "institution": "",
+            "institution_id": "NCAR",
+            "source": "",
+            "source_id": "DUMMY",
+        })
+        values = info.to_dict()
+        self.assertEqual(values["source"], "DUMMY model")
+        self.assertEqual(values["experiment"], "AMIP simulation")
+        self.assertIn("National Center", values["institution"])
+
+    def test_required_derived_attributes_reject_user_overrides(self):
+        cv = {
+            "CV": {
+                **_RICH_CV["CV"],
+                "required_global_attributes": [
+                    "activity_id",
+                    "source",
+                    "experiment",
+                    "institution",
+                ],
+            }
+        }
+        project = _build_project(self.tmp, cv=cv)
+        with self.assertRaises(ControlledVocabularyError) as ctx:
+            project.dataset_info({
+                "activity_id": "CMIP",
+                "experiment": "user experiment",
+                "experiment_id": "amip",
+                "institution": "user institution",
+                "institution_id": "NCAR",
+                "source": "user source",
+                "source_id": "DUMMY",
+            })
+        self.assertIn("source='user source'", str(ctx.exception))
 
     def test_rejects_invalid_activity_id_at_validation(self):
         """dataset_info validates controlled values and rejects unknown ones."""

@@ -433,15 +433,25 @@ class SourceComponent(_CVModel):
         }
 
     def validation_error(
-        self, source_id: Any, metadata: Mapping[str, Any]
+        self,
+        source_id: Any,
+        metadata: Mapping[str, Any],
+        *,
+        ignored_keys: set[str] | None = None,
     ) -> str | None:
         """Return the first source-specific metadata mismatch."""
 
         entry = self.entry_for(source_id)
         if entry is None:
             return None
+        ignored = ignored_keys or set()
         for key, expected in entry.items():
-            if key == "source_id" or key not in metadata or expected in (None, ""):
+            if (
+                key == "source_id"
+                or key in ignored
+                or key not in metadata
+                or expected in (None, "")
+            ):
                 continue
             actual = metadata[key]
             matches = (
@@ -496,6 +506,8 @@ class ExperimentComponent(_CVModel):
         experiment_id: Any,
         metadata: Mapping[str, Any],
         source_types: "SourceTypeComponent",
+        *,
+        ignored_keys: set[str] | None = None,
     ) -> str | None:
         """Return the first experiment-specific metadata mismatch."""
 
@@ -515,8 +527,11 @@ class ExperimentComponent(_CVModel):
             "required_source_type",
             "source_type",
         }
+        ignored = ignored_keys or set()
         for key, expected in entry.items():
             if key in excluded or key not in metadata or expected in (None, ""):
+                continue
+            if key in ignored:
                 continue
             actual = metadata[key]
             matches = (

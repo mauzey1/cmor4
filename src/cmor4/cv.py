@@ -276,17 +276,16 @@ class ControlledVocabulary:
         if self.sources is None:
             return
         for key, value in self.sources.defaults_for(dataset.get("source_id")).items():
-            dataset.setdefault(key, value)
+            if key not in dataset or dataset[key] in (None, ""):
+                dataset[key] = value
 
     def _add_institution_default(self, dataset: dict[str, Any]) -> None:
         """Fill institution text from institution_id."""
 
-        if "institution" in dataset:
-            return
         if self.institutions is None:
             return
         institution = self.institutions.name_for(dataset.get("institution_id"))
-        if institution is not None:
+        if institution is not None and dataset.get("institution") in (None, ""):
             dataset["institution"] = institution
 
     def _add_experiment_defaults(self, dataset: dict[str, Any]) -> None:
@@ -297,7 +296,8 @@ class ControlledVocabulary:
         for key, value in self.experiments.defaults_for(
             dataset.get("experiment_id")
         ).items():
-            dataset.setdefault(key, value)
+            if key not in dataset or dataset[key] in (None, ""):
+                dataset[key] = value
 
     def _add_runtime_global_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill required globals that CMOR normally creates while writing."""
@@ -347,6 +347,7 @@ class ControlledVocabulary:
 
         self.validate_dataset_values(dataset)
         self.validate_required_global_attributes(dataset)
+        self.validate_derived_attributes(dataset)
         self.validate_variant_indices(dataset)
         self.validate_forcing_terms(dataset)
 
@@ -604,11 +605,48 @@ class ControlledVocabulary:
 
         if self.experiments is None:
             return
+        ignored_keys = set()
+        if "experiment" not in self.required_attributes:
+            ignored_keys.add("experiment")
         error = self.experiments.validation_error(
-            dataset.experiment_id, dataset.to_dict(), self.source_types
+            dataset.experiment_id,
+            dataset.to_dict(),
+            self.source_types,
+            ignored_keys=ignored_keys,
         )
         if error is not None:
             raise ControlledVocabularyError(error)
+
+    def validate_derived_attributes(self, dataset: DatasetMetadata) -> None:
+        """Validate required derived text against its selected ID entry."""
+
+        values = dataset.to_dict()
+        expected: dict[str, Any] = {}
+        if self.sources is not None:
+            source = self.sources.defaults_for(dataset.source_id).get("source")
+            if source is not None:
+                expected["source"] = source
+        if self.experiments is not None:
+            experiment = self.experiments.defaults_for(
+                dataset.experiment_id
+            ).get("experiment")
+            if experiment is not None:
+                expected["experiment"] = experiment
+        if self.institutions is not None:
+            institution = self.institutions.name_for(dataset.institution_id)
+            if institution is not None:
+                expected["institution"] = institution
+
+        for key, expected_value in expected.items():
+            if key not in self.required_attributes or key not in values:
+                continue
+            actual = values[key]
+            if actual in (None, "") or str(actual) == str(expected_value):
+                continue
+            raise ControlledVocabularyError(
+                f"{key}={actual!r} does not match the value selected by "
+                f"{key}_id CV entry {expected_value!r}."
+            )
 
     def validate_source_type(
         self,
@@ -656,7 +694,12 @@ class ControlledVocabulary:
 
         if self.sources is None:
             return
-        error = self.sources.validation_error(dataset.source_id, dataset.to_dict())
+        ignored_keys = set()
+        if "source" not in self.required_attributes:
+            ignored_keys.add("source")
+        error = self.sources.validation_error(
+            dataset.source_id, dataset.to_dict(), ignored_keys=ignored_keys
+        )
         if error is not None:
             raise ControlledVocabularyError(error)
 

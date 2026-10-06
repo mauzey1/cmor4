@@ -18,7 +18,14 @@ from cmor4.utils.cv_models import (
 from cmor4.utils.dataset_metadata import DatasetMetadata
 
 
-def _sample_cv() -> ControlledVocabulary:
+def _sample_cv(
+    required_global_attributes: list[str] | None = None,
+) -> ControlledVocabulary:
+    required = required_global_attributes or [
+        "Conventions",
+        "activity_id",
+        "source_id",
+    ]
     return ControlledVocabulary({
         "CV": {
             "Conventions": ["CF-1.11", "CF-1.12"],
@@ -60,9 +67,7 @@ def _sample_cv() -> ControlledVocabulary:
             "mip_era": "CMIP7",
             "profile": {"standard": {"contact": "support@example.test", "priority": 1}},
             "required_global_attributes": [
-                "Conventions",
-                "activity_id",
-                "source_id",
+                *required,
             ],
             "source_id": {
                 "MODEL-A": {
@@ -143,6 +148,85 @@ def test_components_drive_defaults_and_templated_license():
     )
 
 
+def test_optional_derived_attributes_preserve_user_values():
+    cv = _sample_cv()
+    metadata = DatasetMetadata.from_mapping({
+        "activity_id": "CMIP",
+        "experiment": "user experiment description",
+        "experiment_id": "historical",
+        "institution": "user institution description",
+        "institution_id": "PCMDI",
+        "source": "user source description",
+        "source_id": "MODEL-A",
+        "source_type": "AOGCM",
+    })
+
+    prepared = cv.get_dataset_info(metadata)
+    values = prepared.to_dict()
+
+    assert values["source"] == "user source description"
+    assert values["experiment"] == "user experiment description"
+    assert values["institution"] == "user institution description"
+    cv.validate_derived_attributes(prepared)
+    cv.validate_source_attributes(prepared)
+    cv.validate_experiment(prepared)
+
+
+def test_empty_optional_derived_attributes_are_filled_from_cv():
+    cv = _sample_cv()
+    metadata = DatasetMetadata.from_mapping({
+        "activity_id": "CMIP",
+        "experiment": "",
+        "experiment_id": "historical",
+        "institution": "",
+        "institution_id": "PCMDI",
+        "source": "",
+        "source_id": "MODEL-A",
+    })
+
+    prepared = cv.get_dataset_info(metadata).to_dict()
+
+    assert prepared["source"] == "Model A"
+    assert prepared["experiment"] == "historical simulation"
+    assert prepared["institution"] == "Program for Climate Model Diagnosis"
+
+
+def test_required_derived_attributes_must_match_id_defaults():
+    cv = _sample_cv(
+        required_global_attributes=[
+            "activity_id",
+            "source",
+            "experiment",
+            "institution",
+        ]
+    )
+    valid = {
+        "activity_id": "CMIP",
+        "experiment": "historical simulation",
+        "experiment_id": "historical",
+        "institution": "Program for Climate Model Diagnosis",
+        "institution_id": "PCMDI",
+        "source": "Model A",
+        "source_id": "MODEL-A",
+        "source_type": "AOGCM",
+    }
+
+    cv.validate_dataset_info(cv.get_dataset_info(DatasetMetadata.from_mapping(valid)))
+    for key in ("source", "experiment", "institution"):
+        metadata = DatasetMetadata.from_mapping({
+            **valid,
+            key: f"user {key} description",
+        })
+        prepared = cv.get_dataset_info(metadata)
+
+        try:
+            cv.validate_dataset_info(prepared)
+        except ControlledVocabularyError as error:
+            assert f"{key}='user {key} description'" in str(error)
+        else:
+            raise AssertionError(f"required {key} should be validated")
+
+
 def test_specialized_catalogs_are_used_by_existing_validation_api():
     cv = _sample_cv()
     valid = DatasetMetadata.from_mapping({
@@ -152,10 +236,12 @@ def test_specialized_catalogs_are_used_by_existing_validation_api():
         "source_id": "MODEL-A",
         "source_type": "AOGCM",
     })
-    invalid = valid.updated(source="A different model")
+    invalid = valid.updated(source_type="AER")
 
     assert cv.sources is not None
-    assert cv.sources.validation_error("MODEL-A", invalid.to_dict()) is not None
+    assert cv.sources.validation_error(
+        "MODEL-A", invalid.to_dict(), ignored_keys={"source"}
+    ) is not None
     assert cv.experiments is not None
     assert (
         cv.experiments.validation_error(
