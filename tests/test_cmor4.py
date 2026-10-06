@@ -876,19 +876,39 @@ class Cmor4Test(unittest.TestCase):
         coordinates.
         """
         with tempfile.TemporaryDirectory() as tmp_dir:
-            latitude = np.array([[10.0, 20.0], [30.0, 40.0]], dtype="f8")
-            longitude = np.array([[100.0, 110.0], [120.0, 130.0]], dtype="f8")
+            latitude = np.array(
+                [[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]], dtype="f8"
+            )
+            longitude = np.array(
+                [[100.0, 110.0, 120.0], [130.0, 140.0, 150.0]], dtype="f8"
+            )
             latitude_vertices = np.array(
                 [
-                    [[9.0, 11.0, 11.0, 9.0], [19.0, 21.0, 21.0, 19.0]],
-                    [[29.0, 31.0, 31.0, 29.0], [39.0, 41.0, 41.0, 39.0]],
+                    [
+                        [9.0, 11.0, 11.0, 9.0],
+                        [19.0, 21.0, 21.0, 19.0],
+                        [29.0, 31.0, 31.0, 29.0],
+                    ],
+                    [
+                        [39.0, 41.0, 41.0, 39.0],
+                        [49.0, 51.0, 51.0, 49.0],
+                        [59.0, 61.0, 61.0, 59.0],
+                    ],
                 ],
                 dtype="f8",
             )
             longitude_vertices = np.array(
                 [
-                    [[99.0, 101.0, 101.0, 99.0], [109.0, 111.0, 111.0, 109.0]],
-                    [[119.0, 121.0, 121.0, 119.0], [129.0, 131.0, 131.0, 129.0]],
+                    [
+                        [99.0, 101.0, 101.0, 99.0],
+                        [109.0, 111.0, 111.0, 109.0],
+                        [119.0, 121.0, 121.0, 119.0],
+                    ],
+                    [
+                        [129.0, 131.0, 131.0, 129.0],
+                        [139.0, 141.0, 141.0, 139.0],
+                        [149.0, 151.0, 151.0, 149.0],
+                    ],
                 ],
                 dtype="f8",
             )
@@ -907,11 +927,11 @@ class Cmor4Test(unittest.TestCase):
                     bounds=[0.0, 31.0],
                     units="days since 2000-01-01",
                 ),
-                cmor4.Axis(name="x", values=[0.0, 1.0]),
                 cmor4.Axis(name="y", values=[2.0, 3.0]),
+                cmor4.Axis(name="x", values=[0.0, 1.0, 2.0]),
             ]
             grid = self.project.grid(
-                dimensions=["x", "y"],
+                dimensions=["y", "x"],
                 mapping_name="lambert_azimuthal_equal_area",
                 params={
                     "latitude_of_projection_origin": [90.0, "degrees_north"],
@@ -927,23 +947,24 @@ class Cmor4Test(unittest.TestCase):
                 info,
                 variable,
                 axes,
-                np.ones((1, 2, 2), dtype="f4"),
+                np.ones((1, 2, 3), dtype="f4"),
                 grid=grid,
             )
 
             # Verify lat/lon auxiliary coordinates were created
             self.assertIn("latitude", ds.variables)
             self.assertIn("longitude", ds.variables)
-            self.assertEqual(ds["latitude"].dims, ("x", "y"))
-            self.assertEqual(ds["longitude"].dims, ("x", "y"))
+            self.assertEqual(ds["tos"].dims, ("time", "y", "x"))
+            self.assertEqual(ds["latitude"].dims, ("y", "x"))
+            self.assertEqual(ds["longitude"].dims, ("y", "x"))
             np.testing.assert_array_equal(ds["latitude"].values, latitude)
             np.testing.assert_array_equal(ds["longitude"].values, longitude)
 
             # Verify vertices were created
             self.assertIn("vertices_latitude", ds.data_vars)
             self.assertIn("vertices_longitude", ds.data_vars)
-            self.assertEqual(ds["vertices_latitude"].dims, ("x", "y", "vertices"))
-            self.assertEqual(ds["vertices_longitude"].dims, ("x", "y", "vertices"))
+            self.assertEqual(ds["vertices_latitude"].dims, ("y", "x", "vertices"))
+            self.assertEqual(ds["vertices_longitude"].dims, ("y", "x", "vertices"))
             np.testing.assert_array_equal(
                 ds["vertices_latitude"].values, latitude_vertices
             )

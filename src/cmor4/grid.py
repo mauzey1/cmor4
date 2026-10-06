@@ -59,7 +59,7 @@ class Grid(MetadataModel):
     lat/lon::
 
         grid = project.grid(
-            dimensions=("x", "y"),
+            dimensions=("y", "x"),
             mapping_name="lambert_azimuthal_equal_area",
             params={...},
         )

@@ -882,10 +882,11 @@ class TestExample06ComplexGrid(unittest.TestCase):
     conic mapping and lat/lon vertex arrays.
 
     The CMOR3 reference file for this example shows:
-        latitude  : dims=(x, y), attrs=standard_name, long_name, units, bounds
-        longitude : dims=(x, y), attrs=standard_name, long_name, units, bounds
-        vertices_latitude  : dims=(x, y, vertices), attrs={units: degrees_north}
-        vertices_longitude : dims=(x, y, vertices), attrs={units: degrees_east}
+        hfls: dims=(time, y, x)
+        latitude  : dims=(y, x), attrs=standard_name, long_name, units, bounds
+        longitude : dims=(y, x), attrs=standard_name, long_name, units, bounds
+        vertices_latitude  : dims=(y, x, vertices), attrs={units: degrees_north}
+        vertices_longitude : dims=(y, x, vertices), attrs={units: degrees_east}
         lambert_conformal_conic: scalar, attrs=grid_mapping_name + params
         hfls: grid_mapping=lambert_conformal_conic, coordinates=latitude longitude
     """
@@ -1017,10 +1018,7 @@ class TestExample06ComplexGrid(unittest.TestCase):
     # --- dimensions and shape ---
 
     def test_variable_dims_include_x_y(self):
-        dims = self.ds["hfls"].dims
-        self.assertIn("x", dims)
-        self.assertIn("y", dims)
-        self.assertIn("time", dims)
+        self.assertEqual(self.ds["hfls"].dims, ("time", "y", "x"))
 
     def test_grid_dim_sizes(self):
         self.assertEqual(self.ds.sizes["x"], 4)
@@ -1066,12 +1064,14 @@ class TestExample06ComplexGrid(unittest.TestCase):
         self.assertIn("longitude", self.ds.coords)
 
     def test_latitude_dims(self):
-        dims = set(self.ds["latitude"].dims)
-        self.assertEqual(dims, {"x", "y"})
+        self.assertEqual(self.ds["latitude"].dims, ("y", "x"))
 
     def test_longitude_dims(self):
-        dims = set(self.ds["longitude"].dims)
-        self.assertEqual(dims, {"x", "y"})
+        self.assertEqual(self.ds["longitude"].dims, ("y", "x"))
+
+    def test_latitude_longitude_values_preserve_y_x_order(self):
+        np.testing.assert_array_equal(self.ds["latitude"].values, self._LAT.T)
+        np.testing.assert_array_equal(self.ds["longitude"].values, self._LON.T)
 
     def test_latitude_attrs(self):
         a = self.ds["latitude"].attrs
@@ -1096,12 +1096,13 @@ class TestExample06ComplexGrid(unittest.TestCase):
         self.assertIn("vertices_longitude", self.ds)
 
     def test_vertices_latitude_dims(self):
-        dims = set(self.ds["vertices_latitude"].dims)
-        self.assertEqual(dims, {"x", "y", "vertices"})
+        self.assertEqual(self.ds["vertices_latitude"].dims, ("y", "x", "vertices"))
+
+    def test_vertices_longitude_dims(self):
+        self.assertEqual(self.ds["vertices_longitude"].dims, ("y", "x", "vertices"))
 
     def test_vertices_latitude_shape(self):
-        s = self.ds["vertices_latitude"].shape
-        self.assertEqual(sorted(s), [3, 4, 4])
+        self.assertEqual(self.ds["vertices_latitude"].shape, (3, 4, 4))
 
     # --- grid mapping ---
 
