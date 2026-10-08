@@ -146,6 +146,14 @@ class TestVariableDimensions(unittest.TestCase):
         var = self._var(("time", "y", "x"))
         self.assertEqual(grid.variable_dimensions(var), ("time", "y", "x"))
 
+    def test_string_dimensions_path_preserves_non_spatial_dimensions(self) -> None:
+        grid = Grid(dimensions=("site",))
+        var = self._var(("height2m", "time1", "site"))
+        self.assertEqual(
+            grid.variable_dimensions(var),
+            ("height2m", "time1", "site"),
+        )
+
     def test_fallback_to_variable_dimensions(self) -> None:
         grid = Grid()
         var = self._var(("time", "lat", "lon"))

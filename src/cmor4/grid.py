@@ -29,6 +29,12 @@ _NONNEG_PARAMS: frozenset[str] = frozenset({
     "scale_factor_at_central_meridian",
     "scale_factor_at_projection_origin",
 })
+_DEFAULT_HORIZONTAL_DIMS: frozenset[str] = frozenset({
+    "lat",
+    "latitude",
+    "lon",
+    "longitude",
+})
 
 
 class Grid(MetadataModel):
@@ -193,8 +199,14 @@ class Grid(MetadataModel):
 
         var_dims = variable.dimensions
         if var_dims:
-            time_dims = tuple(str(d) for d in var_dims if str(d).lower() == "time")
-            return time_dims + grid_dims
+            grid_dim_names = {name.lower() for name in grid_dims}
+            non_spatial_dims = tuple(
+                str(dim)
+                for dim in var_dims
+                if str(dim).lower()
+                not in grid_dim_names | _DEFAULT_HORIZONTAL_DIMS
+            )
+            return non_spatial_dims + grid_dims
         return grid_dims
 
     def to_dataset_coords(
