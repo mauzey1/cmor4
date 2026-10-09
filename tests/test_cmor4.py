@@ -24,9 +24,9 @@ def dataset_info(tmp_path: Path):
         "experiment_id": "amip",
         "forcing_index": "f3",
         "frequency": "mon",
-        "grid_label": "g999",
+        "grid_label": "g101",
         "initialization_index": "i1",
-        "institution_id": "CCCma",
+        "institution_id": "CNRM-CERFACS",
         "license_id": "CC-BY-4.0",
         "mip_era": "CMIP7",
         "nominal_resolution": "100 km",
@@ -34,7 +34,7 @@ def dataset_info(tmp_path: Path):
         "physics_index": "p1",
         "realization_index": "r9",
         "region": "glb",
-        "source_id": "DUMMY-MODEL",
+        "source_id": "CNRM-ESM2-1e",
         "version": "v20200101",
     }
 
@@ -137,7 +137,7 @@ class Cmor4Test(unittest.TestCase):
 
         attrs = info.global_attributes(variable)
 
-        self.assertEqual(info.source_id, "DUMMY-MODEL")
+        self.assertEqual(info.source_id, "CNRM-ESM2-1e")
         self.assertEqual(info.variant_label(), "r9i1p1f3")
         self.assertEqual(attrs["variable_id"], "tos")
         self.assertEqual(attrs["branded_variable"], "tos_tavg-u-hxy-sea")
@@ -191,12 +191,12 @@ class Cmor4Test(unittest.TestCase):
 
             self.assertEqual(
                 path.name,
-                "tos_tavg-u-hxy-sea_mon_glb_g999_DUMMY-MODEL_amip_"
+                "tos_tavg-u-hxy-sea_mon_glb_g101_CNRM-ESM2-1e_amip_"
                 "r9i1p1f3_200001-200002.nc",
             )
             self.assertIn(
-                "CMIP7/CMIP/CCCma/DUMMY-MODEL/amip/r9i1p1f3/glb/mon/"
-                "tos/tavg-u-hxy-sea/g999/v20200101",
+                "CMIP7/CMIP/CNRM-CERFACS/CNRM-ESM2-1e/amip/r9i1p1f3/glb/mon/"
+                "tos/tavg-u-hxy-sea/g101/v20200101",
                 str(path),
             )
 
@@ -563,7 +563,7 @@ class Cmor4Test(unittest.TestCase):
                     variable,
                     ds=ds,
                 ),
-                "sample_DUMMY-MODEL_200001-200002_v20200101",
+                "sample_CNRM-ESM2-1e_200001-200002_v20200101",
             )
 
             path_info = cmor4.DatasetInfo.from_prepared(
@@ -1010,25 +1010,25 @@ class Cmor4Test(unittest.TestCase):
                     "yr",
                     [182.5, 547.5],
                     "days since 2000-01-01 00:00:00",
-                    "sample_yr_DUMMY-MODEL_r9i1p1f3_2000-2001.nc",
+                    "sample_yr_CNRM-ESM2-1e_r9i1p1f3_2000-2001.nc",
                 ),
                 (
                     "day",
                     [0.9999999, 1.9999999],
                     "days since 1960-01-01 00:00:00",
-                    "sample_day_DUMMY-MODEL_r9i1p1f3_19600102-19600103.nc",
+                    "sample_day_CNRM-ESM2-1e_r9i1p1f3_19600102-19600103.nc",
                 ),
                 (
                     "1hr",
                     [12.6, 77.4],
                     "minutes since 2000-01-01 00:00:00",
-                    "sample_1hr_DUMMY-MODEL_r9i1p1f3_200001010013-200001010117.nc",
+                    "sample_1hr_CNRM-ESM2-1e_r9i1p1f3_200001010013-200001010117.nc",
                 ),
                 (
                     "subhr",
                     [750.4, 2250.6],
                     "seconds since 2000-01-01 00:00:00",
-                    "sample_subhr_DUMMY-MODEL_r9i1p1f3_"
+                    "sample_subhr_CNRM-ESM2-1e_r9i1p1f3_"
                     "20000101001230-20000101003731.nc",
                 ),
             ]
@@ -1128,14 +1128,14 @@ class GlobalAttributeDefaultsTest(unittest.TestCase):
     def test_title_attribute_is_written(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             ds = self._make_dataset(tmp_dir)
-        self.assertEqual(ds.attrs["title"], "DUMMY-MODEL output prepared for CMIP7")
+        self.assertEqual(ds.attrs["title"], "CNRM-ESM2-1e output prepared for CMIP7")
 
     def test_title_uses_source_id_and_mip_era(self):
         """title should reflect the actual source_id in the dataset."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             raw = dataset_info(Path(tmp_dir))
-            raw["source_id"] = "DUMMY-MODEL"
+            raw["source_id"] = "CNRM-ESM2-1e"
             info = self.project.dataset_info(raw)
             ds = open_created_dataset(
                 info,
@@ -1143,7 +1143,7 @@ class GlobalAttributeDefaultsTest(unittest.TestCase):
                 [time_axis(self.project), *horizontal_axes(self.project)],
                 np.ones((2, 2, 2), dtype="f4"),
             )
-        self.assertIn("DUMMY-MODEL", ds.attrs["title"])
+        self.assertIn("CNRM-ESM2-1e", ds.attrs["title"])
         self.assertIn("CMIP7", ds.attrs["title"])
 
     def test_description_attribute_from_experiment_cv(self):

@@ -6,16 +6,16 @@ produced by the corresponding CMOR3 example found at
 https://github.com/PCMDI/cmor/tree/main/examples/python.
 
 Only attributes that CMOR3 explicitly writes are asserted; CMOR4-specific
-global attributes (e.g. ``host_collection``) are not checked.
+global attributes are not checked.
 
 All seven examples share the same dataset metadata unless noted:
 
     activity_id       : CMIP
     calendar          : 360_day
     experiment_id     : amip
-    institution_id    : MOHC
-    source_id         : DUMMY-MODEL
-    grid_label        : g999
+    institution_id    : CNRM-CERFACS
+    source_id         : CNRM-ESM2-1e
+    grid_label        : g101
     nominal_resolution: 100 km
 """
 
@@ -53,16 +53,15 @@ _BASE_DATASET = {
     "experiment_id": "amip",
     "forcing_index": "f1",
     "frequency": "mon",
-    "grid_label": "g999",
-    "host_collection": "CMIP7",
+    "grid_label": "g101",
     "initialization_index": "i1",
-    "institution_id": "MOHC",
+    "institution_id": "CNRM-CERFACS",
     "license_id": "CC-BY-4.0",
     "nominal_resolution": "100 km",
     "physics_index": "p1",
     "realization_index": "r1",
     "region": "glb",
-    "source_id": "DUMMY-MODEL",
+    "source_id": "CNRM-ESM2-1e",
 }
 
 # Coordinate values shared by examples 1–5 and 7
@@ -256,16 +255,16 @@ class TestExample01UsualField(unittest.TestCase):
         self.assertEqual(self.ds.attrs["experiment_id"], "amip")
 
     def test_global_institution_id(self):
-        self.assertEqual(self.ds.attrs["institution_id"], "MOHC")
+        self.assertEqual(self.ds.attrs["institution_id"], "CNRM-CERFACS")
 
     def test_global_source_id(self):
-        self.assertEqual(self.ds.attrs["source_id"], "DUMMY-MODEL")
+        self.assertEqual(self.ds.attrs["source_id"], "CNRM-ESM2-1e")
 
     def test_global_variant_label(self):
         self.assertEqual(self.ds.attrs["variant_label"], "r1i1p1f1")
 
     def test_global_title(self):
-        self.assertIn("DUMMY-MODEL", self.ds.attrs.get("title", ""))
+        self.assertIn("CNRM-ESM2-1e", self.ds.attrs.get("title", ""))
 
 
 # ---------------------------------------------------------------------------
@@ -844,7 +843,7 @@ class TestExample05ModelLevels(unittest.TestCase):
 
     def test_ps_attrs(self):
         a = self.ds["ps"].attrs
-        self.assertEqual(a["standard_name"], "air_pressure")
+        self.assertEqual(a["standard_name"], "surface_air_pressure")
         self.assertEqual(a["long_name"], "Surface Air Pressure")
         self.assertEqual(a["units"], "Pa")
 

@@ -31,16 +31,15 @@ _BASE_CMIP7_DATASET = {
     "experiment_id": "amip",
     "forcing_index": "f1",
     "frequency": "mon",
-    "grid_label": "g999",
-    "host_collection": "CMIP7",
+    "grid_label": "g101",
     "initialization_index": "i1",
-    "institution_id": "MOHC",
+    "institution_id": "CNRM-CERFACS",
     "license_id": "CC-BY-4.0",
     "nominal_resolution": "100 km",
     "physics_index": "p1",
     "realization_index": "r1",
     "region": "glb",
-    "source_id": "DUMMY-MODEL",
+    "source_id": "CNRM-ESM2-1e",
 }
 
 _BASE_CMIP6_DATASET = {
@@ -50,15 +49,14 @@ _BASE_CMIP6_DATASET = {
     "experiment_id": "amip",
     "forcing_index": "f1",
     "frequency": "mon",
-    "grid_label": "g999",
-    "host_collection": "CMIP6",
+    "grid_label": "g101",
     "initialization_index": "i1",
-    "institution_id": "MOHC",
+    "institution_id": "CNRM-CERFACS",
     "nominal_resolution": "100 km",
     "physics_index": "p1",
     "realization_index": "r1",
     "region": "glb",
-    "source_id": "DUMMY-MODEL",
+    "source_id": "CNRM-ESM2-1e",
 }
 
 

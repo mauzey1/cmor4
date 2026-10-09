@@ -230,16 +230,16 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 "experiment_id": "amip",
                 "forcing_index": "f3",
                 "frequency": "mon",
-                "grid_label": "g999",
+                "grid_label": "g101",
                 "initialization_index": "i1",
-                "institution_id": "MOHC",
+                "institution_id": "CNRM-CERFACS",
                 "license_id": "CC-BY-4.0",
                 "nominal_resolution": "100 km",
                 "outpath": str(tmp_dir),
                 "physics_index": "p1",
                 "realization_index": "r9",
                 "region": "glb",
-                "source_id": "DUMMY-MODEL",
+                "source_id": "CNRM-ESM2-1e",
             }
             axes = [
                 guide_time_axis(

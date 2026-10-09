@@ -2125,7 +2125,7 @@ class TestGridLabelFallback(unittest.TestCase):
         project = cmip7_project()
 
         # A CMIP7 CV-defined label passes
-        project.cv.validate_dataset_values(_metadata({"grid_label": "g999"}))
+        project.cv.validate_dataset_values(_metadata({"grid_label": "g101"}))
 
         # A label not in the CMIP7 CV dict is rejected (by CV, not fallback)
         with self.assertRaises(ControlledVocabularyError):

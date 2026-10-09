@@ -383,15 +383,15 @@ def cmip7_dataset(**overrides):
         "experiment_id": "amip",
         "forcing_index": "f3",
         "frequency": "mon",
-        "grid_label": "g999",
+        "grid_label": "g101",
         "initialization_index": "i1",
-        "institution_id": "CCCma",
+        "institution_id": "CNRM-CERFACS",
         "license_id": "CC-BY-4.0",
         "nominal_resolution": "100 km",
         "physics_index": "p1",
         "realization_index": "r9",
         "region": "glb",
-        "source_id": "DUMMY-MODEL",
+        "source_id": "CNRM-ESM2-1e",
     }
     dataset.update(overrides)
     return dataset
@@ -811,9 +811,9 @@ class ProjectTablesTest(unittest.TestCase):
                 "experiment_id": "amip",
                 "forcing_index": "f3",
                 "frequency": "mon",
-                "grid_label": "g999",
+                "grid_label": "g101",
                 "initialization_index": "i1",
-                "institution_id": "CCCma",
+                "institution_id": "CNRM-CERFACS",
                 "license_id": "CC-BY-4.0",
                 "mip_era": "CMIP7",
                 "nominal_resolution": "100 km",
@@ -821,7 +821,7 @@ class ProjectTablesTest(unittest.TestCase):
                 "physics_index": "p1",
                 "realization_index": "r9",
                 "region": "glb",
-                "source_id": "DUMMY-MODEL",
+                "source_id": "CNRM-ESM2-1e",
                 "version": "v20200101",
             }
             variable = project.variable("tos_tavg-u-hxy-sea")
@@ -846,7 +846,7 @@ class ProjectTablesTest(unittest.TestCase):
                 ds["tos"].attrs["cell_methods"],
                 "area: mean where sea time: mean",
             )
-            self.assertEqual(ds.attrs["source_id"], "DUMMY-MODEL")
+            self.assertEqual(ds.attrs["source_id"], "CNRM-ESM2-1e")
 
     def test_cmip7_global_attrs_follow_upstream_cmor_cmip7(self):
         require_path(self, CMIP7_TABLE_ROOT)
@@ -857,17 +857,15 @@ class ProjectTablesTest(unittest.TestCase):
             "experiment_id": "amip",
             "forcing_index": "f3",
             "frequency": "mon",
-            "grid_label": "g999",
+            "grid_label": "g101",
             "initialization_index": "i1",
-            "institution_id": "CCCma",
+            "institution_id": "CNRM-CERFACS",
             "license_id": "CC-BY-4.0",
             "nominal_resolution": "100 km",
             "physics_index": "p1",
             "realization_index": "r9",
             "region": "glb",
-            "source_id": "DUMMY-MODEL",
-            "host_collection": "CMIP7",
-            "archive_id": "WCRP",
+            "source_id": "CNRM-ESM2-1e",
         }
 
         variable = project.variable("tos_tavg-u-hxy-sea")
@@ -889,10 +887,8 @@ class ProjectTablesTest(unittest.TestCase):
             "area_label": "sea",
             "region": "glb",
             "frequency": "mon",
-            "archive_id": "WCRP",
             "mip_era": "CMIP7",
             "data_specs_version": "MIP-DS7.1.0.0",
-            "host_collection": "CMIP7",
             "drs_specs": "MIP-DRS7",
             "license_id": "CC-BY-4.0",
         }
@@ -908,7 +904,7 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertNotIn("license_url", ds.attrs)
         self.assertEqual(
             ds.attrs["license"],
-            "CC-BY-4.0; CMIP7 data produced by CCCma is licensed under a "
+            "CC-BY-4.0; CMIP7 data produced by CNRM-CERFACS is licensed under a "
             "Creative Commons Attribution 4.0 International License "
             "(https://creativecommons.org/licenses/by/4.0). Consult "
             "https://wcrp-cmip.github.io/cmip7-guidance/docs/CMIP7/"
@@ -1061,7 +1057,7 @@ class ProjectTablesTest(unittest.TestCase):
             parent_activity_id="CMIP",
             parent_experiment_id="piControl",
             parent_mip_era="CMIP7",
-            parent_source_id="DUMMY-MODEL",
+            parent_source_id="CNRM-ESM2-1e",
             parent_time_units="days since 1850-01-01",
             parent_variant_label="r1i1p1f3",
             branch_time_in_child=0.0,
@@ -1089,7 +1085,7 @@ class ProjectTablesTest(unittest.TestCase):
             parent_activity_id="CMIP",
             parent_experiment_id="piControl",
             parent_mip_era="CMIP7",
-            parent_source_id="DUMMY-MODEL",
+            parent_source_id="CNRM-ESM2-1e",
             parent_time_units="days since 1850-01-01",
             parent_variant_label="r1i1p1f3",
             branch_time_in_child=0.0,
@@ -1118,15 +1114,15 @@ class ProjectTablesTest(unittest.TestCase):
             "experiment_id": "amip",
             "forcing_index": "f3",
             "frequency": "mon",
-            "grid_label": "g999",
+            "grid_label": "g101",
             "initialization_index": "i1",
-            "institution_id": "CCCma",
+            "institution_id": "CNRM-CERFACS",
             "license_id": "CC-BY-4.0",
             "nominal_resolution": "100 km",
             "physics_index": "p1",
             "realization_index": "r9",
             "region": "glb",
-            "source_id": "DUMMY-MODEL",
+            "source_id": "CNRM-ESM2-1e",
         }
 
         variable = project.variable(
