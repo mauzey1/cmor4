@@ -156,7 +156,7 @@ def create_dataset_from_validated_data(
         axis_dims,
         scalar_coord_names,
         auxiliary_coord_names,
-    ) = build_axis_mappings(axes)
+    ) = build_axis_mappings(axes, calendar=dataset.calendar)
 
     forecast_coord_name = derive_forecast_coords(
         axes,
@@ -182,7 +182,7 @@ def create_dataset_from_validated_data(
     if grid and grid.has_mapping:
         data_vars[grid.variable_name] = (
             (),
-            np.int32(0),
+            np.int32(-2147483647),
             grid.mapping_attributes(),
         )
         auxiliary_coord_names.extend(

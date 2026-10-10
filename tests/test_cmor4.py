@@ -613,6 +613,7 @@ class Cmor4Test(unittest.TestCase):
             self.assertEqual(ds["height"].shape, ())
             self.assertEqual(ds["height"].attrs["units"], "m")
             self.assertEqual(ds["tas"].attrs["coordinates"], "height")
+            self.assertNotIn("coordinates", ds["time_bnds"].attrs)
 
             plev_axes = [
                 time_axis(self.project),

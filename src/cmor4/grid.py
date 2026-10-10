@@ -266,8 +266,12 @@ class Grid(MetadataModel):
                     result: dict[str, Any] = {}
                     for key in ("units", "standard_name", "long_name"):
                         value = getattr(entry, key)
-                        if value is not None:
+                        if value not in (None, ""):
                             result[key] = str(value)
+                    if not result.get("units"):
+                        result["units"] = default_units
+                    if not result.get("standard_name"):
+                        result["standard_name"] = default_sn
                     return result
             # CF hard-coded defaults
             attrs: dict[str, Any] = {

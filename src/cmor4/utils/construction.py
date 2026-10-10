@@ -17,6 +17,8 @@ from .validation import add_axis_dim_aliases, named_dimensions
 
 def build_axis_mappings(
     axes: Sequence[Axis],
+    *,
+    calendar: str | None = None,
 ) -> tuple[
     dict[str, Any],
     dict[str, Any],
@@ -40,6 +42,7 @@ def build_axis_mappings(
             axis_dims,
             scalar_coord_names,
             auxiliary_coord_names,
+            calendar=calendar,
         )
     return coords, data_vars, axis_dims, scalar_coord_names, auxiliary_coord_names
 
@@ -233,11 +236,23 @@ def add_axis(
     axis_dims: dict[str, tuple[str, ...]],
     scalar_coord_names: list[str],
     auxiliary_coord_names: list[str],
+    *,
+    calendar: str | None = None,
 ) -> None:
     name = axis.name
     out_name = str(axis.out_name or axis.name)
     values = axis.values_array()
     coord_attrs = axis.attributes()
+    if (
+        calendar
+        and "calendar" not in coord_attrs
+        and (
+            str(axis.axis or "").upper() == "T"
+            or str(axis.standard_name or "").lower() == "time"
+            or str(axis.name).lower().startswith("time")
+        )
+    ):
+        coord_attrs["calendar"] = calendar
 
     if bool(axis.scalar):
         scalar_value: Any
@@ -247,23 +262,18 @@ def add_axis(
             scalar_value = values.reshape(()).item()
         else:
             raise ValueError("Scalar coordinates must contain exactly one value.")
-        coords[out_name] = ((), scalar_value, coord_attrs)
+        data_vars[out_name] = ((), scalar_value, coord_attrs)
         axis_dims[name] = ()
         add_axis_dim_aliases(axis, axis_dims, ())
         scalar_coord_names.append(out_name)
     elif axis.auxiliary_name:
         axis_dims[name] = (out_name,)
         add_axis_dim_aliases(axis, axis_dims, (out_name,))
-        coords[out_name] = (
-            out_name,
-            np.arange(len(values), dtype="i4"),
-            axis.attributes(include_units=False),
-        )
         aux_name = str(axis.auxiliary_name)
         data_vars[aux_name] = (
             (out_name,),
             values.astype(str),
-            axis.auxiliary_attributes(),
+            {**axis.attributes(include_units=False), **axis.auxiliary_attributes()},
         )
         auxiliary_coord_names.append(aux_name)
     else:
@@ -289,16 +299,28 @@ def add_axis(
             or ("climatology_bnds" if climatology_axis else f"{out_name}_bnds")
         )
         bounds = axis.bounds_array()
-        bounds_dims = tuple(coords[out_name][0]) + (str(axis.bounds_dim or "bnds"),)
+        axis_var = coords[out_name] if out_name in coords else data_vars[out_name]
+        bounds_dims = tuple(axis_var[0]) + (str(axis.bounds_dim or "bnds"),)
         data_vars[bounds_name] = (
             bounds_dims,
             bounds,
             axis.bounds_attributes(),
         )
-        coord_data = coords[out_name]
-        attrs = dict(coord_data[2])
+        if (
+            str(axis.axis or "").upper() == "Z"
+            and (axis.formula is not None or axis.z_factors is not None)
+        ):
+            attrs = dict(data_vars[bounds_name][2])
+            for key in ("units", "standard_name"):
+                if coord_attrs.get(key) is not None:
+                    attrs.setdefault(key, coord_attrs[key])
+            data_vars[bounds_name] = (bounds_dims, bounds, attrs)
+        attrs = dict(axis_var[2])
         attrs["climatology" if climatology_axis else "bounds"] = bounds_name
-        coords[out_name] = (coord_data[0], coord_data[1], attrs)
+        if out_name in coords:
+            coords[out_name] = (axis_var[0], axis_var[1], attrs)
+        else:
+            data_vars[out_name] = (axis_var[0], axis_var[1], attrs)
 
 
 def add_zfactor(
