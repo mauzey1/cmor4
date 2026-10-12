@@ -820,23 +820,43 @@ class Cmor4Test(unittest.TestCase):
             )
             basin_info = self.project.dataset_info(base_info)
 
-            basin_ds = open_created_dataset(
+            basin_path = Path(tmp_dir) / "basin.nc"
+            cmor4.create_dataset(
                 basin_info,
                 basin_variable,
                 basin_axes,
                 np.ones((2, 3, 2), dtype="f4"),
+                path=basin_path,
             )
+            with xr.open_dataset(
+                basin_path, decode_times=False, decode_coords=False
+            ) as opened:
+                basin_ds = opened.load()
 
             self.assertEqual(basin_ds["htovgyre"].dims, ("time", "basin", "lat"))
             self.assertEqual(basin_ds["htovgyre"].attrs["coordinates"], "sector")
+            self.assertEqual(basin_ds["sector"].dtype, np.dtype("S21"))
             self.assertEqual(
-                basin_ds["sector"].values.tolist(),
+                [value.decode("utf-8") for value in basin_ds["sector"].values],
                 [
                     "atlantic_arctic_ocean",
                     "indian_pacific_ocean",
                     "global_ocean",
                 ],
             )
+            with Dataset(basin_path) as output:
+                sector = output.variables["sector"]
+                self.assertEqual(sector.datatype, np.dtype("S1"))
+                self.assertEqual(sector.dimensions, ("basin", "string21"))
+                self.assertEqual(sector[:].shape, (3, 21))
+                self.assertEqual(
+                    basin_ds["sector"].values.tolist(),
+                    [
+                        b"atlantic_arctic_ocean",
+                        b"indian_pacific_ocean",
+                        b"global_ocean",
+                    ],
+                )
 
             grid_axes = [
                 time_axis(self.project),

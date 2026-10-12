@@ -270,9 +270,14 @@ def add_axis(
         axis_dims[name] = (out_name,)
         add_axis_dim_aliases(axis, axis_dims, (out_name,))
         aux_name = str(axis.auxiliary_name)
+        aux_values = values
+        if values.dtype.kind in {"O", "S", "U"}:
+            text_values = np.asarray(values, dtype=str)
+            width = max(1, *(len(value.encode("utf-8")) for value in text_values.flat))
+            aux_values = text_values.astype(f"S{width}")
         data_vars[aux_name] = (
             (out_name,),
-            values.astype(str),
+            aux_values,
             {**axis.attributes(include_units=False), **axis.auxiliary_attributes()},
         )
         auxiliary_coord_names.append(aux_name)
