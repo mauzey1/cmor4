@@ -368,6 +368,31 @@ def create_dataset_from_validated_data(
                 # Set chunk size to full array shape (single chunk)
                 array.encoding["chunksizes"] = tuple(int(size) for size in array.shape)
 
+    # Suppress the _FillValue attribute on coordinate variables and their bounds
+    coordinate_names = {str(name) for name in ds.coords}
+    for array in ds.variables.values():
+        coordinates = array.attrs.get("coordinates")
+        if coordinates:
+            coordinate_names.update(
+                name for name in str(coordinates).split() if name in ds.variables
+            )
+
+    coordinate_bounds_names: set[str] = set()
+    for coord_name in coordinate_names:
+        if coord_name not in ds.variables:
+            continue
+        coord = ds[coord_name]
+        for attr_name in ("bounds", "climatology"):
+            bounds_name = coord.attrs.get(attr_name)
+            if bounds_name is not None and str(bounds_name) in ds.variables:
+                coordinate_bounds_names.add(str(bounds_name))
+
+    for name in coordinate_names | coordinate_bounds_names:
+        if name not in ds.variables:
+            continue
+        ds[name].attrs.pop("_FillValue", None)
+        ds[name].encoding["_FillValue"] = None
+
     validate_final_dataset(ds, ctx, zfactor_names)
 
     return ds

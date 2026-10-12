@@ -7,6 +7,7 @@ import warnings
 from unittest import mock
 
 import numpy as np
+from netCDF4 import Dataset
 import xarray as xr
 
 import cmor4
@@ -659,6 +660,37 @@ class Cmor4Test(unittest.TestCase):
 
             self.assertEqual(plev_ds["ta"].dims, ("time", "plev", "lat", "lon"))
             self.assertEqual(plev_ds["plev"].attrs["positive"], "down")
+
+    def test_coordinate_variables_and_bounds_have_no_fill_value(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir) / "created.nc"
+            info = self.project.dataset_info(dataset_info(Path(tmp_dir)))
+            axes = [
+                time_axis(self.project),
+                self.project.axis("height2m", values=[2.0], scalar=True),
+                *horizontal_axes(self.project),
+            ]
+            variable = self.project.variable("tas_tavg-h2m-hxy-u", table_id="atmos")
+            cmor4.create_dataset(
+                info,
+                variable,
+                axes,
+                np.ones((2, 2, 2), dtype="f4"),
+                path=tmp_path,
+            )
+
+            with Dataset(tmp_path) as output:
+                for name in (
+                    "time",
+                    "time_bnds",
+                    "lat",
+                    "lat_bnds",
+                    "lon",
+                    "lon_bnds",
+                    "height",
+                ):
+                    self.assertNotIn("_FillValue", output.variables[name].ncattrs())
+                self.assertIn("_FillValue", output.variables["tas"].ncattrs())
 
     def test_hybrid_sigma_zfactors_are_written(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
