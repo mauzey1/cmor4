@@ -25,6 +25,8 @@ jobs:
       - name: Install dependencies
         run: |
           brew install udunits
+          export UDUNITS2_INCDIR="$(brew --prefix)/include"
+          export UDUNITS2_LIBDIR="$(brew --prefix)/lib"
           export UDUNITS2_XML_PATH=$(brew --prefix)/share/udunits/udunits2.xml
           export DYLD_LIBRARY_PATH=$(brew --prefix)/lib:$DYLD_LIBRARY_PATH
           python -m pip install --upgrade pip
