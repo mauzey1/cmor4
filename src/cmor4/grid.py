@@ -203,8 +203,7 @@ class Grid(MetadataModel):
             non_spatial_dims = tuple(
                 str(dim)
                 for dim in var_dims
-                if str(dim).lower()
-                not in grid_dim_names | _DEFAULT_HORIZONTAL_DIMS
+                if str(dim).lower() not in grid_dim_names | _DEFAULT_HORIZONTAL_DIMS
             )
             return non_spatial_dims + grid_dims
         return grid_dims

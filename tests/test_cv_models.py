@@ -239,9 +239,12 @@ def test_specialized_catalogs_are_used_by_existing_validation_api():
     invalid = valid.updated(source_type="AER")
 
     assert cv.sources is not None
-    assert cv.sources.validation_error(
-        "MODEL-A", invalid.to_dict(), ignored_keys={"source"}
-    ) is not None
+    assert (
+        cv.sources.validation_error(
+            "MODEL-A", invalid.to_dict(), ignored_keys={"source"}
+        )
+        is not None
+    )
     assert cv.experiments is not None
     assert (
         cv.experiments.validation_error(

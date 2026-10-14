@@ -181,7 +181,6 @@ class TestCMIP7AutoChunking(unittest.TestCase):
 
     def test_cmip7_auto_chunking_applied(self):
         """CMIP7 datasets get automatic chunking when not specified."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -349,7 +348,6 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
 
     def test_compliant_user_chunks_accepted(self):
         """Valid CMIP7-compliant user chunks are accepted."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -428,7 +426,6 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
 
     def test_data_variable_chunks_along_time_accepted(self):
         """Data chunks may split time when each chunk is large enough."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -474,7 +471,6 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
 
     def test_top_level_chunksizes_accepted(self):
         """Top-level chunksizes apply to data without splitting time bounds."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -670,7 +666,6 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
 
     def test_compression_with_cmip7_chunks(self):
         """Compression encoding works alongside CMIP7 chunking."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -724,7 +719,6 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
 
     def test_compression_with_auto_chunks(self):
         """Compression works with auto-applied CMIP7 chunks."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -773,7 +767,6 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
 
     def test_top_level_compression_and_quantization(self):
         """Top-level encoding keys apply to the primary variable."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -820,7 +813,6 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
 
     def test_top_level_and_variable_specific_encoding_keys_pass_through(self):
         """CMOR4 only special-cases chunksizes and passes other encoding keys."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -870,7 +862,6 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
 
     def test_variable_encoding_overrides_top_level_encoding(self):
         """Variable-specific encoding has precedence over top-level defaults."""
-        import cmor4
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
