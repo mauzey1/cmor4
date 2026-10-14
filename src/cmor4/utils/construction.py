@@ -311,9 +311,8 @@ def add_axis(
             bounds,
             axis.bounds_attributes(),
         )
-        if (
-            str(axis.axis or "").upper() == "Z"
-            and (axis.formula is not None or axis.z_factors is not None)
+        if str(axis.axis or "").upper() == "Z" and (
+            axis.formula is not None or axis.z_factors is not None
         ):
             attrs = dict(data_vars[bounds_name][2])
             for key in ("units", "standard_name"):

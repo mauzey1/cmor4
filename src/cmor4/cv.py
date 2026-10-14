@@ -627,9 +627,9 @@ class ControlledVocabulary:
             if source is not None:
                 expected["source"] = source
         if self.experiments is not None:
-            experiment = self.experiments.defaults_for(
-                dataset.experiment_id
-            ).get("experiment")
+            experiment = self.experiments.defaults_for(dataset.experiment_id).get(
+                "experiment"
+            )
             if experiment is not None:
                 expected["experiment"] = experiment
         if self.institutions is not None:

@@ -958,7 +958,7 @@ def _validate_stored_direction(axis: Axis, values: np.ndarray, name: str) -> Non
         )
 
 
-_MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset({"all_leap", "366_day"})
+_MIP_INAPPROPRIATE_CALENDARS: frozenset[str] = frozenset({"tai", "all_leap", "366_day"})
 
 
 def _validate_calendar(dataset: DatasetMetadata) -> None:

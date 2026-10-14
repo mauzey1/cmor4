@@ -34,6 +34,7 @@ notebook = [
 ]
 dev = [
   "pytest>=8.0",
+  "pyfive>=1.1",
   "ruff>=0.15",
   "mypy>=2.1",
   "sphinx>=7.0",

@@ -4316,12 +4316,6 @@ class MIPCalendarTest(unittest.TestCase):
             self.project.validate_dataset(dataset, var, self._base_axes())
         self.assertIn("utc", str(ctx.exception))
 
-    def test_tai_calendar_raises(self):
-        var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon", "calendar": "tai"})
-        with self.assertRaises(AxisValidationError):
-            self.project.validate_dataset(dataset, var, self._base_axes())
-
     def test_completely_unknown_calendar_raises(self):
         var = self.project.variable("pr")
         dataset = DatasetInfo.from_prepared({
@@ -4342,6 +4336,9 @@ class MIPCalendarTest(unittest.TestCase):
 
     def test_all_leap_calendar_warns(self):
         self.assertTrue(self._validate_with_calendar("all_leap"))
+
+    def test_tai_leap_calendar_warns(self):
+        self.assertTrue(self._validate_with_calendar("tai"))
 
     def test_366_day_calendar_warns(self):
         self.assertTrue(self._validate_with_calendar("366_day"))
