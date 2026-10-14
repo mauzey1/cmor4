@@ -1,5 +1,5 @@
-name: Deploy CMOR build
-run-name: Deploy CMOR build
+name: Deploy CMOR
+run-name: Deploy CMOR
 on:
   push:
     branches:
@@ -9,12 +9,36 @@ on:
       - "main"
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run ruff code checks
+        run: |
+          ruff check src tests
+          ruff format src tests --check
+
   build:
+    name: Build (${{ matrix.os }} - Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
         os: ["ubuntu-latest", "macos-latest"]
+
+    needs: lint
 
     steps:
       - name: Checkout repo and submodules
