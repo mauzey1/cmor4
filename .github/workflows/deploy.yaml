@@ -25,8 +25,8 @@ jobs:
       - name: Install dependencies
         run: |
           brew install udunits
-          echo "UDUNITS2_XML_PATH=$(brew --prefix)/share/udunits/udunits2.xml" >> $GITHUB_ENV
-          echo "DYLD_LIBRARY_PATH=$(brew --prefix)/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+          export UDUNITS2_XML_PATH=$(brew --prefix)/share/udunits/udunits2.xml
+          export DYLD_LIBRARY_PATH=$(brew --prefix)/lib:$DYLD_LIBRARY_PATH
           python -m pip install --upgrade pip
           pip install -e .
       - name: Test with pytest
