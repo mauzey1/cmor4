@@ -51,24 +51,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies on Linux
+      - name: Install dependencies
         if: runner.os == 'Linux'
         run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            brew install udunits
+            export UDUNITS2_INCDIR="$(brew --prefix)/include"
+            export UDUNITS2_LIBDIR="$(brew --prefix)/lib"
+            export UDUNITS2_XML_PATH=$(brew --prefix)/share/udunits/udunits2.xml
+            export DYLD_LIBRARY_PATH=$(brew --prefix)/lib:$DYLD_LIBRARY_PATH
+          fi
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install -e ".[dev]"
 
-      - name: Install dependencies on macOS
-        if: runner.os == 'macOS'
+      - name: Test with mypy
         run: |
-          brew install udunits
-          export UDUNITS2_INCDIR="$(brew --prefix)/include"
-          export UDUNITS2_LIBDIR="$(brew --prefix)/lib"
-          export UDUNITS2_XML_PATH=$(brew --prefix)/share/udunits/udunits2.xml
-          export DYLD_LIBRARY_PATH=$(brew --prefix)/lib:$DYLD_LIBRARY_PATH
-          python -m pip install --upgrade pip
-          pip install -e .
+          mypy --python-version ${{ matrix.python-version }} -p cmor4
 
       - name: Test with pytest
         run: |
-          pip install pytest pyfive
           pytest

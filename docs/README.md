@@ -7,14 +7,14 @@ This directory contains the Sphinx documentation for CMOR4.
 Install the development dependencies including Sphinx, sphinx-autobuild, and the Furo theme:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[docs]"
 ```
 
 Or if you have an existing virtual environment:
 
 ```bash
 source venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[docs]"
 ```
 
 ## Building the Documentation
