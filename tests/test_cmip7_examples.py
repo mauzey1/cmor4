@@ -21,12 +21,14 @@ All seven examples share the same dataset metadata unless noted:
 
 from __future__ import annotations
 
+import glob
 import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
 import xarray as xr
+import cmor4
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CMIP7_TABLE_ROOT = REPO_ROOT / "project_tables" / "cmip7-cmor-tables"
@@ -36,8 +38,6 @@ CV_PATH = CMIP7_TABLE_ROOT / "tables-cvs" / "cmor-cvs.json"
 
 def _requires_tables(test):
     """Skip decorator applied when the CMIP7 submodule is not checked out."""
-    import unittest
-
     if not TABLES_DIR.exists() or not CV_PATH.exists():
         return unittest.skip("CMIP7 tables submodule not initialised")(test)
     return test
@@ -78,8 +78,6 @@ _TIME_UNITS = "days since 1979-01-01"
 
 def _project(*table_names: str):
     """Return a ProjectTables instance for the given variable table names."""
-    import cmor4
-
     return cmor4.ProjectTables.from_directory(
         CMIP7_TABLE_ROOT,
         cv_file="tables-cvs/cmor-cvs.json",
@@ -132,8 +130,6 @@ class TestExample01UsualField(unittest.TestCase):
     """Example 1: monthly SST on a regular lat/lon grid (CMIP7_ocean)."""
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         project = _project("CMIP7_ocean.json")
         dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
@@ -302,8 +298,6 @@ class TestExample02PressureLevels(unittest.TestCase):
     )
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         project = _project("CMIP7_atmos.json")
         dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
@@ -411,8 +405,6 @@ class TestExample03ScalarDimension(unittest.TestCase):
     ).reshape(2, 3, 4)
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         base = {**_BASE_DATASET, "forcing_index": "f2", "realization_index": "r9"}
         project = _project("CMIP7_atmos.json")
@@ -508,8 +500,6 @@ class TestExample04AuxiliaryCoordinates(unittest.TestCase):
     ).reshape(2, 3, 3)
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         project = _project("CMIP7_ocean.json")
         dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
@@ -633,8 +623,6 @@ class TestExample05ModelLevels(unittest.TestCase):
     ).reshape(2, 3, 4)
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         project = _project("CMIP7_atmos.json")
         dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
@@ -931,8 +919,6 @@ class TestExample06ComplexGrid(unittest.TestCase):
         return lat_v, lon_v
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         project = _project("CMIP7_atmos.json")
         dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
@@ -1169,8 +1155,6 @@ class TestExample07FixedField(unittest.TestCase):
     )
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         base = {**_BASE_DATASET, "frequency": "fx"}
         project = _project("CMIP7_land.json")
@@ -1251,8 +1235,6 @@ class TestExample08LongNameOverrides(unittest.TestCase):
     """Example 8: long_name remapping for region-specific sea ice variables."""
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         # NH region dataset with daily frequency
         base = {**_BASE_DATASET, "frequency": "day", "region": "nh"}
@@ -1300,8 +1282,6 @@ class TestExample09CellMeasures(unittest.TestCase):
     """Example 9: cell_measures remapping from mapping table."""
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         base = {**_BASE_DATASET, "region": "glb"}
         project = _project("CMIP7_aerosol.json")
@@ -1347,8 +1327,6 @@ class TestDatasetWriterIntegration01(unittest.TestCase):
     """Example 1 rewritten with DatasetWriter: verify output matches cmorize()."""
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         project = _project("CMIP7_ocean.json")
         dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
@@ -1404,8 +1382,6 @@ class TestDatasetWriterIntegration01(unittest.TestCase):
             )
 
         # Find the output file
-        import glob
-
         files = glob.glob(f"{self.tmp}/**/*.nc", recursive=True)
         self.assertEqual(len(files), 1)
         self.ds = xr.open_dataset(files[0], decode_times=False)
@@ -1509,8 +1485,6 @@ class TestDatasetWriterIntegration05(unittest.TestCase):
     ).reshape(2, 3, 4)
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         project = _project("CMIP7_atmos.json")
         dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
@@ -1681,8 +1655,6 @@ class TestDatasetWriterIntegration05(unittest.TestCase):
             )
 
         # Find the output file
-        import glob
-
         files = glob.glob(f"{self.tmp}/**/*.nc", recursive=True)
         self.assertEqual(len(files), 1)
         self.ds = xr.open_dataset(files[0], decode_times=False)
@@ -1750,8 +1722,6 @@ class TestDatasetWriterIntegration02(unittest.TestCase):
     )
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
         project = _project("CMIP7_atmos.json")
         dataset = _make_dataset(project, _BASE_DATASET, self.tmp)
@@ -1782,8 +1752,6 @@ class TestDatasetWriterIntegration02(unittest.TestCase):
             )
 
         # Find the output file
-        import glob
-
         files = glob.glob(f"{self.tmp}/**/*.nc", recursive=True)
         self.assertEqual(len(files), 1)
         self.ds = xr.open_dataset(files[0], decode_times=False)

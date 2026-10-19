@@ -26,10 +26,11 @@ from typing import Any
 
 import numpy as np
 
-from cmor4 import Axis, Grid, Variable
+from cmor4 import Axis, DatasetInfo, Grid, ProjectTables, Variable
 from dataset_helpers import open_created_dataset
 from cmor4.exceptions import TableValidationError
 from cmor4.utils.construction import add_grid_coords
+from cmor4.tables import _validate_grid_dimensions
 
 # ---------------------------------------------------------------------------
 # Minimal helpers
@@ -321,8 +322,6 @@ class TestMustCallCmorGrid(unittest.TestCase):
 
     def _make_project(self) -> Any:
         """Build a minimal ProjectTables with a grids table containing i/j axes."""
-        from cmor4 import ProjectTables
-
         cv = {
             "CV": {
                 "activity_id": ["CMIP"],
@@ -416,8 +415,6 @@ class TestMustCallCmorGrid(unittest.TestCase):
 
 class TestProjectTablesGridFactory(unittest.TestCase):
     def _make_project(self) -> Any:
-        from cmor4 import ProjectTables
-
         cv = {"CV": {"required_global_attributes": [], "mip_era": "CMIP7"}}
         grids_table = {
             "axis_entry": {
@@ -464,8 +461,6 @@ class TestProjectTablesGridFactory(unittest.TestCase):
 
     def test_grid_axes_empty_table_skips_validation(self) -> None:
         """When the grids table has no axis entries, any axis is accepted."""
-        from cmor4 import ProjectTables
-
         cv = {"CV": {"required_global_attributes": [], "mip_era": "CMIP7"}}
         grids_table: dict[str, dict[str, dict[str, str]]] = {
             "axis_entry": {},
@@ -496,8 +491,6 @@ class TestProjectTablesGridFactory(unittest.TestCase):
 
 class TestValidateGridDimensions(unittest.TestCase):
     def test_axis_path_passes_matching_shapes(self) -> None:
-        from cmor4.tables import _validate_grid_dimensions
-
         j = Axis(name="j", out_name="j", values=np.arange(4, dtype="f4"))
         i = Axis(name="i", out_name="i", values=np.arange(8, dtype="f4"))
         lat2d, lon2d = _latlon(4, 8)
@@ -505,8 +498,6 @@ class TestValidateGridDimensions(unittest.TestCase):
         _validate_grid_dimensions(grid, [])  # should not raise
 
     def test_axis_path_raises_on_shape_mismatch(self) -> None:
-        from cmor4.tables import _validate_grid_dimensions
-
         j = Axis(name="j", out_name="j", values=np.arange(4, dtype="f4"))
         i = Axis(name="i", out_name="i", values=np.arange(8, dtype="f4"))
         wrong_lat = np.zeros((5, 8))  # j should be 4
@@ -515,8 +506,6 @@ class TestValidateGridDimensions(unittest.TestCase):
             _validate_grid_dimensions(grid, [])
 
     def test_name_path_passes_with_matching_axes(self) -> None:
-        from cmor4.tables import _validate_grid_dimensions
-
         j = Axis(name="j", values=np.arange(4, dtype="f4"))
         i = Axis(name="i", values=np.arange(8, dtype="f4"))
         lat2d, lon2d = _latlon(4, 8)
@@ -524,8 +513,6 @@ class TestValidateGridDimensions(unittest.TestCase):
         _validate_grid_dimensions(grid, [j, i])  # should not raise
 
     def test_name_path_raises_on_missing_axis(self) -> None:
-        from cmor4.tables import _validate_grid_dimensions
-
         i = Axis(name="i", values=np.arange(8, dtype="f4"))
         grid = Grid(dimensions=("j", "i"))
         with self.assertRaises(TableValidationError) as ctx:
@@ -533,8 +520,6 @@ class TestValidateGridDimensions(unittest.TestCase):
         self.assertIn("j", str(ctx.exception))
 
     def test_name_path_raises_on_shape_mismatch(self) -> None:
-        from cmor4.tables import _validate_grid_dimensions
-
         j = Axis(name="j", values=np.arange(4, dtype="f4"))
         i = Axis(name="i", values=np.arange(8, dtype="f4"))
         wrong_lat = np.zeros((3, 8))  # j should be 4
@@ -591,8 +576,6 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         return time_axis, j_axis, i_axis, grid, lat2d, lon2d
 
     def test_curvilinear_grid_dataset(self) -> None:
-        from cmor4.datasetinfo import DatasetInfo
-
         nj, ni = 4, 8
         time_axis, j_axis, i_axis, grid, lat2d, lon2d = self._make_grid_and_axes(nj, ni)
 
@@ -625,8 +608,6 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         self.assertIn("longitude", coord_attr)
 
     def test_curvilinear_grid_with_vertices(self) -> None:
-        from cmor4.datasetinfo import DatasetInfo
-
         nj, ni, nv = 3, 5, 4
         lat2d, lon2d = _latlon(nj, ni)
         blat = np.random.rand(nj, ni, nv).astype("f4")
@@ -668,8 +649,6 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         """When grid axes are also passed in the caller's axes list they must
         not be processed twice — no duplicate coords or doubled coordinates
         attribute entries."""
-        from cmor4.datasetinfo import DatasetInfo
-
         nj, ni = 4, 8
         lat2d, lon2d = _latlon(nj, ni)
         time_axis = Axis(

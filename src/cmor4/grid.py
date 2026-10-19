@@ -125,12 +125,10 @@ class Grid(MetadataModel):
     @model_validator(mode="after")
     def _sync_axes_and_dimensions(self) -> Grid:
         """Derive dimensions from axes, mark axes as isgridaxis."""
-        from .axis import Axis as _Axis  # local import avoids circular
-
         if self.axes:
             # Mark every dimensional axis as belonging to a grid.
             # Axis is frozen, so build updated copies if not already flagged.
-            updated: list[_Axis] = [
+            updated: list[Axis] = [
                 a if a.isgridaxis else a.updated(isgridaxis=True) for a in self.axes
             ]
             object.__setattr__(self, "axes", updated)

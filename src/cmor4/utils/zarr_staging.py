@@ -7,6 +7,8 @@ import tempfile
 from typing import Any
 
 import numpy as np
+import dask.array as da
+import zarr
 
 
 @dataclass
@@ -27,13 +29,6 @@ class ZarrStagingStore:
             )
         )
         path = root / "staging.zarr"
-        try:
-            import zarr
-        except ModuleNotFoundError as exc:
-            raise ModuleNotFoundError(
-                "DatasetWriter requires the optional runtime dependency 'zarr'. "
-                "Install cmor4 with current project dependencies before using it."
-            ) from exc
         return cls(root=root, path=path, _group=zarr.open_group(str(path), mode="w"))
 
     def append(self, name: str, data: np.ndarray, time_dim_index: int) -> Any:
@@ -78,13 +73,6 @@ class ZarrStagingStore:
         array = self.array(name)
         if array is None:
             raise ValueError(f"No staged Zarr array exists for {name!r}.")
-        try:
-            import dask.array as da
-        except ModuleNotFoundError as exc:
-            raise ModuleNotFoundError(
-                "DatasetWriter requires the runtime dependency 'dask[array]' "
-                "to finalize staged Zarr data without loading it into memory."
-            ) from exc
         data = da.from_zarr(array)
         byteorder = getattr(data.dtype, "byteorder", None)
         if byteorder not in (None, "=", "|"):
@@ -97,13 +85,6 @@ class ZarrStagingStore:
 
     def reset(self) -> None:
         shutil.rmtree(self.path, ignore_errors=True)
-        try:
-            import zarr
-        except ModuleNotFoundError as exc:
-            raise ModuleNotFoundError(
-                "DatasetWriter requires the optional runtime dependency 'zarr'. "
-                "Install cmor4 with current project dependencies before using it."
-            ) from exc
         self._group = zarr.open_group(str(self.path), mode="w")
         self._arrays.clear()
 

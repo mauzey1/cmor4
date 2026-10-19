@@ -20,6 +20,11 @@ from .utils.construction import (
     derive_forecast_coords,
     set_formula_terms,
 )
+from .utils.chunking import (
+    calculate_cmip7_chunks,
+    is_cmip7_dataset,
+    validate_cmip7_chunksizes,
+)
 from .utils.validation import (
     ValidationContext,
     _dataset_for_variable,
@@ -238,13 +243,6 @@ def create_dataset_from_validated_data(
     if missing_value is not None:
         ds[var_name].attrs["missing_value"] = missing_value
         ds[var_name].encoding["_FillValue"] = missing_value
-
-    # Handle chunking with CMIP7 compliance
-    from .utils.chunking import (
-        calculate_cmip7_chunks,
-        is_cmip7_dataset,
-        validate_cmip7_chunksizes,
-    )
 
     # Extract user-provided chunksizes for the data variable.
     # Priority: variable-specific encoding["var_name"]["chunksizes"] >

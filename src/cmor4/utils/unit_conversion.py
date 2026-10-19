@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import cf_units
+
 
 def units_are_convertible(user_units: str, table_units: str) -> bool:
     """Return True if *user_units* and *table_units* are dimensionally
@@ -39,8 +41,6 @@ def units_are_convertible(user_units: str, table_units: str) -> bool:
     if user_units == table_units:
         return True
     try:
-        import cf_units
-
         a = cf_units.Unit(user_units)
         b = cf_units.Unit(table_units)
         return a.is_convertible(b)

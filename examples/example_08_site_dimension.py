@@ -55,8 +55,12 @@ def write_example(output_dir: Path) -> str:
         dimensions=["site"],
         latitude=site_latitudes,
         longitude=site_longitudes,
-        latitude_vertices=np.column_stack((site_latitudes - 0.25, site_latitudes + 0.25)),
-        longitude_vertices=np.column_stack((site_longitudes - 0.25, site_longitudes + 0.25)),
+        latitude_vertices=np.column_stack(
+            (site_latitudes - 0.25, site_latitudes + 0.25)
+        ),
+        longitude_vertices=np.column_stack(
+            (site_longitudes - 0.25, site_longitudes + 0.25)
+        ),
     )
     variable = project.variable(
         "tas_tpt-h2m-hs-u", table_id="atmos", missing_value=np.float64(1.0e20)

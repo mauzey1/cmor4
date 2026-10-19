@@ -27,6 +27,7 @@ from cmor4.exceptions import (
     AxisValidationError,
 )
 from cmor4.utils.dataset_metadata import DatasetMetadata
+from cmor4.utils.validation import validate_axis_values_early
 from table_helpers import (
     CMIP7_TABLE_ROOT,
     DRCDP_TABLE_ROOT,
@@ -3985,8 +3986,6 @@ class StoredDirectionTest(unittest.TestCase):
 
     def test_raw_axis_with_wrong_direction_raises_on_early_validation(self):
         """An unprepared Axis with stored_direction set is also validated."""
-        from cmor4.utils.validation import validate_axis_values_early
-
         raw = Axis(
             name="plev",
             values=[10000.0, 50000.0, 92500.0],
@@ -3997,8 +3996,6 @@ class StoredDirectionTest(unittest.TestCase):
             validate_axis_values_early(raw)
 
     def test_raw_axis_correct_direction_passes_early_validation(self):
-        from cmor4.utils.validation import validate_axis_values_early
-
         raw = Axis(
             name="plev",
             values=[92500.0, 50000.0, 10000.0],

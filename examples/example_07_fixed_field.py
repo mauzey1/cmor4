@@ -60,7 +60,11 @@ def write_example(output_dir: Path) -> str:
         "rootd_ti-u-hxy-lnd", table_id="land", missing_value=np.float64(1.0e20)
     )
     data = np.array(
-        [[0.50, 0.45, 1.0e20, 0.55], [0.60, 0.60, 1.0e20, 0.55], [1.0e20, 0.45, 0.50, 0.50]],
+        [
+            [0.50, 0.45, 1.0e20, 0.55],
+            [0.60, 0.60, 1.0e20, 0.55],
+            [1.0e20, 0.45, 0.50, 0.50],
+        ],
         dtype="f4",
     )
     return str(cmor4.cmorize(dataset, variable, axes, data))

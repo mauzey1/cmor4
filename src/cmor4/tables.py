@@ -1145,8 +1145,6 @@ def _validate_grid_dimensions(
         lat/lon array size along a given axis index does not match the axis
         length.
     """
-    import numpy as np
-
     if getattr(grid, "axes", None):
         # --- Axis-based path: grid owns its dimensional Axis objects -------
         grid_axes = list(grid.axes)
