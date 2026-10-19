@@ -1064,6 +1064,7 @@ def validate_variable_values(
 ) -> None:
     """Apply CMOR-style checks to data variable and formula-term values."""
 
+    values: np.ndarray
     try:
         values = np.ma.asarray(data, dtype=float)
     except (TypeError, ValueError):
