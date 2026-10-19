@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence, Union
+from typing import Any, Mapping, Sequence, Union, overload
 import re
 import warnings
 
@@ -17,6 +17,7 @@ from .grid_mapping_registry import (
 from .time_utils import cftime_interval_days
 from .dataset_metadata import DatasetMetadata
 from ..axis import Axis
+from ..datasetinfo import DatasetInfo
 from ..exceptions import (
     AxisValidationError,
     TableValidationError,
@@ -218,6 +219,20 @@ def validate_final_dataset(
 
     for zfactor, out_name in zip(ctx.zfactors, zfactor_names):
         _validate_final_zfactor(ds, zfactor, out_name)
+
+
+@overload
+def _dataset_for_variable(
+    dataset: DatasetInfo,
+    variable: Variable,
+) -> tuple[DatasetInfo, Variable]: ...
+
+
+@overload
+def _dataset_for_variable(
+    dataset: DatasetMetadata,
+    variable: Variable,
+) -> tuple[DatasetMetadata, Variable]: ...
 
 
 def _dataset_for_variable(

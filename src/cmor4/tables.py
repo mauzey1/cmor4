@@ -977,14 +977,14 @@ class ProjectTables:
 
         # ZFactor validation: ensure stored attributes match tables
         for zfactor in zfactors:
-            _ze = self.formula_table.resolve(zfactor)
-            entry_name, entry = (_ze.name, _ze) if _ze else (None, None)
-            if entry is None:
+            formula_entry = self.formula_table.resolve(zfactor)
+            formula_entry_name = formula_entry.name if formula_entry else None
+            if formula_entry is None:
                 continue
 
             # Units must be dimensionally convertible, not just equal.
             # Use the same cf_units-based check as Variable units validation.
-            table_units = entry.units
+            table_units = formula_entry.units
             user_units = zfactor.units
             if (
                 table_units is not None
@@ -994,14 +994,14 @@ class ProjectTables:
                 and not _units_are_convertible(str(user_units), str(table_units))
             ):
                 raise TableValidationError(
-                    f"formula term {entry_name!r} units={user_units!r} does "
+                    f"formula term {formula_entry_name!r} units={user_units!r} does "
                     f"not match table value {table_units!r} and the two are "
                     f"not dimensionally convertible."
                 )
 
             # Validate remaining metadata (standard_name, long_name)
             # by exact match.
-            entry.validate_metadata(
+            formula_entry.validate_metadata(
                 zfactor.to_dict(),
                 ("standard_name", "long_name"),
                 "formula term",
@@ -1010,11 +1010,11 @@ class ProjectTables:
             # When the formula-term table entry has no declared
             # dimensions the term is expected to be a scalar.  Accept a
             # size-1 array (CMOR3-compatible) but reject larger arrays.
-            if not entry.dimensions and zfactor.values is not None:
+            if not formula_entry.dimensions and zfactor.values is not None:
                 arr = np.asarray(zfactor.values)
                 if arr.ndim > 0 and arr.size != 1:
                     raise TableValidationError(
-                        f"formula term {entry_name!r} has no declared "
+                        f"formula term {formula_entry_name!r} has no declared "
                         "dimensions (expected a scalar value) but values "
                         f"with shape {arr.shape} were provided."
                     )
