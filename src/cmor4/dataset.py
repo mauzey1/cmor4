@@ -370,8 +370,8 @@ def create_dataset_from_validated_data(
 
     # Suppress the _FillValue attribute on coordinate variables and their bounds
     coordinate_names = {str(name) for name in ds.coords}
-    for array in ds.variables.values():
-        coordinates = array.attrs.get("coordinates")
+    for data_var in ds.variables.values():
+        coordinates = data_var.attrs.get("coordinates")
         if coordinates:
             coordinate_names.update(
                 name for name in str(coordinates).split() if name in ds.variables
@@ -400,7 +400,7 @@ def create_dataset_from_validated_data(
 
 def write_netcdf(
     ds: xr.Dataset,
-    dataset: DatasetInfo,
+    dataset: DatasetMetadata,
     variable: Variable,
     path: str | Path | None = None,
     **to_netcdf_kwargs: Any,
@@ -583,7 +583,7 @@ def _collect_external_variables(
 
 
 def build_output_path(
-    dataset: DatasetInfo,
+    dataset: DatasetMetadata,
     variable: Variable,
     ds: xr.Dataset | None = None,
 ) -> Path:
@@ -650,7 +650,7 @@ def build_output_path(
 
 def string_from_template(
     template: str,
-    dataset: DatasetInfo,
+    dataset: DatasetMetadata,
     variable: Variable,
     ds: xr.Dataset | None = None,
     separator: str | None = None,

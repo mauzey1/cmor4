@@ -116,16 +116,18 @@ class CoordinateTable:
         grid_coord_entries: dict[str, AxisEntry] = {}
 
         if coordinate_table is not None:
-            document = CoordinateTableDocument.model_validate_json(
+            coordinate_document = CoordinateTableDocument.model_validate_json(
                 coordinate_table.read_text()
             )
-            coord_entries = document.axis_entry
+            coord_entries = coordinate_document.axis_entry
         if grid_table is not None:
-            document = GridTableDocument.model_validate_json(grid_table.read_text())
-            grid_axis_entries = document.axis_entry
+            grid_document = GridTableDocument.model_validate_json(
+                grid_table.read_text()
+            )
+            grid_axis_entries = grid_document.axis_entry
             grid_coord_entries = {
                 name: entry.model_copy(update={"is_grid_coord": True})
-                for name, entry in document.variable_entry.items()
+                for name, entry in grid_document.variable_entry.items()
             }
 
         return cls(coord_entries, grid_axis_entries, grid_coord_entries)

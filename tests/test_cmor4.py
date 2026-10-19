@@ -929,9 +929,7 @@ class Cmor4Test(unittest.TestCase):
         coordinates.
         """
         with tempfile.TemporaryDirectory() as tmp_dir:
-            latitude = np.array(
-                [[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]], dtype="f8"
-            )
+            latitude = np.array([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]], dtype="f8")
             longitude = np.array(
                 [[100.0, 110.0, 120.0], [130.0, 140.0, 150.0]], dtype="f8"
             )
