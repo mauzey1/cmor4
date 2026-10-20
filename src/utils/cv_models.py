@@ -3,7 +3,7 @@
 The JSON files used by CMOR are intentionally extensible and contain several
 different kinds of data under one ``CV`` object.  This module turns the parts
 that affect dataset validation into small Pydantic models.  The coordinating
-:class:`cmor4.cv.ControlledVocabulary` consumes these typed components rather
+:class:`cmor.cv.ControlledVocabulary` consumes these typed components rather
 than behaving like the source JSON mapping.
 
 The models are deliberately project-neutral.  A new project can add ordinary

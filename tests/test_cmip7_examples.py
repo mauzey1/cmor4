@@ -1,11 +1,11 @@
-"""CMOR4 reimplementations of the CMOR3 Python examples.
+"""CMOR reimplementations of the CMOR3 Python examples.
 
-Each test writes a dataset with CMOR4 and verifies that the dimensions,
+Each test writes a dataset with CMOR and verifies that the dimensions,
 coordinate names, coordinate attributes, and variable attributes match those
 produced by the corresponding CMOR3 example found at
 https://github.com/PCMDI/cmor/tree/main/examples/python.
 
-Only attributes that CMOR3 explicitly writes are asserted; CMOR4-specific
+Only attributes that CMOR3 explicitly writes are asserted; CMOR-specific
 global attributes are not checked.
 
 All seven examples share the same dataset metadata unless noted:
@@ -28,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 import xarray as xr
-import cmor4
+import cmor
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CMIP7_TABLE_ROOT = REPO_ROOT / "project_tables" / "cmip7-cmor-tables"
@@ -78,7 +78,7 @@ _TIME_UNITS = "days since 1979-01-01"
 
 def _project(*table_names: str):
     """Return a ProjectTables instance for the given variable table names."""
-    return cmor4.ProjectTables.from_directory(
+    return cmor.ProjectTables.from_directory(
         CMIP7_TABLE_ROOT,
         cv_file="tables-cvs/cmor-cvs.json",
         variable_tables=[f"tables/{n}" for n in table_names],
@@ -166,7 +166,7 @@ class TestExample01UsualField(unittest.TestCase):
             ],
             dtype="f4",
         ).reshape(2, 3, 4)
-        path = cmor4.cmorize(dataset, variable, axes, data)
+        path = cmor.cmorize(dataset, variable, axes, data)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -310,7 +310,7 @@ class TestExample02PressureLevels(unittest.TestCase):
             2, 19, 3, 4
         )
         data[0, 0, 0, 0] = np.float32(1.0e20)
-        path = cmor4.cmorize(dataset, variable, axes, data)
+        path = cmor.cmorize(dataset, variable, axes, data)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -413,7 +413,7 @@ class TestExample03ScalarDimension(unittest.TestCase):
             "tas_tavg-h2m-hxy-u", table_id="atmos", missing_value=np.float32(1.0e20)
         )
         axes = [_time_axis(project), _lat_axis(project), _lon_axis(project)]
-        path = cmor4.cmorize(dataset, variable, axes, self._DATA)
+        path = cmor.cmorize(dataset, variable, axes, self._DATA)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -510,7 +510,7 @@ class TestExample04AuxiliaryCoordinates(unittest.TestCase):
         )
         basin_axis = project.axis("basin", values=self._BASINS)
         axes = [_time_axis(project), basin_axis, _lat_axis(project)]
-        path = cmor4.cmorize(dataset, variable, axes, self._DATA)
+        path = cmor.cmorize(dataset, variable, axes, self._DATA)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -766,7 +766,7 @@ class TestExample05ModelLevels(unittest.TestCase):
             ],
             dtype="f4",
         ).reshape(2, 5, 3, 4)
-        path = cmor4.cmorize(
+        path = cmor.cmorize(
             dataset,
             variable,
             [time_axis, lev_axis, lat_axis, lon_axis],
@@ -994,7 +994,7 @@ class TestExample06ComplexGrid(unittest.TestCase):
             ],
             dtype="f4",
         ).reshape(2, 3, 4)
-        path = cmor4.cmorize(dataset, variable, [time_axis], data, grid=grid)
+        path = cmor.cmorize(dataset, variable, [time_axis], data, grid=grid)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -1163,7 +1163,7 @@ class TestExample07FixedField(unittest.TestCase):
             "rootd_ti-u-hxy-lnd", table_id="land", missing_value=np.float32(1.0e20)
         )
         axes = [_lat_axis(project), _lon_axis(project)]
-        path = cmor4.cmorize(dataset, variable, axes, self._DATA)
+        path = cmor.cmorize(dataset, variable, axes, self._DATA)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -1252,7 +1252,7 @@ class TestExample08LongNameOverrides(unittest.TestCase):
         )
         axes = [time_axis]
         data = np.array([10.0e6, 11.0e6], dtype="f4")
-        path = cmor4.cmorize(dataset, variable, axes, data)
+        path = cmor.cmorize(dataset, variable, axes, data)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -1294,7 +1294,7 @@ class TestExample09CellMeasures(unittest.TestCase):
         )
         axes = [_time_axis(project), _lat_axis(project), _lon_axis(project)]
         data = np.linspace(0.1, 0.5, 2 * 3 * 4, dtype="f4").reshape(2, 3, 4)
-        path = cmor4.cmorize(dataset, variable, axes, data)
+        path = cmor.cmorize(dataset, variable, axes, data)
         self.ds = xr.open_dataset(path, decode_times=False)
 
     def tearDown(self):
@@ -1367,7 +1367,7 @@ class TestDatasetWriterIntegration01(unittest.TestCase):
         ).reshape(2, 3, 4)
 
         # Write incrementally with DatasetWriter
-        with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+        with cmor.DatasetWriter(dataset, variable, axes) as writer:
             # Write first time slice
             writer.write(
                 data[0:1],
@@ -1633,7 +1633,7 @@ class TestDatasetWriterIntegration05(unittest.TestCase):
         ).reshape(2, 5, 3, 4)
 
         # Write incrementally with DatasetWriter
-        with cmor4.DatasetWriter(
+        with cmor.DatasetWriter(
             dataset,
             variable,
             [time_axis, lev_axis, lat_axis, lon_axis],
@@ -1737,7 +1737,7 @@ class TestDatasetWriterIntegration02(unittest.TestCase):
         data[0, 0, 0, 0] = np.float32(1.0e20)
 
         # Write incrementally with DatasetWriter
-        with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+        with cmor.DatasetWriter(dataset, variable, axes) as writer:
             # Write first time slice
             writer.write(
                 data[0:1],

@@ -1,4 +1,4 @@
-"""Pydantic base class shared by all CMOR4 metadata records."""
+"""Pydantic base class shared by all CMOR metadata records."""
 
 from __future__ import annotations
 
@@ -77,12 +77,12 @@ BoolCoerced = Annotated[bool | None, BeforeValidator(_to_bool)]
 
 
 class MetadataModel(BaseModel):
-    """Frozen Pydantic base for CMOR4 metadata records.
+    """Frozen Pydantic base for CMOR metadata records.
 
     Subclasses (Axis, Variable, ZFactor, Grid) are pure data holders: they
     declare typed fields and provide NetCDF output helpers.  All project-table
     resolution and merge logic lives on the table classes in
-    :mod:`cmor4.utils.tables`.
+    :mod:`cmor.utils.tables`.
 
     Design notes
     ------------

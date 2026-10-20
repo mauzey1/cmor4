@@ -1,15 +1,15 @@
 """CMIP6 dataset-validation tests using real CMIP6 tables.
 
-This module ports CMOR3's Python test suite for CMIP6 to CMOR4, using the
+This module ports CMOR3's Python test suite for CMIP6 to CMOR, using the
 ``project_tables/cmip6-cmor-tables`` submodule (mirrors
 https://github.com/PCMDI/cmip6-cmor-tables).
 
 Each test class maps to one or more CMOR3 test files in ``cmor/Test/``.
 The CMOR3 tests drove the C library through its Python bindings and inspected
-log output; CMOR4 tests call the Python API directly and assert on exceptions
+log output; CMOR tests call the Python API directly and assert on exceptions
 or dataset attributes.
 
-CMOR3 test file → CMOR4 test class mapping
+CMOR3 test file → CMOR test class mapping
 -------------------------------------------
 test_python_CMIP6_CV_badinstitutionID.py   → TestInstitutionValidation
 test_python_CMIP6_CV_badinstitution.py     → TestInstitutionValidation
@@ -56,9 +56,9 @@ from typing import Any
 
 import numpy as np
 
-import cmor4
+import cmor
 from dataset_helpers import open_created_dataset
-from cmor4.dataset import _collect_external_variables
+from cmor.dataset import _collect_external_variables
 
 # ---------------------------------------------------------------------------
 # Location of the CMIP6 tables submodule
@@ -89,10 +89,10 @@ def _require_cmip6_tables(test: unittest.TestCase) -> None:
         )
 
 
-def _cmip6_project(*extra_tables: str) -> cmor4.ProjectTables:
+def _cmip6_project(*extra_tables: str) -> cmor.ProjectTables:
     """Load the CMIP6 project tables, optionally with additional variable tables."""
     tables = [CMIP6_OMON_TABLE, CMIP6_AMON_TABLE] + list(extra_tables)
-    return cmor4.ProjectTables.from_directory(
+    return cmor.ProjectTables.from_directory(
         CMIP6_TABLE_ROOT,
         cv_file=CMIP6_CV_FILE,
         variable_tables=tables,
@@ -288,7 +288,7 @@ class TestInstitutionValidation(unittest.TestCase):
         expected log error containing ``"ddPCMDI"``.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(_amip_attrs(tmp, institution_id="ddPCMDI"))
             self.assertIn("ddPCMDI", str(ctx.exception))
 
@@ -299,7 +299,7 @@ class TestInstitutionValidation(unittest.TestCase):
         expected log message containing ``'NCC2" will be replaced with'``.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(_amip_attrs(tmp, institution_id="NCC2"))
             self.assertIn("NCC2", str(ctx.exception))
 
@@ -348,7 +348,7 @@ class TestSourceValidation(unittest.TestCase):
         expected log error containing ``"bad_sourceid"``.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(_amip_attrs(tmp, source_id="bad_sourceid"))
             self.assertIn("bad_sourceid", str(ctx.exception))
 
@@ -358,7 +358,7 @@ class TestSourceValidation(unittest.TestCase):
         CMOR3 test: uses PCMDI institution but mismatched source.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError):
+            with self.assertRaises(cmor.ControlledVocabularyError):
                 # CESM2 belongs to NCAR, not PCMDI
                 self.project.dataset_info(
                     _amip_attrs(
@@ -387,7 +387,7 @@ class TestSourceValidation(unittest.TestCase):
         expected log error containing ``"source type"``.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(
                     _ssp434_attrs(tmp, source_type="AOGCM PYTHON")
                 )
@@ -432,7 +432,7 @@ class TestGridLabelValidation(unittest.TestCase):
         expected log error containing ``'"gr-0"'``.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(_amip_attrs(tmp, grid_label="gr-0"))
             self.assertIn("gr-0", str(ctx.exception))
 
@@ -443,7 +443,7 @@ class TestGridLabelValidation(unittest.TestCase):
         expected log error containing ``'"gs1n"'``.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(_amip_attrs(tmp, grid_label="gs1n"))
             self.assertIn("gs1n", str(ctx.exception))
 
@@ -489,12 +489,12 @@ class TestVariantLabelValidation(unittest.TestCase):
         CMOR3 test: ``cmor.set_cur_dataset_attribute("physics_index", "1A")``
         expected log error containing ``'"1A"'``.
 
-        CMIP6 stores ``variant_label`` as a POSIX BRE regex which CMOR4 cannot
+        CMIP6 stores ``variant_label`` as a POSIX BRE regex which CMOR cannot
         directly evaluate.  Instead, we verify that an entirely invalid format
         that is not a recognised CMIP6 activity_id is rejected by the CV.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 # Activity ID 'BADACT' is not in the CMIP6 CV
                 self.project.dataset_info(_amip_attrs(tmp, activity_id="BADACT"))
             self.assertIn("BADACT", str(ctx.exception))
@@ -516,7 +516,7 @@ class TestVariantLabelValidation(unittest.TestCase):
                 "physics_index": "1",
                 "forcing_index": "1",
             })
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(attrs)
             self.assertIn(overflow_value, str(ctx.exception))
 
@@ -532,7 +532,7 @@ class TestVariantLabelValidation(unittest.TestCase):
                 "physics_index": "1",
                 "forcing_index": "1",
             })
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(attrs)
             self.assertIn(huge, str(ctx.exception))
 
@@ -598,7 +598,7 @@ class TestParentExperimentValidation(unittest.TestCase):
         must not have parent attributes set.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError):
+            with self.assertRaises(cmor.ControlledVocabularyError):
                 self.project.dataset_info(
                     _amip_attrs(
                         tmp,
@@ -615,7 +615,7 @@ class TestParentExperimentValidation(unittest.TestCase):
         invalid ``parent_source_id="child"`` — the CV should reject it.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(_ssp434_attrs(tmp, parent_source_id="child"))
             self.assertIn("child", str(ctx.exception))
 
@@ -633,7 +633,7 @@ class TestParentExperimentValidation(unittest.TestCase):
         values ``['no parent', 'dcppA-assim']``, so ``historical`` is invalid.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 # dcppC-forecast-addAgung only allows 'dcppA-assim' or 'no parent'
                 # as parent; 'historical' should be rejected
                 self.project.dataset_info({
@@ -672,7 +672,7 @@ class TestParentExperimentValidation(unittest.TestCase):
         ``parent_source_id="OLD-SOURCE"`` expected log error containing ``'OLD'``.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(
                     _ssp434_attrs(tmp, parent_source_id="OLD-SOURCE")
                 )
@@ -686,7 +686,7 @@ class TestParentExperimentValidation(unittest.TestCase):
         ``"CMIP-6"`` under the ``parent_mip_era`` key.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(_ssp434_attrs(tmp, parent_mip_era="CMIP-6"))
             self.assertIn("CMIP-6", str(ctx.exception))
 
@@ -724,7 +724,7 @@ class TestSubExperimentValidation(unittest.TestCase):
         an error containing ``"sub_experiment_id"``.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(
                     _dcpp_hindcast_attrs(tmp, sub_experiment_id="s3000")
                 )
@@ -747,7 +747,7 @@ class TestSubExperimentValidation(unittest.TestCase):
     def test_unknown_sub_experiment_id_is_rejected(self) -> None:
         """A sub_experiment_id not in the CV is rejected."""
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError):
+            with self.assertRaises(cmor.ControlledVocabularyError):
                 self.project.dataset_info(_amip_attrs(tmp, sub_experiment_id="sXXXX"))
 
 
@@ -773,7 +773,7 @@ class TestActivityValidation(unittest.TestCase):
         and expects a CV error.
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError):
+            with self.assertRaises(cmor.ControlledVocabularyError):
                 self.project.dataset_info(_amip_attrs(tmp, activity_id="ScenarioMIP"))
 
     def test_correct_activity_id_for_amip_passes(self) -> None:
@@ -785,7 +785,7 @@ class TestActivityValidation(unittest.TestCase):
     def test_invalid_activity_id_string_is_rejected(self) -> None:
         """An activity_id not in the CV enum is always rejected."""
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError):
+            with self.assertRaises(cmor.ControlledVocabularyError):
                 self.project.dataset_info(
                     _amip_attrs(tmp, activity_id="NOT_AN_ACTIVITY")
                 )
@@ -809,7 +809,7 @@ class TestExperimentValidation(unittest.TestCase):
     def test_unknown_experiment_id_is_rejected(self) -> None:
         """An experiment_id not in the CV raises ControlledVocabularyError."""
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError) as ctx:
+            with self.assertRaises(cmor.ControlledVocabularyError) as ctx:
                 self.project.dataset_info(
                     _amip_attrs(tmp, experiment_id="bad_experiment")
                 )
@@ -834,7 +834,7 @@ class TestExperimentValidation(unittest.TestCase):
         CMOR3 reference: ``test_python_CMIP6_CV_nomipera.py``
         """
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(cmor4.ControlledVocabularyError):
+            with self.assertRaises(cmor.ControlledVocabularyError):
                 self.project.dataset_info(_amip_attrs(tmp, mip_era="CMIP5"))
 
 
@@ -1167,14 +1167,14 @@ class TestCmip6DatasetRoundtrip(unittest.TestCase):
       4. Write a variable and close
       5. Assert on log output or NetCDF attributes
 
-    CMOR4 equivalent: ProjectTables + dataset_info + cmorize.
+    CMOR equivalent: ProjectTables + dataset_info + cmorize.
     """
 
     def setUp(self) -> None:
         _require_cmip6_tables(self)
         self.project = _cmip6_project()
 
-    def _time_axis(self) -> cmor4.Axis:
+    def _time_axis(self) -> cmor.Axis:
         return self.project.axis(
             "time",
             values=[0.5, 1.5, 2.5, 3.5, 4.5],

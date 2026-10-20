@@ -68,7 +68,7 @@ class DatasetWriter:
     - **Memory-bounded operation**: Uses dask lazy loading to stream data
       chunk-by-chunk without loading the full array into memory
     - **Validation**: Applies the same CMOR table validation as
-      :func:`~cmor4.cmorize`, ensuring output compliance
+      :func:`~cmor.cmorize`, ensuring output compliance
     - **Automatic cleanup**: Staging directory is automatically removed on
       success, preserved on error for debugging
     - **Flexible time specification**: Time values can be provided incrementally
@@ -78,10 +78,10 @@ class DatasetWriter:
 
     .. code-block:: python
 
-        import cmor4
+        import cmor
         import numpy as np
 
-        project = cmor4.ProjectTables.from_directory(...)
+        project = cmor.ProjectTables.from_directory(...)
         dataset = project.dataset_info({...})
         variable = project.variable("tas")
 
@@ -93,7 +93,7 @@ class DatasetWriter:
         ]
 
         # Write data incrementally
-        with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+        with cmor.DatasetWriter(dataset, variable, axes) as writer:
             for year in range(1850, 2015):
                 time_vals, data = load_year(year)  # Your function
                 bounds = compute_bounds(time_vals)  # Your function
@@ -190,7 +190,7 @@ class DatasetWriter:
     --------
     **Basic incremental write:**
 
-    >>> with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+    >>> with cmor.DatasetWriter(dataset, variable, axes) as writer:
     ...     for month in range(12):
     ...         data = load_month(month)  # Your function
     ...         time_val = [month * 30.0 + 15.0]
@@ -203,7 +203,7 @@ class DatasetWriter:
     >>> time = project.axis("time", values=time_vals, bounds=time_bnds)
     >>> axes = [time, lat, lon]
     >>>
-    >>> with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+    >>> with cmor.DatasetWriter(dataset, variable, axes) as writer:
     ...     # Write uses pre-specified time values
     ...     writer.write(data[:6])    # First 6 time steps
     ...     writer.write(data[6:])    # Remaining time steps
@@ -217,7 +217,7 @@ class DatasetWriter:
     ...         "complevel": 4,
     ...     }
     ... }
-    >>> writer = cmor4.DatasetWriter(
+    >>> writer = cmor.DatasetWriter(
     ...     dataset,
     ...     variable,
     ...     axes,
@@ -229,7 +229,7 @@ class DatasetWriter:
 
     **Writing multiple file segments:**
 
-    >>> writer = cmor4.DatasetWriter(
+    >>> writer = cmor.DatasetWriter(
     ...     dataset, variable, axes, path="segment-1.nc"
     ... )
     >>> writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
@@ -247,7 +247,7 @@ class DatasetWriter:
     ...     project.zfactor("p0", values=100000.0),
     ...     project.zfactor("ps"),  # Time-varying - no values
     ... ]
-    >>> with cmor4.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
+    >>> with cmor.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
     ...     # Provide ps values per chunk
     ...     ps_chunk1 = np.full((12, 180, 360), 99000.0, dtype="f4")
     ...     writer.write(data[:12], time_values=times[:12], zfactors={"ps": ps_chunk1})
@@ -399,7 +399,7 @@ class DatasetWriter:
 
         >>> # Time axis initialized with complete values
         >>> time = project.axis("time", values=[15.0, 45.0], ...)
-        >>> writer = cmor4.DatasetWriter(dataset, variable, [time, ...])
+        >>> writer = cmor.DatasetWriter(dataset, variable, [time, ...])
         >>> writer.write(data)  # Uses pre-specified time values
 
         **Write single time slice:**
@@ -531,24 +531,24 @@ class DatasetWriter:
         --------
         **Basic usage:**
 
-        >>> writer = cmor4.DatasetWriter(dataset, variable, axes)
+        >>> writer = cmor.DatasetWriter(dataset, variable, axes)
         >>> writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
         >>> writer.write(data2, time_values=[45.0], time_bounds=[[30.0, 60.0]])
         >>> path = writer.close()
         >>> print(f"Wrote {path}")
-        >>> with cmor4.open_dataset(path, decode_times=False) as ds:
+        >>> with cmor.open_dataset(path, decode_times=False) as ds:
         ...     print(f"Time range: {ds.time.values}")
 
         **With context manager (automatic close):**
 
-        >>> with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+        >>> with cmor.DatasetWriter(dataset, variable, axes) as writer:
         ...     writer.write(data, time_values=times, time_bounds=bounds)
         ...     # close() called automatically on context exit
 
         **Inspect written dataset:**
 
         >>> path = writer.close()
-        >>> with cmor4.open_dataset(path) as ds:
+        >>> with cmor.open_dataset(path) as ds:
         ...     print(ds.data_vars)  # Show variables
         ...     print(ds.attrs)      # Show global attributes
 

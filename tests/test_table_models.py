@@ -5,8 +5,8 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from cmor4 import Axis, DatasetInfo, Grid, Variable, ZFactor
-from cmor4.utils.table_models import (
+from cmor import Axis, DatasetInfo, Grid, Variable, ZFactor
+from cmor.utils.table_models import (
     CoordinateTableDocument,
     FormulaTableDocument,
     GridTableDocument,

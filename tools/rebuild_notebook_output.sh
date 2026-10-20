@@ -7,7 +7,7 @@ Usage:
   tools/rebuild_notebook_output.sh [options] NOTEBOOK.ipynb [...]
   tools/rebuild_notebook_output.sh [options] --all
 
-Executes CMOR4 example notebooks in place, then strips notebook metadata while
+Executes CMOR example notebooks in place, then strips notebook metadata while
 keeping the regenerated outputs.
 
 Options:

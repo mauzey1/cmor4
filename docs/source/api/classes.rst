@@ -1,7 +1,7 @@
 Classes
 =======
 
-CMOR4 provides several classes for managing metadata and validation:
+CMOR provides several classes for managing metadata and validation:
 
 .. toctree::
    :maxdepth: 1

@@ -1,9 +1,9 @@
 Exceptions
 ==========
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
-CMOR4 defines four exception classes, all inheriting from ``ValueError``:
+CMOR defines four exception classes, all inheriting from ``ValueError``:
 
 .. autoexception:: TableValidationError
    :show-inheritance:

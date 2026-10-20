@@ -42,7 +42,7 @@ class Grid(MetadataModel):
 
     Grid objects may be constructed in two ways:
 
-    **Axis-based** — supply ``axes`` with already-created :class:`~cmor4.Axis`
+    **Axis-based** — supply ``axes`` with already-created :class:`~cmor.Axis`
     instances.  The grid owns those axes as its indexing dimensions; it
     derives ``dimensions`` from them automatically and marks each axis with
     ``isgridaxis=True``.  This is the recommended path for curvilinear and
@@ -73,7 +73,7 @@ class Grid(MetadataModel):
     Parameters
     ----------
     axes:
-        Ordered :class:`~cmor4.Axis` objects that form the grid's indexing
+        Ordered :class:`~cmor.Axis` objects that form the grid's indexing
         dimensions.  When supplied, ``dimensions`` is derived from them and
         each axis is flagged ``isgridaxis=True``.
     dimensions:
@@ -218,7 +218,7 @@ class Grid(MetadataModel):
         **grid-owned variables** dimensioned by the grid's own spatial
         dimensions (and a ``vertices`` dimension for the cell-corner arrays).
         They are written directly as xarray dataset entries rather than being
-        routed through the :class:`~cmor4.Axis` machinery.
+        routed through the :class:`~cmor.Axis` machinery.
 
         Parameters
         ----------
@@ -227,7 +227,7 @@ class Grid(MetadataModel):
             ``["j", "i"]``).  These become the dimension tuple for the
             lat/lon coordinate arrays.
         coord_table:
-            Optional :class:`~cmor4.utils.tables.CoordinateTable` used to pull
+            Optional :class:`~cmor.utils.tables.CoordinateTable` used to pull
             CF metadata (``standard_name``, ``long_name``, ``units``) for
             latitude and longitude from the project tables.  When ``None``,
             hard-coded CF defaults are used.

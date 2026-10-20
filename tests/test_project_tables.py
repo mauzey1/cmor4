@@ -10,8 +10,8 @@ from typing import Any
 
 import numpy as np
 
-import cmor4
-from cmor4 import (
+import cmor
+from cmor import (
     Axis,
     ControlledVocabulary,
     Grid,
@@ -21,13 +21,13 @@ from cmor4 import (
     ZFactor,
 )
 from pydantic import ValidationError
-from cmor4.exceptions import (
+from cmor.exceptions import (
     ControlledVocabularyError,
     TableValidationError,
     AxisValidationError,
 )
-from cmor4.utils.dataset_metadata import DatasetMetadata
-from cmor4.utils.validation import validate_axis_values_early
+from cmor.utils.dataset_metadata import DatasetMetadata
+from cmor.utils.validation import validate_axis_values_early
 from table_helpers import (
     CMIP7_TABLE_ROOT,
     DRCDP_TABLE_ROOT,
@@ -359,18 +359,18 @@ def lat_lon_axes(project=None):
             ),
         ]
     return [
-        cmor4.Axis(
+        cmor.Axis(
             name="time",
             values=[15.0, 45.0],
             bounds=[[0.0, 30.0], [30.0, 60.0]],
             units="days since 2000-01-01",
         ),
-        cmor4.Axis(
+        cmor.Axis(
             name="latitude",
             values=[-45.0, 45.0],
             bounds=[[-90.0, 0.0], [0.0, 90.0]],
         ),
-        cmor4.Axis(
+        cmor.Axis(
             name="longitude",
             values=[90.0, 270.0],
             bounds=[[0.0, 180.0], [180.0, 360.0]],
@@ -431,12 +431,12 @@ class ProjectTablesTest(unittest.TestCase):
             ),
         ]
 
-        variable = cmor4.Variable(
+        variable = cmor.Variable(
             name="sample",
             dimensions=["time", "x", "y"],
             coordinates=["latitude", "longitude"],
         )
-        info = cmor4.DatasetInfo.from_prepared(
+        info = cmor.DatasetInfo.from_prepared(
             {"frequency": "mon"},
         )
 
@@ -463,7 +463,7 @@ class ProjectTablesTest(unittest.TestCase):
         require_path(self, CMIP7_TABLE_ROOT)
         project = cmip7_project("tables/CMIP7_ocean.json")
 
-        self.assertIsInstance(project.cv, cmor4.ControlledVocabulary)
+        self.assertIsInstance(project.cv, cmor.ControlledVocabulary)
         self.assertIn("activity_id", project.cv.rules)
         self.assertIn("tos_tavg-u-hxy-sea", project.variable_table.entries)
         self.assertIn("latitude", project.coordinate_table._all_coord)
@@ -498,12 +498,12 @@ class ProjectTablesTest(unittest.TestCase):
                 + "\n"
             )
 
-            cv = cmor4.ControlledVocabulary.from_file(cv_file)
+            cv = cmor.ControlledVocabulary.from_file(cv_file)
 
             self.assertEqual(cv.rules["activity_id"].allowed_values, ("CMIP",))
             self.assertEqual(cv.required_attributes, ("activity_id",))
             cv.validate_dataset_info(_metadata({"activity_id": "CMIP"}))
-            with self.assertRaises(cmor4.ControlledVocabularyError):
+            with self.assertRaises(cmor.ControlledVocabularyError):
                 cv.validate_dataset_info(
                     _metadata({"activity_id": "not-a-real-activity"})
                 )
@@ -590,7 +590,7 @@ class ProjectTablesTest(unittest.TestCase):
 """.strip()
                 + "\n"
             )
-            project = cmor4.ProjectTables(
+            project = cmor.ProjectTables(
                 cv_file,
                 [variable_table],
                 coordinate_table=coordinate_table,
@@ -622,7 +622,7 @@ class ProjectTablesTest(unittest.TestCase):
         project = cmip7_project("tables/CMIP7_ocean.json")
 
         with self.assertRaisesRegex(
-            cmor4.TableValidationError,
+            cmor.TableValidationError,
             "Generic level 'olevel' matches multiple coordinate entries",
         ):
             project.axis("olevel", values=[5.0, 50.0])
@@ -661,12 +661,12 @@ class ProjectTablesTest(unittest.TestCase):
             ),
         ]
 
-        variable = cmor4.Variable(
+        variable = cmor.Variable(
             name="sample",
             dimensions=["time", "x", "y"],
             coordinates=["latitude", "longitude"],
         )
-        info = cmor4.DatasetInfo.from_prepared(
+        info = cmor.DatasetInfo.from_prepared(
             {"frequency": "mon"},
         )
 
@@ -774,7 +774,7 @@ class ProjectTablesTest(unittest.TestCase):
 """.strip()
                 + "\n"
             )
-            project = cmor4.ProjectTables(
+            project = cmor.ProjectTables(
                 cv_file,
                 [variable_table],
                 coordinate_table=coordinate_table,
@@ -792,11 +792,11 @@ class ProjectTablesTest(unittest.TestCase):
             "Tables/obs4MIPs_Amon.json", "Tables/obs4MIPs_A1hrPt.json"
         )
 
-        with self.assertRaises(cmor4.TableValidationError):
-            project.variable_table.resolve(cmor4.Variable(name="pr").to_dict())
+        with self.assertRaises(cmor.TableValidationError):
+            project.variable_table.resolve(cmor.Variable(name="pr").to_dict())
 
         entry = project.variable_table.resolve(
-            cmor4.Variable(name="pr", table_id="obs4MIPs_A1hrPt").to_dict()
+            cmor.Variable(name="pr", table_id="obs4MIPs_A1hrPt").to_dict()
         )
 
         self.assertEqual(entry.table_id, "obs4MIPs_A1hrPt")
@@ -925,7 +925,7 @@ class ProjectTablesTest(unittest.TestCase):
         project = cmip7_project("tables/CMIP7_ocean.json")
         dataset = cmip7_dataset(activity_id="not-a-real-activity")
 
-        with self.assertRaises(cmor4.ControlledVocabularyError):
+        with self.assertRaises(cmor.ControlledVocabularyError):
             project.dataset_info(dataset)
 
     def test_experiment_required_source_type_is_validated(self):
@@ -971,7 +971,7 @@ class ProjectTablesTest(unittest.TestCase):
 """.strip()
                 + "\n"
             )
-            project = cmor4.ProjectTables(cv_file, [variable_table])
+            project = cmor.ProjectTables(cv_file, [variable_table])
             dataset = {
                 "activity_id": "CMIP",
                 "experiment_id": "historical",
@@ -982,10 +982,10 @@ class ProjectTablesTest(unittest.TestCase):
             self.assertEqual(prepared.to_dict()["source_type"], "AOGCM AER")
 
             with self.assertRaisesRegex(
-                cmor4.ControlledVocabularyError, "missing required"
+                cmor.ControlledVocabularyError, "missing required"
             ):
                 project.dataset_info({**dataset, "source_type": "AER"})
-            with self.assertRaisesRegex(cmor4.ControlledVocabularyError, "not allowed"):
+            with self.assertRaisesRegex(cmor.ControlledVocabularyError, "not allowed"):
                 project.dataset_info({**dataset, "source_type": "AOGCM LAND"})
 
     def test_required_global_attributes_are_enforced(self):
@@ -996,8 +996,8 @@ class ProjectTablesTest(unittest.TestCase):
         variable = project.variable("tos_tavg-u-hxy-sea")
         info = project.dataset_info(dataset)
 
-        with self.assertRaisesRegex(cmor4.ControlledVocabularyError, "license_id"):
-            cmor4.create_dataset(
+        with self.assertRaisesRegex(cmor.ControlledVocabularyError, "license_id"):
+            cmor.create_dataset(
                 info,
                 variable,
                 lat_lon_axes(project),
@@ -1011,9 +1011,9 @@ class ProjectTablesTest(unittest.TestCase):
         info = project.dataset_info(cmip7_dataset())
 
         with self.assertRaisesRegex(
-            cmor4.ControlledVocabularyError, "not-a-real-activity"
+            cmor.ControlledVocabularyError, "not-a-real-activity"
         ):
-            cmor4.create_dataset(
+            cmor.create_dataset(
                 info,
                 variable,
                 lat_lon_axes(project),
@@ -1037,7 +1037,7 @@ class ProjectTablesTest(unittest.TestCase):
             "source_id": "LOCA2-1",
         }
 
-        with self.assertRaisesRegex(cmor4.ControlledVocabularyError, "institution_id"):
+        with self.assertRaisesRegex(cmor.ControlledVocabularyError, "institution_id"):
             project.dataset_info(dataset)
 
     def test_parent_experiment_attributes_are_required_by_experiment_cv(self):
@@ -1046,7 +1046,7 @@ class ProjectTablesTest(unittest.TestCase):
         dataset = cmip7_dataset(experiment_id="historical")
 
         with self.assertRaisesRegex(
-            cmor4.ControlledVocabularyError, "parent_experiment_id"
+            cmor.ControlledVocabularyError, "parent_experiment_id"
         ):
             project.dataset_info(dataset)
 
@@ -1104,7 +1104,7 @@ class ProjectTablesTest(unittest.TestCase):
 
         for key, value in cases.items():
             with self.subTest(key=key):
-                with self.assertRaises(cmor4.ControlledVocabularyError):
+                with self.assertRaises(cmor.ControlledVocabularyError):
                     project.dataset_info({**dataset, key: value})
 
     def test_cmip7_variable_attrs_come_from_variable_table(self):
@@ -1223,7 +1223,7 @@ class ProjectTablesTest(unittest.TestCase):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
 
-        with self.assertRaises(cmor4.TableValidationError):
+        with self.assertRaises(cmor.TableValidationError):
             project.variable("not_a_table_variable")
 
     def test_obs4mips_rejects_frequency_that_does_not_match_table(self):
@@ -1254,9 +1254,9 @@ class ProjectTablesTest(unittest.TestCase):
             project.axis("longitude", values=[90.0, 270.0]),
         ]
 
-        with self.assertRaises(cmor4.ControlledVocabularyError):
+        with self.assertRaises(cmor.ControlledVocabularyError):
             with tempfile.TemporaryDirectory() as tmp_dir:
-                cmor4.create_dataset(
+                cmor.create_dataset(
                     info,
                     variable,
                     axes,
@@ -4236,7 +4236,7 @@ class MIPCalendarTest(unittest.TestCase):
     is valid per the CF convention but inappropriate for MIP data.
 
     CMOR3 rejects 'utc', 'tai', 'all_leap', and '366_day' with a warning.
-    CMOR4 mirrors this behaviour.
+    CMOR mirrors this behaviour.
     """
 
     def setUp(self):

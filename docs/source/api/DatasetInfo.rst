@@ -6,7 +6,7 @@ fields as attributes (for example, ``info.source_id``) and use
 ``info.to_dict()`` when a dictionary is required by an external API. Project-
 specific global attributes are included in that serialized dictionary.
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
 .. autoclass:: DatasetInfo
    :members:

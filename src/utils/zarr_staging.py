@@ -24,7 +24,7 @@ class ZarrStagingStore:
     def create(cls, staging_dir: str | Path | None = None) -> ZarrStagingStore:
         root = Path(
             tempfile.mkdtemp(
-                prefix="cmor4-datasetwriter-",
+                prefix="cmor-datasetwriter-",
                 dir=str(staging_dir) if staging_dir is not None else None,
             )
         )

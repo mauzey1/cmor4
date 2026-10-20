@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import cmor4
+import cmor
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +15,7 @@ TABLE_ROOT = REPO_ROOT / "project_tables" / "cmip7-cmor-tables"
 
 def write_example(output_dir: Path) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
-    project = cmor4.ProjectTables.from_directory(
+    project = cmor.ProjectTables.from_directory(
         TABLE_ROOT,
         cv_file="tables-cvs/cmor-cvs.json",
         variable_tables=["tables/CMIP7_atmos.json"],
@@ -68,12 +68,12 @@ def write_example(output_dir: Path) -> str:
     data = np.linspace(275.0, 290.0, 2 * site_values.size, dtype="f4").reshape(
         2, site_values.size
     )
-    return str(cmor4.cmorize(dataset, variable, [time, site], data, grid=grid))
+    return str(cmor.cmorize(dataset, variable, [time, site], data, grid=grid))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Write CMIP7 near-surface air temperature at sites with CMOR4."
+        description="Write CMIP7 near-surface air temperature at sites with CMOR."
     )
     parser.add_argument(
         "--output-dir",

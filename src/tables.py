@@ -1063,11 +1063,11 @@ class ProjectTables:
         self.cv.validate_parent_attributes(metadata)
 
     def _mark_prepared_axis(self, axis: Axis) -> Axis:
-        object.__setattr__(axis, "_cmor4_project_tables", self)
+        object.__setattr__(axis, "_cmor_project_tables", self)
         return axis
 
     def _is_prepared_axis(self, axis: Axis) -> bool:
-        return getattr(axis, "_cmor4_project_tables", None) is self
+        return getattr(axis, "_cmor_project_tables", None) is self
 
     def _add_table_header_defaults(
         self, dataset: dict[str, Any], variable_entry: VariableEntry

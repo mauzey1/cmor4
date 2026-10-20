@@ -1,23 +1,23 @@
 Basic Usage
 ===========
 
-This guide covers common CMOR4 usage patterns for creating climate model output.
+This guide covers common CMOR usage patterns for creating climate model output.
 
 One-Shot Writing with cmorize()
 --------------------------------
 
-The :func:`cmor4.cmorize` function is the simplest way to write CMOR-compliant NetCDF files when your complete dataset fits in memory.
+The :func:`cmor.cmorize` function is the simplest way to write CMOR-compliant NetCDF files when your complete dataset fits in memory.
 
 Simple 3D Dataset (time, lat, lon)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   import cmor4
+   import cmor
    import numpy as np
 
    # Load project tables
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/cmip7-cmor-tables",
        cv_file="tables-cvs/cmor-cvs.json",
        variable_tables=["tables/CMIP7_atmos.json"],
@@ -69,7 +69,7 @@ Simple 3D Dataset (time, lat, lon)
    data = np.random.randn(len(time_values), 180, 360) * 10 + 288.0
 
    # Write to NetCDF
-   output_path = cmor4.cmorize(
+   output_path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -84,10 +84,10 @@ Simple 3D Dataset (time, lat, lon)
 
 .. code-block:: python
 
-   import cmor4
+   import cmor
    import numpy as np
 
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/cmip7-cmor-tables",
        cv_file="tables-cvs/cmor-cvs.json",
        variable_tables=["tables/CMIP7_atmos.json"],
@@ -123,7 +123,7 @@ Simple 3D Dataset (time, lat, lon)
    # Create 4D data (time, plev, lat, lon)
    data = np.random.randn(1, len(plev_values), 90, 180) * 15 + 250.0
 
-   output_path = cmor4.cmorize(
+   output_path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -150,7 +150,7 @@ Control NetCDF encoding and compression:
        }
    }
 
-   output_path = cmor4.cmorize(
+   output_path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -171,7 +171,7 @@ Add custom metadata to your output files:
        "references": "doi:10.1234/example",
    }
 
-   output_path = cmor4.cmorize(
+   output_path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -193,7 +193,7 @@ Handle missing values properly:
    mask = np.random.random((12, 180, 360)) < 0.1  # 10% missing
    masked_data = ma.masked_array(data, mask=mask)
 
-   output_path = cmor4.cmorize(
+   output_path = cmor.cmorize(
        data=masked_data,
        dataset=dataset,
        variable=variable,
@@ -215,7 +215,7 @@ Process multiple variables or experiments:
        # Generate appropriate data for this variable
        data = generate_data_for_variable(var_name)
 
-       output_path = cmor4.cmorize(
+       output_path = cmor.cmorize(
            data=data,
            dataset=dataset,
            variable=variable,
@@ -232,17 +232,17 @@ Handle validation errors gracefully:
 .. code-block:: python
 
    try:
-       output_path = cmor4.cmorize(
+       output_path = cmor.cmorize(
            data=data,
            dataset=dataset,
            variable=variable,
            axes=axes,
        )
-   except cmor4.AxisValidationError as e:
+   except cmor.AxisValidationError as e:
        print(f"Axis validation failed: {e}")
-   except cmor4.VariableValidationError as e:
+   except cmor.VariableValidationError as e:
        print(f"Variable validation failed: {e}")
-   except cmor4.CVValidationError as e:
+   except cmor.CVValidationError as e:
        print(f"Controlled vocabulary validation failed: {e}")
    except ValueError as e:
        print(f"Data validation failed: {e}")

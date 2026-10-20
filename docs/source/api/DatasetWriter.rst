@@ -1,7 +1,7 @@
 DatasetWriter
 =============
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
 .. autoclass:: DatasetWriter
    :members:

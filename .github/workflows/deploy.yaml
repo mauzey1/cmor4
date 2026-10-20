@@ -65,7 +65,7 @@ jobs:
 
       - name: Test with mypy
         run: |
-          mypy --python-version ${{ matrix.python-version }} -p cmor4
+          mypy --python-version ${{ matrix.python-version }} --explicit-package-bases src
 
       - name: Test with pytest
         run: |

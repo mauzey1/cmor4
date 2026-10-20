@@ -9,7 +9,7 @@ import warnings
 import numpy as np
 import xarray as xr
 
-import cmor4
+import cmor
 from table_helpers import cmip7_project
 
 
@@ -35,7 +35,7 @@ def dataset_info(tmp_path: Path) -> dict[str, str]:
     }
 
 
-def horizontal_axes(project: cmor4.ProjectTables) -> list[cmor4.Axis]:
+def horizontal_axes(project: cmor.ProjectTables) -> list[cmor.Axis]:
     return [
         project.axis(
             "latitude",
@@ -51,10 +51,10 @@ def horizontal_axes(project: cmor4.ProjectTables) -> list[cmor4.Axis]:
 
 
 def time_axis(
-    project: cmor4.ProjectTables,
+    project: cmor.ProjectTables,
     values: list[float] | None = None,
     bounds: list[list[float]] | None = None,
-) -> cmor4.Axis:
+) -> cmor.Axis:
     kwargs = {"units": "days since 2000-01-01"}
     if values is not None:
         kwargs["values"] = values
@@ -63,7 +63,7 @@ def time_axis(
     return project.axis("time", **kwargs)
 
 
-def hybrid_axis(project: cmor4.ProjectTables) -> cmor4.Axis:
+def hybrid_axis(project: cmor.ProjectTables) -> cmor.Axis:
     return project.axis(
         "standard_hybrid_sigma",
         values=[0.9, 0.1],
@@ -72,9 +72,9 @@ def hybrid_axis(project: cmor4.ProjectTables) -> cmor4.Axis:
 
 
 def hybrid_zfactors(
-    project: cmor4.ProjectTables,
+    project: cmor.ProjectTables,
     ps_values: np.ndarray | None = None,
-) -> list[cmor4.ZFactor]:
+) -> list[cmor.ZFactor]:
     return [
         project.zfactor(
             "a",
@@ -158,14 +158,14 @@ class DatasetWriterTest(unittest.TestCase):
             writer_axes = [time_axis(self.project), *horizontal_axes(self.project)]
             data = np.arange(8, dtype="f4").reshape(2, 2, 2)
 
-            expected_path = cmor4.cmorize(
+            expected_path = cmor.cmorize(
                 info,
                 variable,
                 axes,
                 data,
                 path=tmp_path / "cmorize.nc",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 writer_axes,
@@ -195,14 +195,14 @@ class DatasetWriterTest(unittest.TestCase):
             writer_axes = [time_axis(self.project), *horizontal_axes(self.project)]
             data = np.arange(8, dtype="f4").reshape(2, 2, 2)
 
-            expected_path = cmor4.cmorize(
+            expected_path = cmor.cmorize(
                 info,
                 variable,
                 axes,
                 data,
                 path=tmp_path / "cmorize.nc",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 writer_axes,
@@ -255,7 +255,7 @@ class DatasetWriterTest(unittest.TestCase):
                 axis=0,
             )
 
-            expected_path = cmor4.cmorize(
+            expected_path = cmor.cmorize(
                 info,
                 variable,
                 axes,
@@ -263,7 +263,7 @@ class DatasetWriterTest(unittest.TestCase):
                 zfactors=hybrid_zfactors(self.project, ps),
                 path=tmp_path / "cmorize-zfactor.nc",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 writer_axes,
@@ -306,7 +306,7 @@ class DatasetWriterTest(unittest.TestCase):
                 "tnhusscpbl_tavg-al-hxy-u",
                 table_id="atmos",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [
@@ -333,7 +333,7 @@ class DatasetWriterTest(unittest.TestCase):
                 "tnhusscpbl_tavg-al-hxy-u",
                 table_id="atmos",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [
@@ -366,7 +366,7 @@ class DatasetWriterTest(unittest.TestCase):
                 "tnhusscpbl_tavg-al-hxy-u",
                 table_id="atmos",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [
@@ -392,7 +392,7 @@ class DatasetWriterTest(unittest.TestCase):
             info = self.project.dataset_info(dataset_info(tmp_path))
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -412,7 +412,7 @@ class DatasetWriterTest(unittest.TestCase):
             info = self.project.dataset_info(dataset_info(tmp_path))
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -437,7 +437,7 @@ class DatasetWriterTest(unittest.TestCase):
             info = self.project.dataset_info(dataset_info(tmp_path))
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -481,7 +481,7 @@ class DatasetWriterTest(unittest.TestCase):
             info = self.project.dataset_info(dataset_info(tmp_path))
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -516,7 +516,7 @@ class DatasetWriterTest(unittest.TestCase):
                 "tnhusscpbl_tavg-al-hxy-u",
                 table_id="atmos",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [
@@ -548,7 +548,7 @@ class DatasetWriterTest(unittest.TestCase):
                 "tnhusscpbl_tavg-al-hxy-u",
                 table_id="atmos",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [
@@ -583,7 +583,7 @@ class DatasetWriterTest(unittest.TestCase):
                 "tnhusscpbl_tavg-al-hxy-u",
                 table_id="atmos",
             )
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [
@@ -622,7 +622,7 @@ class DatasetWriterTest(unittest.TestCase):
                 *horizontal_axes(self.project),
             ]
 
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -687,7 +687,7 @@ class TestDatasetWriterEncoding(unittest.TestCase):
                 }
             }
 
-            with cmor4.DatasetWriter(info, variable, axes, encoding=encoding) as writer:
+            with cmor.DatasetWriter(info, variable, axes, encoding=encoding) as writer:
                 data = np.arange(4, dtype="f4").reshape(1, 2, 2)
                 writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
 
@@ -717,7 +717,7 @@ class TestDatasetWriterEncoding(unittest.TestCase):
                 }
             }
 
-            with cmor4.DatasetWriter(info, variable, axes, encoding=encoding) as writer:
+            with cmor.DatasetWriter(info, variable, axes, encoding=encoding) as writer:
                 # First write
                 data1 = np.arange(4, dtype="f4").reshape(1, 2, 2)
                 writer.write(data1, time_values=[15.0], time_bounds=[[0.0, 30.0]])
@@ -746,7 +746,7 @@ class TestDatasetWriterEncoding(unittest.TestCase):
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
 
             # No encoding specified - should get auto-chunking
-            with cmor4.DatasetWriter(info, variable, axes) as writer:
+            with cmor.DatasetWriter(info, variable, axes) as writer:
                 data = np.arange(4, dtype="f4").reshape(1, 2, 2)
                 writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
 

@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 import xarray as xr
 
-import cmor4
+import cmor
 from table_helpers import cmip7_project, drcdp_project, obs4mips_project
 from dataset_helpers import cmorize_and_open, open_created_dataset
 
@@ -21,7 +21,7 @@ def guide_time_axis(values, bounds, units, calendar="standard", project=None):
             units=units,
             extra={"calendar": calendar},
         )
-    return cmor4.Axis(
+    return cmor.Axis(
         name="time",
         values=values,
         bounds=bounds,
@@ -38,7 +38,7 @@ def guide_lat_axis(values=(-45.0, 45.0), project=None):
             values=values,
             bounds=_regular_bounds(values),
         )
-    return cmor4.Axis(
+    return cmor.Axis(
         name="latitude",
         values=values,
         bounds=_regular_bounds(values),
@@ -53,7 +53,7 @@ def guide_lon_axis(values=(90.0, 180.0, 270.0), project=None):
             values=values,
             bounds=_regular_bounds(values),
         )
-    return cmor4.Axis(
+    return cmor.Axis(
         name="longitude",
         values=values,
         bounds=_regular_bounds(values),
@@ -166,7 +166,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lon_axis(project=project),
             ]
 
-            path = cmor4.cmorize(
+            path = cmor.cmorize(
                 info,
                 variable,
                 axes,
@@ -288,7 +288,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 ),
                 guide_lat_axis((25.0, 26.0)),
                 guide_lon_axis((240.0, 241.0, 242.0)),
-                cmor4.Axis(
+                cmor.Axis(
                     name="latitude",
                     out_name="latitude",
                     values=[[25.0, 25.1, 25.2], [26.0, 26.1, 26.2]],
@@ -298,7 +298,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     bounds_dim="vertices",
                     auxiliary=True,
                 ),
-                cmor4.Axis(
+                cmor.Axis(
                     name="longitude",
                     out_name="longitude",
                     values=[[240.0, 241.0, 242.0], [240.0, 241.0, 242.0]],
@@ -309,7 +309,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     auxiliary=True,
                 ),
             ]
-            grid = cmor4.Grid(
+            grid = cmor.Grid(
                 mapping_name="latitude_longitude",
                 params={
                     "longitude_of_prime_meridian": [0.0, "degrees_east"],
@@ -365,7 +365,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                 guide_lon_axis((90.0, 180.0, 270.0)),
             ]
 
-            path = cmor4.cmorize(
+            path = cmor.cmorize(
                 info,
                 variable,
                 axes,

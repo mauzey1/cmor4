@@ -1,7 +1,7 @@
 ControlledVocabulary
 ====================
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
 .. autoclass:: ControlledVocabulary
    :members:
@@ -40,7 +40,7 @@ typed default and tracking components.
 This keeps the dataset creation API unchanged while making CV behavior
 discoverable through named, typed attributes.
 
-.. currentmodule:: cmor4.utils.cv_models
+.. currentmodule:: cmor.utils.cv_models
 
 .. autoclass:: ControlledVocabularyModel
    :members:

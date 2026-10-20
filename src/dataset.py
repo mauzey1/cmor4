@@ -412,8 +412,8 @@ def write_netcdf(
     dataset:
         Dataset metadata used to build the default output path.  When the
         metadata contains ``create_subdirectories=False``, the output
-        directory must already exist; CMOR4 will not create it.  The default
-        behaviour (``create_subdirectories=True``) mirrors CMOR4's original
+        directory must already exist; CMOR will not create it.  The default
+        behaviour (``create_subdirectories=True``) mirrors CMOR's original
         behaviour and creates the full directory tree automatically.
     variable:
         Variable metadata used to build the default output path.
@@ -442,7 +442,7 @@ def write_netcdf(
     # Honour create_subdirectories.  The flag mirrors CMOR3's own behaviour:
     # when False, the output directory must already exist; CMOR3 errors when
     # it cannot create the directory (e.g. a non-existent /CMIP6 root).
-    # Default is True for backwards-compatibility with CMOR4's original
+    # Default is True for backwards-compatibility with CMOR's original
     # always-create behaviour.
     create_subdirs = (
         True if dataset.create_subdirectories is None else dataset.create_subdirectories
@@ -594,7 +594,7 @@ def build_output_path(
        keys in the dataset metadata.  These take highest priority.
     2. **CV DRS section** — ``directory_path_template`` /
        ``filename_template`` from the CV's ``DRS`` block, when present.
-       All three project CVs shipped with CMOR4 (CMIP7, DRCDP) carry a
+       All three project CVs shipped with CMOR (CMIP7, DRCDP) carry a
        ``DRS`` section; obs4MIPs does not.
     3. **Hard-coded defaults** — ``DEFAULT_OUTPUT_PATH_TEMPLATE`` and
        ``DEFAULT_OUTPUT_FILE_TEMPLATE``.

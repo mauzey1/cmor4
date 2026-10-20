@@ -1,7 +1,7 @@
 ZFactor
 =======
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
 .. autoclass:: ZFactor
    :members:

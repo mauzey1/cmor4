@@ -1,7 +1,7 @@
 """CMOR3 validation parity tests.
 
-Verifies that CMOR4 replicates the validation behaviour present in CMOR3
-but absent from the initial CMOR4 implementation.  Each test class covers
+Verifies that CMOR replicates the validation behaviour present in CMOR3
+but absent from the initial CMOR implementation.  Each test class covers
 one functional area; the list below maps them to the corresponding CMOR3
 source references.
 
@@ -57,19 +57,19 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from cmor4 import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
+from cmor import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
 from dataset_helpers import open_created_dataset
-from cmor4.dataset import (
+from cmor.dataset import (
     _collect_external_variables,
     build_output_path,
     create_dataset,
     write_netcdf,
 )
-from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
-from cmor4.utils.dataset_metadata import DatasetMetadata
-from cmor4.utils.validation import _is_time_axis, _validate_time_interval, validate_axes
+from cmor.exceptions import AxisValidationError, ControlledVocabularyError
+from cmor.utils.dataset_metadata import DatasetMetadata
+from cmor.utils.validation import _is_time_axis, _validate_time_interval, validate_axes
 from table_helpers import cmip7_project, drcdp_project, obs4mips_project
-import test_cmor4 as _tc4
+import test_cmor as _tc4
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -2118,7 +2118,7 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     CMOR3 reference: ``Test/test_python_CMIP6_CV_baddirectory.py``.
     When ``create_subdirectories=0`` and the outpath cannot be created, CMOR3
-    errors with "unable to create this directory".  CMOR4 mirrors this by
+    errors with "unable to create this directory".  CMOR mirrors this by
     raising ``ValueError`` when ``create_subdirectories=False`` and the
     output parent directory is absent.
 

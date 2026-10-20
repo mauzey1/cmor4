@@ -26,11 +26,11 @@ from typing import Any
 
 import numpy as np
 
-from cmor4 import Axis, DatasetInfo, Grid, ProjectTables, Variable
+from cmor import Axis, DatasetInfo, Grid, ProjectTables, Variable
 from dataset_helpers import open_created_dataset
-from cmor4.exceptions import TableValidationError
-from cmor4.utils.construction import add_grid_coords
-from cmor4.tables import _validate_grid_dimensions
+from cmor.exceptions import TableValidationError
+from cmor.utils.construction import add_grid_coords
+from cmor.tables import _validate_grid_dimensions
 
 # ---------------------------------------------------------------------------
 # Minimal helpers
