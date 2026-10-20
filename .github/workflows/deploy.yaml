@@ -27,8 +27,8 @@ jobs:
 
       - name: Run ruff code checks
         run: |
-          ruff check src tests
-          ruff format src tests --check
+          ruff check cmor tests
+          ruff format cmor tests --check
 
   build:
     name: Build (${{ matrix.os }} - Python ${{ matrix.python-version }})
@@ -65,7 +65,7 @@ jobs:
 
       - name: Test with mypy
         run: |
-          mypy --python-version ${{ matrix.python-version }} --explicit-package-bases src
+          mypy --python-version ${{ matrix.python-version }} --explicit-package-bases cmor
 
       - name: Test with pytest
         run: |
