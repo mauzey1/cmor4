@@ -1,7 +1,7 @@
 Advanced Features
 =================
 
-This guide covers advanced CMOR4 features for complex datasets.
+This guide covers advanced CMOR features for complex datasets.
 
 Custom Grids
 ------------
@@ -13,10 +13,10 @@ Define custom grid structures:
 
 .. code-block:: python
 
-   import cmor4
+   import cmor
    import numpy as np
 
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/cmip7-cmor-tables",
        cv_file="tables-cvs/cmor-cvs.json",
        variable_tables=["tables/CMIP7_ocean.json"],
@@ -61,7 +61,7 @@ For non-rectangular grids (e.g., tripolar ocean grids):
    variable = project.variable("tos", table_id="ocean")
 
    # Create dataset with 2D spatial grid
-   path = cmor4.cmorize(
+   path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -89,7 +89,7 @@ For meshes and unstructured grids:
 Grid Mapping Validation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-CMOR4 validates grid mappings against the CF-1.12 convention's registered grid mapping names and parameters. This ensures that projected coordinate systems are properly specified:
+CMOR validates grid mappings against the CF-1.12 convention's registered grid mapping names and parameters. This ensures that projected coordinate systems are properly specified:
 
 .. code-block:: python
 
@@ -104,14 +104,14 @@ CMOR4 validates grid mappings against the CF-1.12 convention's registered grid m
        false_northing=0.0,
    )
 
-   # CMOR4 validates:
+   # CMOR validates:
    # 1. grid_mapping_name is a valid CF-1.12 registered name
    # 2. All required parameters for that projection are present
    # 3. Parameter names and values follow CF conventions
 
 **Supported Grid Mappings:**
 
-CMOR4 validates against all CF-1.12 registered grid mappings, including:
+CMOR validates against all CF-1.12 registered grid mappings, including:
 
 - ``albers_conical_equal_area``
 - ``azimuthal_equidistant``
@@ -132,7 +132,7 @@ CMOR4 validates against all CF-1.12 registered grid mappings, including:
 
 **Grid Table Validation:**
 
-When loading project tables, CMOR4 now performs enhanced validation on grid definitions:
+When loading project tables, CMOR now performs enhanced validation on grid definitions:
 
 .. code-block:: python
 
@@ -140,7 +140,7 @@ When loading project tables, CMOR4 now performs enhanced validation on grid defi
    # - Invalid grid_mapping_name values
    # - Missing required parameters for grid mappings
    # - Inconsistent coordinate specifications
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/cmip7-cmor-tables",
        cv_file="tables-cvs/cmor-cvs.json",
        grid_table="tables/CMIP7_grids.json",  # Validated on load
@@ -156,10 +156,10 @@ For atmospheric model levels:
 
 .. code-block:: python
 
-   import cmor4
+   import cmor
    import numpy as np
 
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/cmip7-cmor-tables",
        cv_file="tables-cvs/cmor-cvs.json",
        variable_tables=["tables/CMIP7_atmos.json"],
@@ -202,7 +202,7 @@ For atmospheric model levels:
 
    variable = project.variable("ta", table_id="atmos")
 
-   path = cmor4.cmorize(
+   path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -239,7 +239,7 @@ Time Handling
 Different Calendar Types
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-CMOR4 supports various calendar types:
+CMOR supports various calendar types:
 
 .. code-block:: python
 
@@ -273,14 +273,14 @@ CMOR4 supports various calendar types:
 Forecast Coordinates (Reference Time and Lead Time)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-CMOR4 automatically derives forecast coordinates for forecast/initialized model output. When you provide a ``forecast_reference_time`` (reftime) coordinate, CMOR4 automatically generates the corresponding ``forecast_period`` (leadtime) coordinate:
+CMOR automatically derives forecast coordinates for forecast/initialized model output. When you provide a ``forecast_reference_time`` (reftime) coordinate, CMOR automatically generates the corresponding ``forecast_period`` (leadtime) coordinate:
 
 .. code-block:: python
 
-   import cmor4
+   import cmor
    import numpy as np
 
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/cmip7-cmor-tables",
        cv_file="tables-cvs/cmor-cvs.json",
        variable_tables=["tables/CMIP7_atmos.json"],
@@ -319,9 +319,9 @@ CMOR4 automatically derives forecast coordinates for forecast/initialized model 
 
    axes = [time_axis, reftime_axis, lat_axis, lon_axis]
 
-   # CMOR4 automatically generates leadtime coordinate
+   # CMOR automatically generates leadtime coordinate
    # leadtime[i] = time[i] - reftime
-   path = cmor4.cmorize(
+   path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -357,7 +357,7 @@ For ensemble forecasts with multiple initialization times:
    )
 
    # Data has shape (time, reftime, lat, lon)
-   # CMOR4 derives leadtime for each time-reftime pair
+   # CMOR derives leadtime for each time-reftime pair
 
 **Incremental Writing with Forecasts:**
 
@@ -365,7 +365,7 @@ DatasetWriter also supports incremental writing of forecast data:
 
 .. code-block:: python
 
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        for init_time in initialization_times:
            # Load forecast data for this initialization
            reftime = init_time
@@ -424,7 +424,7 @@ Variables with no spatial dimensions:
 
    data = np.random.randn(len(time_axis.values)) * 0.5 + 288.0
 
-   path = cmor4.cmorize(
+   path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -456,7 +456,7 @@ Data at specific locations:
 
    data = np.random.randn(1, 3) * 5 + 288.0  # (time, site)
 
-   path = cmor4.cmorize(
+   path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -492,7 +492,7 @@ Processing Multiple Variants
        # Load ensemble member data
        data = load_ensemble_data(variant)
 
-       path = cmor4.cmorize(
+       path = cmor.cmorize(
            data=data,
            dataset=dataset_info,
            variable=variable,
@@ -524,7 +524,7 @@ Multiple Experiments
        # Load experiment-specific data
        data = load_experiment_data(experiment)
 
-       path = cmor4.cmorize(
+       path = cmor.cmorize(
            data=data,
            dataset=dataset_info,
            variable=variable,
@@ -573,7 +573,7 @@ Add your own validation logic:
 
    # Use before cmorize
    validate_data(data, variable)
-   path = cmor4.cmorize(dataset, variable, axes, data)
+   path = cmor.cmorize(dataset, variable, axes, data)
 
 Parallel Processing
 -------------------
@@ -584,11 +584,11 @@ Process Multiple Variables in Parallel
 .. code-block:: python
 
    from multiprocessing import Pool
-   import cmor4
+   import cmor
 
    def process_variable(var_name):
        """Process a single variable."""
-       project = cmor4.ProjectTables.from_directory(
+       project = cmor.ProjectTables.from_directory(
            "project_tables/cmip7-cmor-tables",
            cv_file="tables-cvs/cmor-cvs.json",
            variable_tables=["tables/CMIP7_atmos.json"],
@@ -609,7 +609,7 @@ Process Multiple Variables in Parallel
        variable = project.variable(var_name, table_id="atmos")
        data = load_data(var_name)
 
-       path = cmor4.cmorize(dataset, variable, axes, data)
+       path = cmor.cmorize(dataset, variable, axes, data)
     
        return path
 
@@ -630,7 +630,7 @@ Starting from Xarray Datasets
 .. code-block:: python
 
    import xarray as xr
-   import cmor4
+   import cmor
 
    # Load existing dataset
    ds_in = xr.open_dataset("model_output.nc")
@@ -649,7 +649,7 @@ Starting from Xarray Datasets
        project.axis("longitude", values=lon_values.tolist()),
    ]
 
-   path = cmor4.cmorize(
+   path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,
@@ -662,7 +662,7 @@ Post-Processing CMOR Output
 .. code-block:: python
 
    # Create CMOR file
-   path = cmor4.cmorize(dataset, variable, axes, data)
+   path = cmor.cmorize(dataset, variable, axes, data)
 
    # Open and post-process
    ds = xr.open_dataset(path)
@@ -682,7 +682,7 @@ Observational Data
 .. code-block:: python
 
    # Load obs4MIPs tables
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/obs4MIPs-cmor-tables",
        cv_file="obs4MIPs_CVs.json",
        variable_tables=["obs4MIPs_satellite.json"],
@@ -701,7 +701,7 @@ Observational Data
    # Process observational data
    variable = project.variable("ta", table_id="satellite")
 
-   path = cmor4.cmorize(
+   path = cmor.cmorize(
        data=obs_data,
        dataset=dataset,
        variable=variable,
@@ -719,7 +719,7 @@ For datasets too large for memory:
 .. code-block:: python
 
    # Use DatasetWriter for incremental writes
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        # Process in time chunks
        for year in range(1850, 2015):
            # Load one year at a time
@@ -739,13 +739,13 @@ DatasetWriter already uses Dask internally for memory-efficient finalization, bu
 .. code-block:: python
 
    import dask.array as da
-   import cmor4
+   import cmor
 
    # Load data lazily from existing Zarr store
    data = da.from_zarr("large_dataset.zarr")
 
    # Write in chunks - only compute what's needed
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        for i in range(0, len(data), chunk_size):
            # Compute only this chunk (lazy evaluation)
            chunk = data[i:i+chunk_size].compute()
@@ -761,12 +761,12 @@ Monitor memory usage:
 .. code-block:: python
 
    import tracemalloc
-   import cmor4
+   import cmor
 
    tracemalloc.start()
 
    # Your CMOR processing
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        for chunk in data_chunks:
            writer.write(chunk, time_values=times)
 

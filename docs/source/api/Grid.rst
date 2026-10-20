@@ -1,7 +1,7 @@
 Grid
 ====
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
 .. autoclass:: Grid
    :members:

@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cmor4"
+name = "cmor"
 version = "4.0.0a1"
 description = "Python package for creating CF-compliant climate model output in NetCDF format."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-  { name = "cmor4 contributors" },
+  { name = "cmor contributors" },
 ]
 dependencies = [
   "cf-units>=3.3",
@@ -50,17 +50,18 @@ filterwarnings = [
   "ignore:numpy.ndarray size changed:RuntimeWarning",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+packages = ["cmor", "cmor.utils"]
+package-dir = { cmor = "cmor" }
 
 [tool.setuptools.package-data]
-"cmor4" = ["py.typed"]
+"cmor" = ["py.typed"]
 
 [tool.mypy]
 warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = false
-files = ["src/cmor4", "tests"]
+files = ["cmor"]
 
 [[tool.mypy.overrides]]
 module = ["cf_units.*", "cftime.*", "mpl_toolkits.basemap.*"]

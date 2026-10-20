@@ -1,4 +1,6 @@
-# CMOR4 Documentation
+# CMOR Documentation
+
+This directory contains the Sphinx documentation for CMOR.
 
 This directory contains the Sphinx documentation for CMOR4.
 
@@ -88,7 +90,7 @@ docs/
 
 ### User Guide (`source/usage/`)
 
-The user guide provides practical examples for common CMOR4 tasks:
+The user guide provides practical examples for common CMOR tasks:
 
 - **Quick Start** - Get started in minutes with a minimal example
 - **Basic Usage** - Common patterns using `cmorize()` for one-shot writes
@@ -104,7 +106,7 @@ The user guide provides practical examples for common CMOR4 tasks:
    NewClass
    ========
 
-   .. currentmodule:: cmor4
+   .. currentmodule:: cmor
 
    .. autoclass:: NewClass
       :members:
@@ -136,7 +138,7 @@ Add the function to `source/api/functions.rst`:
 
 ### Module import errors
 
-If Sphinx can't find the `cmor4` module, make sure:
+If Sphinx can't find the `cmor` module, make sure:
 1. The package is installed in editable mode: `pip install -e .`
 2. Your virtual environment is activated
 3. The `sys.path` modification in `conf.py` is correct

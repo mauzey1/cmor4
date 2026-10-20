@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../../"))
 
-project = "CMOR4"
+project = "CMOR"
 copyright = "2026, Chris Mauzey"
 author = "Chris Mauzey"
 release = "4.0.0a1"

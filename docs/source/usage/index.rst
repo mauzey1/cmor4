@@ -1,7 +1,7 @@
 Usage Guide
 ===========
 
-This guide provides practical examples of using CMOR4 to create CF-compliant climate model output.
+This guide provides practical examples of using CMOR to create CF-compliant climate model output.
 
 .. toctree::
    :maxdepth: 2

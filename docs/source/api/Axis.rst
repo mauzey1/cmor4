@@ -1,7 +1,7 @@
 Axis
 ====
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
 .. autoclass:: Axis
    :members:

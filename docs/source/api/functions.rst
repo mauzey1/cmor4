@@ -1,7 +1,7 @@
 Functions
 =========
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
 Main API functions for creating and writing CMOR-compliant datasets.
 

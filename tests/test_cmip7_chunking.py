@@ -9,6 +9,7 @@ from pathlib import Path
 import pyfive
 import numpy as np
 import xarray as xr
+import cmor
 from dataset_helpers import open_created_dataset
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -167,10 +168,8 @@ class TestCMIP7AutoChunking(unittest.TestCase):
     """Test automatic CMIP7 chunking application."""
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
-        self.project = cmor4.ProjectTables.from_directory(
+        self.project = cmor.ProjectTables.from_directory(
             CMIP7_TABLE_ROOT,
             cv_file="tables-cvs/cmor-cvs.json",
             variable_tables=["tables/CMIP7_atmos.json"],
@@ -241,8 +240,6 @@ class TestCMIP7AutoChunking(unittest.TestCase):
 
     def test_cmip7_auto_chunking_written_to_file(self):
         """CMIP7 auto-chunking persists when file is written."""
-        import cmor4
-
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
             "outpath": self.tmp,
@@ -275,7 +272,7 @@ class TestCMIP7AutoChunking(unittest.TestCase):
 
         data = np.random.rand(50, 45, 90).astype(np.float32) * 30 + 270
 
-        path = cmor4.cmorize(dataset, variable, axes, data)
+        path = cmor.cmorize(dataset, variable, axes, data)
 
         # Read back and check chunking
         ds_read = xr.open_dataset(path)
@@ -287,11 +284,9 @@ class TestCMIP7AutoChunking(unittest.TestCase):
 
     def test_non_cmip7_no_auto_chunking(self):
         """Non-CMIP7 datasets don't get automatic chunking."""
-        import cmor4
-
         # Use CMIP6 metadata
-        dataset = cmor4.DatasetInfo({**_BASE_CMIP6_DATASET, "outpath": self.tmp})
-        variable = cmor4.Variable(
+        dataset = cmor.DatasetInfo({**_BASE_CMIP6_DATASET, "outpath": self.tmp})
+        variable = cmor.Variable(
             name="tas", units="K", missing_value=np.float32(1.0e20)
         )
 
@@ -301,19 +296,19 @@ class TestCMIP7AutoChunking(unittest.TestCase):
         lon_vals = np.linspace(0, 359, 20)
 
         axes = [
-            cmor4.Axis(
+            cmor.Axis(
                 name="time",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
             ),
-            cmor4.Axis(
+            cmor.Axis(
                 name="latitude",
                 values=lat_vals,
                 bounds=_create_bounds(lat_vals, "latitude"),
                 units="degrees_north",
             ),
-            cmor4.Axis(
+            cmor.Axis(
                 name="longitude",
                 values=lon_vals,
                 bounds=_create_bounds(lon_vals, "longitude"),
@@ -334,10 +329,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
     """Test validation of user-provided chunking for CMIP7."""
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
-        self.project = cmor4.ProjectTables.from_directory(
+        self.project = cmor.ProjectTables.from_directory(
             CMIP7_TABLE_ROOT,
             cv_file="tables-cvs/cmor-cvs.json",
             variable_tables=["tables/CMIP7_atmos.json"],
@@ -512,8 +505,6 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
 
     def test_small_chunks_rejected(self):
         """Chunks smaller than 4 MiB are rejected."""
-        import cmor4
-
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
             "outpath": self.tmp,
@@ -550,14 +541,12 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         encoding = {"bldep": {"chunksizes": (10, 10, 20)}}
 
         with self.assertRaises(ValueError) as cm:
-            cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
+            cmor.create_dataset(dataset, variable, axes, data, encoding=encoding)
 
         self.assertIn("4 mib", str(cm.exception).lower())
 
     def test_top_level_small_chunks_rejected(self):
         """Top-level chunksizes are validated against CMIP7 chunk size rules."""
-        import cmor4
-
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
             "outpath": self.tmp,
@@ -591,14 +580,12 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         encoding = {"chunksizes": (10, 10, 20)}
 
         with self.assertRaises(ValueError) as cm:
-            cmor4.create_dataset(dataset, variable, axes, data, encoding=encoding)
+            cmor.create_dataset(dataset, variable, axes, data, encoding=encoding)
 
         self.assertIn("4 mib", str(cm.exception).lower())
 
     def test_time_coordinate_chunksizes_rejected(self):
         """Variable-specific time chunks must keep time and bounds as one chunk."""
-        import cmor4
-
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
             "outpath": self.tmp,
@@ -636,7 +623,7 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         for encoding in cases:
             with self.subTest(encoding=encoding):
                 with self.assertRaises(ValueError) as cm:
-                    cmor4.create_dataset(
+                    cmor.create_dataset(
                         dataset,
                         variable,
                         axes,
@@ -652,10 +639,8 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
     """Test that non-chunking encoding parameters work with CMIP7."""
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
-        self.project = cmor4.ProjectTables.from_directory(
+        self.project = cmor.ProjectTables.from_directory(
             CMIP7_TABLE_ROOT,
             cv_file="tables-cvs/cmor-cvs.json",
             variable_tables=["tables/CMIP7_atmos.json"],
@@ -812,7 +797,7 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
         self.assertEqual(ds["bldep"].encoding.get("least_significant_digit"), 2)
 
     def test_top_level_and_variable_specific_encoding_keys_pass_through(self):
-        """CMOR4 only special-cases chunksizes and passes other encoding keys."""
+        """CMOR only special-cases chunksizes and passes other encoding keys."""
 
         dataset = self.project.dataset_info({
             **_BASE_CMIP7_DATASET,
@@ -917,10 +902,8 @@ class TestCheckCMIP7RepackChunking(unittest.TestCase, CMIP7ChunkingCheckAssertio
     """Test if files generated have chunking that meets CMIP7 repack requirements."""
 
     def setUp(self):
-        import cmor4
-
         self.tmp = tempfile.mkdtemp()
-        self.project = cmor4.ProjectTables.from_directory(
+        self.project = cmor.ProjectTables.from_directory(
             CMIP7_TABLE_ROOT,
             cv_file="tables-cvs/cmor-cvs.json",
             variable_tables=[
@@ -966,9 +949,7 @@ class TestCheckCMIP7RepackChunking(unittest.TestCase, CMIP7ChunkingCheckAssertio
         ]
 
     def _assert_chunking_compliant_file(self, variable, axes, data, *, encoding=None):
-        import cmor4
-
-        path = cmor4.cmorize(
+        path = cmor.cmorize(
             self._dataset(),
             variable,
             axes,

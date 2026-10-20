@@ -1,7 +1,7 @@
 """CMOR3 validation parity tests.
 
-Verifies that CMOR4 replicates the validation behaviour present in CMOR3
-but absent from the initial CMOR4 implementation.  Each test class covers
+Verifies that CMOR replicates the validation behaviour present in CMOR3
+but absent from the initial CMOR implementation.  Each test class covers
 one functional area; the list below maps them to the corresponding CMOR3
 source references.
 
@@ -46,6 +46,7 @@ Coverage
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import unittest
 import warnings
@@ -56,12 +57,19 @@ from typing import Any
 import numpy as np
 import xarray as xr
 
-from cmor4 import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
+from cmor import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
 from dataset_helpers import open_created_dataset
-from cmor4.dataset import _collect_external_variables, create_dataset, build_output_path
-from cmor4.exceptions import AxisValidationError, ControlledVocabularyError
-from cmor4.utils.dataset_metadata import DatasetMetadata
-from cmor4.utils.validation import _validate_time_interval, _is_time_axis
+from cmor.dataset import (
+    _collect_external_variables,
+    build_output_path,
+    create_dataset,
+    write_netcdf,
+)
+from cmor.exceptions import AxisValidationError, ControlledVocabularyError
+from cmor.utils.dataset_metadata import DatasetMetadata
+from cmor.utils.validation import _is_time_axis, _validate_time_interval, validate_axes
+from table_helpers import cmip7_project, drcdp_project, obs4mips_project
+import test_cmor as _tc4
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -288,8 +296,6 @@ class TestFrequencyRequired(unittest.TestCase):
         A non-empty dataset is needed to trigger the check; an empty dict is
         the structure-only placeholder passed by validate_components(None, …).
         """
-        from cmor4.utils.validation import validate_axes
-
         time_axis = Axis(
             name="time",
             axis="T",
@@ -302,8 +308,6 @@ class TestFrequencyRequired(unittest.TestCase):
 
     def test_validate_axes_passes_for_lat_without_frequency(self):
         """Non-time axes are not affected by the frequency requirement."""
-        from cmor4.utils.validation import validate_axes
-
         lat_axis = Axis(
             name="lat",
             axis="Y",
@@ -1211,8 +1215,6 @@ class TestDrsTemplates(unittest.TestCase):
 
     def test_cmip7_project_uses_cv_drs_templates(self):
         """The real CMIP7 project tables carry a DRS section that is used."""
-        from table_helpers import cmip7_project
-
         project = cmip7_project()
         self.assertIsNotNone(project.cv.drs)
         cv_path_tmpl, cv_file_tmpl = project.cv.drs.templates()
@@ -1226,8 +1228,6 @@ class TestDrsTemplates(unittest.TestCase):
 
     def test_drcdp_project_uses_cv_drs_templates(self):
         """The DRCDP project tables also carry a DRS section."""
-        from table_helpers import drcdp_project
-
         project = drcdp_project()
         self.assertIsNotNone(project.cv.drs)
         cv_path_tmpl, cv_file_tmpl = project.cv.drs.templates()
@@ -1237,8 +1237,6 @@ class TestDrsTemplates(unittest.TestCase):
 
     def test_obs4mips_project_has_no_drs_templates(self):
         """obs4MIPs has no typed DRS component."""
-        from table_helpers import obs4mips_project
-
         project = obs4mips_project()
         cv_path_tmpl, cv_file_tmpl = (
             project.cv.drs.templates() if project.cv.drs else (None, None)
@@ -1475,22 +1473,16 @@ class TestCVStructureValidation(unittest.TestCase):
 
     def test_cmip7_cv_has_no_structural_issues(self):
         """The shipped CMIP7 CV should be well-formed."""
-        from table_helpers import cmip7_project
-
         project = cmip7_project()
         issues = project.cv.validate_structure()
         self.assertEqual(issues, [], msg=f"CMIP7 CV structural issues: {issues}")
 
     def test_obs4mips_cv_has_no_structural_issues(self):
-        from table_helpers import obs4mips_project
-
         project = obs4mips_project()
         issues = project.cv.validate_structure()
         self.assertEqual(issues, [], msg=f"obs4MIPs CV structural issues: {issues}")
 
     def test_drcdp_cv_has_no_structural_issues(self):
-        from table_helpers import drcdp_project
-
         project = drcdp_project()
         issues = project.cv.validate_structure()
         self.assertEqual(issues, [], msg=f"DRCDP CV structural issues: {issues}")
@@ -1503,8 +1495,6 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 # 7. history attribute uses actual Conventions and mip_era tokens
 # ---------------------------------------------------------------------------
-
-import re as _re  # noqa: E402 (appended)
 
 
 class TestHistoryAttribute(unittest.TestCase):
@@ -1526,7 +1516,7 @@ class TestHistoryAttribute(unittest.TestCase):
     # Regex matching the full history format:
     #   "<ISO-8601Z> ; CMOR rewrote data to be consistent with "
     #   "<X> and <Y> data requirements."
-    _HISTORY_RE = _re.compile(
+    _HISTORY_RE = re.compile(
         r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"
         r" ; CMOR rewrote data to be consistent with "
         r".+ and .+ data requirements\.$"
@@ -1534,8 +1524,6 @@ class TestHistoryAttribute(unittest.TestCase):
 
     def _make_dataset(self, tmp: Path, extra: dict | None = None) -> xr.Dataset:
         """Build a minimal dataset and return the resulting xarray Dataset."""
-        import numpy as np
-
         project = _make_project(
             tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
         )
@@ -1596,8 +1584,6 @@ class TestHistoryAttribute(unittest.TestCase):
             )
             dataset_info = project.dataset_info(_MINIMAL_DATASET)
             variable = project.variable("tas")
-            import numpy as np
-
             time_axis = project.axis(
                 "time", values=[15.0, 45.0], units="days since 2000-01-01"
             )
@@ -1630,8 +1616,6 @@ class TestHistoryAttribute(unittest.TestCase):
                 "mip_era": "obs4MIPs",
             })
             variable = project.variable("tas")
-            import numpy as np
-
             time_axis = project.axis(
                 "time", values=[15.0, 45.0], units="days since 2000-01-01"
             )
@@ -1670,8 +1654,6 @@ class TestHistoryAttribute(unittest.TestCase):
         """history supplied via extra_attrs must override the generated default."""
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
-            import numpy as np
-
             project = _make_project(
                 tmp, _MINIMAL_CV, _MINIMAL_VARIABLES, _MINIMAL_COORDINATES
             )
@@ -1911,8 +1893,6 @@ class TestNestedCVAttributes(unittest.TestCase):
 
     def test_hierarchical_leaf_attrs_written_to_netcdf_global_attrs(self):
         """Leaf attributes from nested CV entries appear in the output NetCDF attrs."""
-        import numpy as np
-
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             project = _make_project(
@@ -1943,18 +1923,6 @@ class TestNestedCVAttributes(unittest.TestCase):
 
     def test_cmip7_real_project_frequency_does_not_inject_approx_interval(self):
         """With the real CMIP7 tables, approx_interval must not appear in output."""
-        import sys
-        import numpy as np
-
-        # table_helpers.py lives in the tests directory; add it to path if needed
-        tests_dir = str(Path(__file__).parent)
-        if tests_dir not in sys.path:
-            sys.path.insert(0, tests_dir)
-        from table_helpers import cmip7_project
-
-        # Import the CMIP7-specific helpers from test_cmor4 module
-        import test_cmor4 as _tc4
-
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp_path = Path(tmp_str)
             project = cmip7_project()
@@ -2114,8 +2082,6 @@ class TestGridLabelFallback(unittest.TestCase):
 
     def test_cmip7_real_project_grid_label_validated_by_cv(self):
         """With real CMIP7 tables, grid_label is validated against the CV dict."""
-        from table_helpers import cmip7_project
-
         project = cmip7_project()
 
         # A CMIP7 CV-defined label passes
@@ -2131,8 +2097,6 @@ class TestGridLabelFallback(unittest.TestCase):
         This verifies that a CMIP7-format label like 'g100' is NOT
         double-checked by the fallback after passing the CV enumeration.
         """
-        from table_helpers import cmip7_project
-
         project = cmip7_project()
         # 'g100' is in the CMIP7 CV — should pass cleanly, no fallback noise
         project.cv.validate_dataset_values(_metadata({"grid_label": "g100"}))
@@ -2148,15 +2112,13 @@ if __name__ == "__main__":
 # 10. create_subdirectories=False requires the output directory to exist
 # ---------------------------------------------------------------------------
 
-import numpy as _np  # noqa: E402
-
 
 class TestCreateSubdirectories(unittest.TestCase):
     """create_subdirectories=False requires the output dir to already exist.
 
     CMOR3 reference: ``Test/test_python_CMIP6_CV_baddirectory.py``.
     When ``create_subdirectories=0`` and the outpath cannot be created, CMOR3
-    errors with "unable to create this directory".  CMOR4 mirrors this by
+    errors with "unable to create this directory".  CMOR mirrors this by
     raising ``ValueError`` when ``create_subdirectories=False`` and the
     output parent directory is absent.
 
@@ -2182,14 +2144,12 @@ class TestCreateSubdirectories(unittest.TestCase):
             dataset_info,
             variable,
             [time_axis, lat_axis, lon_axis],
-            _np.ones((2, 2, 2)),
+            np.ones((2, 2, 2)),
         )
         return ds, dataset_info, variable
 
     def _patch_dataset(self, dataset_info, extra: dict):
         """Return a new prepared dataset with extra keys merged in."""
-        from cmor4.datasetinfo import DatasetInfo
-
         return DatasetInfo.from_prepared(
             {**dict(dataset_info), **extra},
             project=dataset_info.project,
@@ -2206,8 +2166,6 @@ class TestCreateSubdirectories(unittest.TestCase):
         Mirrors CMOR3 test_python_CMIP6_CV_baddirectory: CMOR3 errors when it
         cannot write to the requested outpath.
         """
-        from cmor4.dataset import write_netcdf
-
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             ds, info, variable = self._build_minimal_ds(tmp)
@@ -2222,8 +2180,6 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_error_message_guides_user(self):
         """Error message tells the user how to fix the problem."""
-        from cmor4.dataset import write_netcdf
-
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             ds, info, variable = self._build_minimal_ds(tmp)
@@ -2236,8 +2192,6 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_deeply_nested_missing_dir_raises(self):
         """The check fires even for deeply nested missing paths."""
-        from cmor4.dataset import write_netcdf
-
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             ds, info, variable = self._build_minimal_ds(tmp)
@@ -2253,8 +2207,6 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_existing_output_dir_passes_when_create_subdirectories_false(self):
         """Pre-existing output dir with create_subdirectories=False succeeds."""
-        from cmor4.dataset import write_netcdf
-
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             ds, info, variable = self._build_minimal_ds(tmp)
@@ -2273,8 +2225,6 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_missing_dir_created_automatically_by_default(self):
         """Default behaviour creates the output directory tree automatically."""
-        from cmor4.dataset import write_netcdf
-
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             ds, info, variable = self._build_minimal_ds(tmp)
@@ -2286,8 +2236,6 @@ class TestCreateSubdirectories(unittest.TestCase):
 
     def test_create_subdirectories_true_creates_dirs(self):
         """Explicit create_subdirectories=True also creates directories."""
-        from cmor4.dataset import write_netcdf
-
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             ds, info, variable = self._build_minimal_ds(tmp)
@@ -2321,7 +2269,7 @@ class TestCreateSubdirectories(unittest.TestCase):
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],
-                _np.ones((2, 2, 2)),
+                np.ones((2, 2, 2)),
             )
 
         self.assertNotIn("create_subdirectories", ds.attrs)
@@ -2345,7 +2293,7 @@ class TestCreateSubdirectories(unittest.TestCase):
                 dataset_info,
                 variable,
                 [time_axis, lat_axis, lon_axis],
-                _np.ones((2, 2, 2)),
+                np.ones((2, 2, 2)),
             )
 
         self.assertNotIn("outpath", ds.attrs)

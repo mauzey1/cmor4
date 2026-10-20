@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import cmor4
+import cmor
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -14,7 +14,7 @@ TABLE_ROOT = REPO_ROOT / "project_tables" / "cmip7-cmor-tables"
 
 def write_example(output_dir: Path) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
-    project = cmor4.ProjectTables.from_directory(
+    project = cmor.ProjectTables.from_directory(
         TABLE_ROOT,
         cv_file="tables-cvs/cmor-cvs.json",
         variable_tables=["tables/CMIP7_land.json"],
@@ -60,14 +60,18 @@ def write_example(output_dir: Path) -> str:
         "rootd_ti-u-hxy-lnd", table_id="land", missing_value=np.float64(1.0e20)
     )
     data = np.array(
-        [[0.50, 0.45, 1.0e20, 0.55], [0.60, 0.60, 1.0e20, 0.55], [1.0e20, 0.45, 0.50, 0.50]],
+        [
+            [0.50, 0.45, 1.0e20, 0.55],
+            [0.60, 0.60, 1.0e20, 0.55],
+            [1.0e20, 0.45, 0.50, 0.50],
+        ],
         dtype="f4",
     )
-    return str(cmor4.cmorize(dataset, variable, axes, data))
+    return str(cmor.cmorize(dataset, variable, axes, data))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Write CMIP7 example 7 with CMOR4.")
+    parser = argparse.ArgumentParser(description="Write CMIP7 example 7 with CMOR.")
     parser.add_argument(
         "--output-dir",
         type=Path,

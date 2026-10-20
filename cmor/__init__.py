@@ -1,5 +1,7 @@
 """CMOR-like NetCDF creation with xarray."""
 
+__version__ = "4.0.0a1"
+
 from .dataset import (
     build_output_path,
     cmorize,
@@ -43,5 +45,3 @@ __all__ = [
     "write_netcdf",
     "ZFactor",
 ]
-
-__version__ = "4.0.0a1"

@@ -8,6 +8,7 @@ from typing import Any, Self
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
+from .. import __version__ as _VERSION
 from .metadata import BoolCoerced, MetadataModel
 
 # Keys that must not appear in NetCDF global attributes
@@ -194,13 +195,11 @@ class DatasetMetadata(MetadataModel):
         extra_attrs: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Return complete NetCDF global attributes for this dataset and variable."""
-        from .. import __version__ as _ver
-
         creation_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         metadata = self.to_dict()
         attrs: dict[str, Any] = {
             "Conventions": metadata.get("Conventions", "CF-1.12"),
-            "cmor_version": _ver,
+            "cmor_version": _VERSION,
         }
         for key, val in metadata.items():
             if key in INTERNAL_DATASET_KEYS or key.startswith("_"):

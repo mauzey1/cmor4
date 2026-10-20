@@ -1,7 +1,7 @@
 """Typed models for project-table documents and entries.
 
 The JSON table schema is intentionally kept separate from the runtime metadata
-models in :mod:`cmor4.axis`, :mod:`cmor4.variable`, and related modules.  Table
+models in :mod:`cmor.axis`, :mod:`cmor.variable`, and related modules.  Table
 rows describe authoritative defaults and constraints; runtime models describe
 fully constructed objects and may contain large array-like values.
 """
@@ -123,7 +123,7 @@ class DimensionedTableEntry(NamedTableEntry):
 
     @property
     def runtime_dimensions(self) -> tuple[str, ...]:
-        """Dimensions in the order used by CMOR4 runtime objects."""
+        """Dimensions in the order used by CMOR runtime objects."""
 
         return tuple(reversed(self.dimensions))
 

@@ -1,8 +1,8 @@
-# CMOR4
+# CMOR
 
-**Climate Model Output Rewriter (CMOR) - Version 4**
+**Climate Model Output Rewriter (CMOR), version 4**
 
-CMOR4 is a Python package for creating CF-compliant climate model output in NetCDF format. It validates metadata against project tables (CMIP7, obs4MIPs, DRCDP) and writes standards-compliant NetCDF files from Python metadata and data objects.
+CMOR is a Python package for creating CF-compliant climate model output in NetCDF format. It validates metadata against project tables (CMIP7, obs4MIPs, DRCDP) and writes standards-compliant NetCDF files from Python metadata and data objects.
 
 ## Key Features
 
@@ -61,14 +61,14 @@ ruff format src tests
 3. **Provide data**: Supply numpy arrays or xarray DataArrays
 4. **Create output**: Call `cmorize()` to validate and write CF-compliant NetCDF
 
-## Example CMOR4 program
+## Example CMOR program
 
 ```python
 import numpy as np
-import cmor4
+import cmor
 
 # Load project tables
-project = cmor4.ProjectTables.from_directory(
+project = cmor.ProjectTables.from_directory(
     "project_tables/cmip7-cmor-tables",
     cv_file="tables-cvs/cmor-cvs.json",
     variable_tables=["tables/CMIP7_atmos.json"],
@@ -103,7 +103,7 @@ axes = [
 data = np.random.randn(2, 180, 360) + 288.0
 
 # Write CMOR-compliant NetCDF file
-path = cmor4.cmorize(dataset, variable, axes, data)
+path = cmor.cmorize(dataset, variable, axes, data)
 print(f"Created: {path}")
 ```
 
@@ -112,10 +112,10 @@ print(f"Created: {path}")
 For large datasets or data produced incrementally (e.g., as a model runs), use `DatasetWriter` to write time slices one at a time without loading the complete time series into memory:
 
 ```python
-import cmor4
+import cmor
 import numpy as np
 
-project = cmor4.ProjectTables.from_directory(...)
+project = cmor.ProjectTables.from_directory(...)
 dataset = project.dataset_info({...})
 variable = project.variable("tas")
 
@@ -127,7 +127,7 @@ axes = [
 ]
 
 # Write data incrementally (memory-bounded - never loads full time series)
-with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+with cmor.DatasetWriter(dataset, variable, axes) as writer:
     for year in range(1850, 2015):
         # Load one year at a time
         time_vals, data = load_year(year)  # Your function: returns (12,) and (12, 180, 360)
@@ -154,12 +154,12 @@ print(f"Complete dataset written to: {writer.path}")
 
 ```python
 # Append new time records to an existing file
-with cmor4.DatasetWriter(dataset, variable, axes, 
+with cmor.DatasetWriter(dataset, variable, axes,
                          path="existing.nc", existing="append") as writer:
     writer.write(new_data, time_values=new_times, time_bounds=new_bounds)
 
 # Incremental zfactor writes (for hybrid coordinates)
-with cmor4.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
+with cmor.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
     writer.write(data, time_values=times, time_bounds=bounds,
                  zfactors={"ps": surface_pressure_slice})
 ```
@@ -176,4 +176,4 @@ Jupyter notebook examples with visualizations are available in [notebooks](./not
 
 ## Acknowledgments
 
-CMOR4 is developed and maintained by the Program for Climate Model Diagnosis and Intercomparison ([PCMDI](https://pcmdi.llnl.gov/)) at [Lawrence Livermore National Laboratory](https://www.llnl.gov/).
+CMOR is developed and maintained by the Program for Climate Model Diagnosis and Intercomparison ([PCMDI](https://pcmdi.llnl.gov/)) at [Lawrence Livermore National Laboratory](https://www.llnl.gov/).

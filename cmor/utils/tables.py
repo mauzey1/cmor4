@@ -1,4 +1,4 @@
-"""Indexed table objects and entry types for CMOR4 metadata.
+"""Indexed table objects and entry types for CMOR metadata.
 
 Entry classes — lightweight resolved-entry containers, one per table type:
 
@@ -780,7 +780,7 @@ class VariableTable:
     def resolve(self, request: Variable | Mapping[str, Any]) -> VariableEntry:
         """Return the :class:`VariableEntry` matching *data*.
 
-        Raises :exc:`~cmor4.exceptions.TableValidationError` if the
+        Raises :exc:`~cmor.exceptions.TableValidationError` if the
         variable is not found or is ambiguous across tables.
         """
         data = request.to_dict() if isinstance(request, Variable) else dict(request)
@@ -994,7 +994,7 @@ class VariableTable:
 
         Notes
         -----
-        Called by :meth:`~cmor4.tables.ProjectTables.validate_dataset`. For
+        Called by :meth:`~cmor.tables.ProjectTables.validate_dataset`. For
         contextual empty-string remaps, the accepted variable value is ``None``
         or ``""``; non-empty values are rejected.
         """

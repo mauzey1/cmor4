@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 import xarray as xr
 
-import cmor4
+import cmor
 from dataset_helpers import load_dataset
 from table_helpers import cmip7_project
 
@@ -34,7 +34,7 @@ def dataset_info(tmp_path: Path) -> dict[str, str]:
     }
 
 
-def horizontal_axes(project: cmor4.ProjectTables) -> list[cmor4.Axis]:
+def horizontal_axes(project: cmor.ProjectTables) -> list[cmor.Axis]:
     return [
         project.axis(
             "latitude",
@@ -49,7 +49,7 @@ def horizontal_axes(project: cmor4.ProjectTables) -> list[cmor4.Axis]:
     ]
 
 
-def shifted_horizontal_axes(project: cmor4.ProjectTables) -> list[cmor4.Axis]:
+def shifted_horizontal_axes(project: cmor.ProjectTables) -> list[cmor.Axis]:
     return [
         project.axis(
             "latitude",
@@ -65,10 +65,10 @@ def shifted_horizontal_axes(project: cmor4.ProjectTables) -> list[cmor4.Axis]:
 
 
 def time_axis(
-    project: cmor4.ProjectTables,
+    project: cmor.ProjectTables,
     values: list[float] | None = None,
     bounds: list[list[float]] | None = None,
-) -> cmor4.Axis:
+) -> cmor.Axis:
     kwargs = {"units": "days since 2000-01-01"}
     if values is not None:
         kwargs["values"] = values
@@ -78,10 +78,10 @@ def time_axis(
 
 
 def curvilinear_grid(
-    project: cmor4.ProjectTables,
+    project: cmor.ProjectTables,
     *,
     mapping_latitude: float = 90.0,
-) -> cmor4.Grid:
+) -> cmor.Grid:
     y_axis = project.axis(
         "y",
         values=[0.0, 10000.0, 20000.0],
@@ -133,7 +133,7 @@ def curvilinear_grid(
     )
 
 
-def hybrid_axis(project: cmor4.ProjectTables) -> cmor4.Axis:
+def hybrid_axis(project: cmor.ProjectTables) -> cmor.Axis:
     return project.axis(
         "standard_hybrid_sigma",
         values=[0.9, 0.1],
@@ -142,11 +142,11 @@ def hybrid_axis(project: cmor4.ProjectTables) -> cmor4.Axis:
 
 
 def hybrid_zfactors(
-    project: cmor4.ProjectTables,
+    project: cmor.ProjectTables,
     ps_values: np.ndarray,
     *,
     a_values: list[float] | None = None,
-) -> list[cmor4.ZFactor]:
+) -> list[cmor.ZFactor]:
     a_vals = a_values or [0.9, 0.1]
     return [
         project.zfactor(
@@ -194,7 +194,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 values=[15.0, 45.0, 75.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0], [60.0, 90.0]],
             )
-            expected_path = cmor4.cmorize(
+            expected_path = cmor.cmorize(
                 info,
                 variable,
                 [full_time, *horizontal_axes(self.project)],
@@ -202,7 +202,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 path=tmp_path / "expected.nc",
             )
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -214,7 +214,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
                 )
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -243,7 +243,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             output_path = tmp_path / "writer.nc"
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -255,7 +255,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0]],
                 )
 
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *shifted_horizontal_axes(self.project)],
@@ -278,7 +278,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             output_path = tmp_path / "writer.nc"
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -290,7 +290,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[30.0, 60.0]],
                 )
 
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -313,7 +313,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             output_path = tmp_path / "writer.nc"
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -325,7 +325,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0]],
                 )
 
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -346,7 +346,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             tmp_path = Path(tmp_dir)
             info = self.project.dataset_info(dataset_info(tmp_path))
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -377,7 +377,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 values=[15.0, 45.0, 75.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0], [60.0, 90.0]],
             )
-            expected_path = cmor4.cmorize(
+            expected_path = cmor.cmorize(
                 info,
                 variable,
                 [full_time],
@@ -386,7 +386,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 path=tmp_path / "expected-grid.nc",
             )
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project)],
@@ -399,7 +399,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
                 )
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project)],
@@ -433,7 +433,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             variable = self.project.variable("hfls_tavg-u-hxy-u", table_id="atmos")
             output_path = tmp_path / "writer-grid.nc"
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project)],
@@ -446,7 +446,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0]],
                 )
 
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project)],
@@ -491,7 +491,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 values=[15.0, 45.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0]],
             )
-            expected_path = cmor4.cmorize(
+            expected_path = cmor.cmorize(
                 info,
                 variable,
                 [full_time, hybrid_axis(self.project), *horizontal_axes(self.project)],
@@ -500,7 +500,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 path=tmp_path / "expected-zfactor.nc",
             )
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -513,7 +513,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0]],
                 )
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -549,7 +549,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             ]
             ps = np.full((1, 2, 2), 99000.0, dtype="f4")
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -562,7 +562,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0]],
                 )
 
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -592,14 +592,14 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 np.arange(12, 20, dtype="f4").reshape(2, 2, 2),
             ]
 
-            with cmor4.DatasetWriter(info, variable, axes, path=output_path) as writer:
+            with cmor.DatasetWriter(info, variable, axes, path=output_path) as writer:
                 writer.write(
                     chunks[0],
                     time_values=[15.0, 45.0],
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]],
                 )
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -613,7 +613,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                 )
                 writer.close()
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -647,7 +647,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             old_creation_date = "1900-01-01T00:00:00Z"
             old_tracking_id = "old-tracking-id"
 
-            with cmor4.DatasetWriter(info, variable, axes, path=output_path) as writer:
+            with cmor.DatasetWriter(info, variable, axes, path=output_path) as writer:
                 writer.write(
                     np.ones((1, 2, 2), dtype="f4"),
                     time_values=[15.0],
@@ -668,7 +668,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             rewritten.to_netcdf(output_path)
             rewritten.close()
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -694,7 +694,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
             output_path = tmp_path / "writer.nc"
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -707,7 +707,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0]],
                 )
 
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -735,14 +735,14 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             axes = [time_axis(self.project), *horizontal_axes(self.project)]
             output_path = tmp_path / "writer.nc"
 
-            with cmor4.DatasetWriter(info, variable, axes, path=output_path) as writer:
+            with cmor.DatasetWriter(info, variable, axes, path=output_path) as writer:
                 writer.write(
                     np.ones((2, 2, 2), dtype="f4"),
                     time_values=[15.0, 45.0],
                     time_bounds=[0.0, 30.0, 60.0],
                 )
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 axes,
@@ -768,7 +768,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
             output_path = tmp_path / "writer.nc"
 
-            with cmor4.DatasetWriter(
+            with cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *horizontal_axes(self.project)],
@@ -780,7 +780,7 @@ class DatasetWriterAppendModeTests(unittest.TestCase):
                     time_bounds=[[0.0, 30.0]],
                 )
 
-            writer = cmor4.DatasetWriter(
+            writer = cmor.DatasetWriter(
                 info,
                 variable,
                 [time_axis(self.project), *shifted_horizontal_axes(self.project)],

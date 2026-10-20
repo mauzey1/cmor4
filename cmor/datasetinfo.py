@@ -16,7 +16,7 @@ class DatasetInfo(DatasetMetadata):
     Parameters
     ----------
     project : ProjectTables, optional
-        :class:`~cmor4.tables.ProjectTables` that prepared this record.
+        :class:`~cmor.tables.ProjectTables` that prepared this record.
         Excluded from metadata serialization.
     user_info : dict, optional
         Original user-supplied metadata before CV defaults were applied.

@@ -7,3 +7,4 @@ __pycache__/
 cmor_output/
 notebooks/output/
 docs/build/
+.vscode

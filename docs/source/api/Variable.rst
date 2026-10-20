@@ -1,7 +1,7 @@
 Variable
 ========
 
-.. currentmodule:: cmor4
+.. currentmodule:: cmor
 
 .. autoclass:: Variable
    :members:

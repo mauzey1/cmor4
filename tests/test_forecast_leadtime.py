@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset
 
-from cmor4 import Axis, DatasetInfo, DatasetWriter, Variable, cmorize
-from cmor4.utils.construction import build_axis_mappings, derive_forecast_coords
-from cmor4.utils.tables import CoordinateTable
+from cmor import Axis, DatasetInfo, DatasetWriter, Variable, cmorize
+from cmor.utils.construction import build_axis_mappings, derive_forecast_coords
+from cmor.utils.tables import CoordinateTable
 
 
 def _time(values=(0.0, 6.0, 12.0), units="hours since 2020-01-01") -> Axis:

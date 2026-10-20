@@ -1,16 +1,16 @@
 Quick Start
 ===========
 
-This guide will get you started with CMOR4 in minutes.
+This guide will get you started with CMOR in minutes.
 
 Installation
 ------------
 
-Install CMOR4 from PyPI:
+Install CMOR from PyPI:
 
 .. code-block:: bash
 
-   pip install cmor4
+   pip install cmor
 
 Or install from source:
 
@@ -27,11 +27,11 @@ Here's a minimal example of creating a CMOR-compliant NetCDF file:
 
 .. code-block:: python
 
-   import cmor4
+   import cmor
    import numpy as np
 
    # Load project tables
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/cmip7-cmor-tables",
        cv_file="tables-cvs/cmor-cvs.json",
        variable_tables=["tables/CMIP7_ocean.json"],
@@ -70,7 +70,7 @@ Here's a minimal example of creating a CMOR-compliant NetCDF file:
    data = np.random.randn(3, 2, 2) * 5 + 290.0  # Ocean temperature in K
 
    # Write to NetCDF
-   output_path = cmor4.cmorize(
+   output_path = cmor.cmorize(
        data=data,
        dataset=dataset,
        variable=variable,

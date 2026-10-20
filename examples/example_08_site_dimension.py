@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import cmor4
+import cmor
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +15,7 @@ TABLE_ROOT = REPO_ROOT / "project_tables" / "cmip7-cmor-tables"
 
 def write_example(output_dir: Path) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
-    project = cmor4.ProjectTables.from_directory(
+    project = cmor.ProjectTables.from_directory(
         TABLE_ROOT,
         cv_file="tables-cvs/cmor-cvs.json",
         variable_tables=["tables/CMIP7_atmos.json"],
@@ -55,8 +55,12 @@ def write_example(output_dir: Path) -> str:
         dimensions=["site"],
         latitude=site_latitudes,
         longitude=site_longitudes,
-        latitude_vertices=np.column_stack((site_latitudes - 0.25, site_latitudes + 0.25)),
-        longitude_vertices=np.column_stack((site_longitudes - 0.25, site_longitudes + 0.25)),
+        latitude_vertices=np.column_stack(
+            (site_latitudes - 0.25, site_latitudes + 0.25)
+        ),
+        longitude_vertices=np.column_stack(
+            (site_longitudes - 0.25, site_longitudes + 0.25)
+        ),
     )
     variable = project.variable(
         "tas_tpt-h2m-hs-u", table_id="atmos", missing_value=np.float64(1.0e20)
@@ -64,12 +68,12 @@ def write_example(output_dir: Path) -> str:
     data = np.linspace(275.0, 290.0, 2 * site_values.size, dtype="f4").reshape(
         2, site_values.size
     )
-    return str(cmor4.cmorize(dataset, variable, [time, site], data, grid=grid))
+    return str(cmor.cmorize(dataset, variable, [time, site], data, grid=grid))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Write CMIP7 near-surface air temperature at sites with CMOR4."
+        description="Write CMIP7 near-surface air temperature at sites with CMOR."
     )
     parser.add_argument(
         "--output-dir",

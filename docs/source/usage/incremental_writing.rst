@@ -1,7 +1,7 @@
 Incremental Writing with DatasetWriter
 =======================================
 
-:class:`cmor4.DatasetWriter` enables memory-bounded incremental writing of CMOR-compliant NetCDF files. Write data one time slice at a time as it becomes available, perfect for streaming model output or datasets larger than RAM.
+:class:`cmor.DatasetWriter` enables memory-bounded incremental writing of CMOR-compliant NetCDF files. Write data one time slice at a time as it becomes available, perfect for streaming model output or datasets larger than RAM.
 
 When to Use DatasetWriter
 --------------------------
@@ -42,11 +42,11 @@ Write data one time slice at a time:
 
 .. code-block:: python
 
-   import cmor4
+   import cmor
    import numpy as np
 
    # Load project tables
-   project = cmor4.ProjectTables.from_directory(
+   project = cmor.ProjectTables.from_directory(
        "project_tables/cmip7-cmor-tables",
        cv_file="tables-cvs/cmor-cvs.json",
        variable_tables=["tables/CMIP7_ocean.json"],
@@ -77,7 +77,7 @@ Write data one time slice at a time:
    ]
 
    # Write incrementally
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        for year in range(1850, 2015):
            # Load one year's data (12 months)
            time_values = np.arange(12) * 30.0 + 15.0 + (year - 1850) * 365.0
@@ -116,7 +116,7 @@ If you know the complete time range upfront:
 
    axes = [time_axis, lat, lon]
 
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        # Write in chunks - time values taken from axis
        for i in range(0, len(time_values), 12):
            chunk = data[i:i+12]
@@ -129,7 +129,7 @@ For more control over finalization:
 
 .. code-block:: python
 
-   writer = cmor4.DatasetWriter(
+   writer = cmor.DatasetWriter(
        dataset,
        variable,
        axes,
@@ -144,7 +144,7 @@ For more control over finalization:
    output_path = writer.close()
 
    print(f"Wrote {output_path}")
-   with cmor4.open_dataset(output_path, decode_times=False) as ds:
+   with cmor.open_dataset(output_path, decode_times=False) as ds:
        print(f"Time range: {ds.time.values[0]} to {ds.time.values[-1]}")
 
 Advanced Features
@@ -160,7 +160,7 @@ Create separate file segments with gaps between them:
    from pathlib import Path
 
    # First segment: 1850-1900
-   writer = cmor4.DatasetWriter(
+   writer = cmor.DatasetWriter(
        dataset,
        variable,
        axes,
@@ -193,7 +193,7 @@ Control where files are written:
 .. code-block:: python
 
    # Explicit path
-   writer = cmor4.DatasetWriter(
+   writer = cmor.DatasetWriter(
        dataset,
        variable,
        axes,
@@ -201,7 +201,7 @@ Control where files are written:
    )
 
    # Auto-generated from metadata (CMIP DRS)
-   writer = cmor4.DatasetWriter(dataset, variable, axes)
+   writer = cmor.DatasetWriter(dataset, variable, axes)
 
 Incremental Formula Terms (Hybrid Sigma Coordinates)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -227,7 +227,7 @@ For variables on hybrid sigma coordinates, time-varying formula terms (e.g., sur
 
    axes = [time_axis, hybrid_axis, lat_axis, lon_axis]
 
-   with cmor4.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes, zfactors=zfactors) as writer:
        for year in range(1850, 2015):
            # Load model data and surface pressure for this year
            data = load_model_data(year)  # Shape: (12, 2, 180, 360)
@@ -267,7 +267,7 @@ Specify NetCDF encoding:
        }
    }
 
-   writer = cmor4.DatasetWriter(
+   writer = cmor.DatasetWriter(
        dataset,
        variable,
        axes,
@@ -281,7 +281,7 @@ Use fast local storage for temporary files:
 
 .. code-block:: python
 
-   writer = cmor4.DatasetWriter(
+   writer = cmor.DatasetWriter(
        dataset,
        variable,
        axes,
@@ -300,7 +300,7 @@ Additional Global Attributes
        "contact": "user@institution.edu",
    }
 
-   writer = cmor4.DatasetWriter(
+   writer = cmor.DatasetWriter(
        dataset,
        variable,
        axes,
@@ -315,13 +315,13 @@ Control what happens when the output file already exists:
 .. code-block:: python
 
    # Default: raise error if exists
-   writer = cmor4.DatasetWriter(dataset, variable, axes, existing="error")
+   writer = cmor.DatasetWriter(dataset, variable, axes, existing="error")
 
    # Overwrite existing
-   writer = cmor4.DatasetWriter(dataset, variable, axes, existing="replace")
+   writer = cmor.DatasetWriter(dataset, variable, axes, existing="replace")
 
    # Append new time records to existing file
-   writer = cmor4.DatasetWriter(dataset, variable, axes, existing="append")
+   writer = cmor.DatasetWriter(dataset, variable, axes, existing="append")
 
 Best Practices
 --------------
@@ -334,12 +334,12 @@ Always use the ``with`` statement:
 .. code-block:: python
 
    # ✓ Good - automatic cleanup
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        writer.write(data, time_values=times, time_bounds=bounds)
    # File automatically finalized
 
    # ✗ Avoid - manual cleanup required
-   writer = cmor4.DatasetWriter(dataset, variable, axes)
+   writer = cmor.DatasetWriter(dataset, variable, axes)
    writer.write(data, time_values=times, time_bounds=bounds)
    writer.close()  # Must remember to call close()
 
@@ -355,7 +355,7 @@ Test with small data first:
    test_time = time_values[:1]
    test_bounds = time_bounds[:1]
 
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        writer.write(test_data, time_values=test_time, time_bounds=test_bounds)
 
    print("Validation successful! Proceeding with full write...")
@@ -384,7 +384,7 @@ Monitor Progress
 
 .. code-block:: python
 
-   with cmor4.DatasetWriter(dataset, variable, axes) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes) as writer:
        for year in range(1850, 2015):
            time_vals, data = load_year(year)
            writer.write(data, time_values=time_vals, time_bounds=bounds)
@@ -402,12 +402,12 @@ Handle Validation Errors
 .. code-block:: python
 
    try:
-       writer = cmor4.DatasetWriter(dataset, variable, axes)
+       writer = cmor.DatasetWriter(dataset, variable, axes)
        writer.write(data, time_values=[15.0], time_bounds=[[0.0, 30.0]])
        path = writer.close()
-   except cmor4.AxisValidationError as e:
+   except cmor.AxisValidationError as e:
        print(f"Time axis validation failed: {e}")
-   except cmor4.VariableValidationError as e:
+   except cmor.VariableValidationError as e:
        print(f"Variable validation failed: {e}")
    except ValueError as e:
        print(f"Data validation failed: {e}")
@@ -419,7 +419,7 @@ The staging directory is preserved for debugging:
 
 .. code-block:: python
 
-   writer = cmor4.DatasetWriter(dataset, variable, axes)
+   writer = cmor.DatasetWriter(dataset, variable, axes)
    print(f"Staging directory: {writer.staging_root}")
 
    try:
@@ -468,7 +468,7 @@ Common Errors
 
 .. code-block:: python
 
-   writer = cmor4.DatasetWriter(dataset, variable, axes,
+   writer = cmor.DatasetWriter(dataset, variable, axes,
                                  path="missing.nc", existing="append")
    writer.write(data, time_values=[15.0])
    # FileNotFoundError: Cannot append because output file 'missing.nc' does not exist
@@ -478,7 +478,7 @@ Common Errors
 .. code-block:: python
 
    # Original file has different grid
-   writer = cmor4.DatasetWriter(dataset, variable, axes,
+   writer = cmor.DatasetWriter(dataset, variable, axes,
                                  path="output.nc", existing="append")
    writer.write(data, time_values=[75.0])
    # ValueError: dimension 'lat' has size 180 in existing file and 91 in new dataset
@@ -514,7 +514,7 @@ Slow Writes
 .. code-block:: python
 
    # Use fast local storage
-   writer = cmor4.DatasetWriter(
+   writer = cmor.DatasetWriter(
        dataset, variable, axes,
        staging_dir="/fast/local/scratch"
    )
@@ -534,7 +534,7 @@ Zarr staging requires ~2× final file size:
    print(f"Free space: {stat.free / 1e9:.1f} GB")
 
    # Use different staging location
-   writer = cmor4.DatasetWriter(
+   writer = cmor.DatasetWriter(
        dataset, variable, axes,
        staging_dir="/larger/disk/staging"
    )
@@ -578,7 +578,7 @@ Use ``existing="append"`` to add new time records to an existing CMOR file:
 .. code-block:: python
 
    # Initial write
-   with cmor4.DatasetWriter(
+   with cmor.DatasetWriter(
        dataset,
        variable,
        axes,
@@ -588,7 +588,7 @@ Use ``existing="append"`` to add new time records to an existing CMOR file:
                     time_bounds=[[0.0, 30.0], [30.0, 60.0]])
 
    # Later, append more data
-   with cmor4.DatasetWriter(
+   with cmor.DatasetWriter(
        dataset,
        variable,
        axes,
@@ -638,17 +638,17 @@ You can append multiple times to the same file:
    output_path = Path("accumulated.nc")
 
    # Initial write
-   with cmor4.DatasetWriter(dataset, variable, axes, path=output_path) as writer:
+   with cmor.DatasetWriter(dataset, variable, axes, path=output_path) as writer:
        writer.write(chunk1, time_values=times1, time_bounds=bounds1)
 
    # First append
-   with cmor4.DatasetWriter(
+   with cmor.DatasetWriter(
        dataset, variable, axes, path=output_path, existing="append"
    ) as writer:
        writer.write(chunk2, time_values=times2, time_bounds=bounds2)
 
    # Second append
-   with cmor4.DatasetWriter(
+   with cmor.DatasetWriter(
        dataset, variable, axes, path=output_path, existing="append"
    ) as writer:
        writer.write(chunk3, time_values=times3, time_bounds=bounds3)
@@ -674,7 +674,7 @@ Provide time-varying zfactor values incrementally via the ``zfactors`` parameter
        project.zfactor("ps"),  # No values - will provide per chunk
    ]
 
-   with cmor4.DatasetWriter(
+   with cmor.DatasetWriter(
        dataset, variable, axes, path="hybrid.nc", zfactors=zfactors
    ) as writer:
        # First write - provide ps values for this chunk
@@ -712,7 +712,7 @@ Alternatively, use append mode with complete zfactor values for each write:
        project.zfactor("ps", values=ps_2000),
    ]
 
-   with cmor4.DatasetWriter(
+   with cmor.DatasetWriter(
        dataset, variable, axes, path="hybrid.nc", zfactors=zfactors_2000
    ) as writer:
        writer.write(data_2000, time_values=times_2000, time_bounds=bounds_2000)
@@ -726,7 +726,7 @@ Alternatively, use append mode with complete zfactor values for each write:
        project.zfactor("ps", values=ps_2001),
    ]
 
-   with cmor4.DatasetWriter(
+   with cmor.DatasetWriter(
        dataset, variable, axes, path="hybrid.nc",
        zfactors=zfactors_2001, existing="append"
    ) as writer:
@@ -766,7 +766,7 @@ Append operations are atomic - if validation fails, the original file is unchang
 .. code-block:: python
 
    try:
-       with cmor4.DatasetWriter(
+       with cmor.DatasetWriter(
            dataset, variable, axes,
            path="output.nc", existing="append"
        ) as writer:
@@ -794,7 +794,7 @@ Here's a full example with error handling and progress monitoring:
 
 .. code-block:: python
 
-   import cmor4
+   import cmor
    import numpy as np
    from pathlib import Path
 
@@ -802,7 +802,7 @@ Here's a full example with error handling and progress monitoring:
        """Write model output incrementally."""
 
        # Setup
-       project = cmor4.ProjectTables.from_directory(
+       project = cmor.ProjectTables.from_directory(
            "project_tables/cmip7-cmor-tables",
            cv_file="tables-cvs/cmor-cvs.json",
            variable_tables=["tables/CMIP7_ocean.json"],
@@ -829,7 +829,7 @@ Here's a full example with error handling and progress monitoring:
        ]
 
        # Write incrementally
-       writer = cmor4.DatasetWriter(
+       writer = cmor.DatasetWriter(
            dataset,
            variable,
            axes,
@@ -855,7 +855,7 @@ Here's a full example with error handling and progress monitoring:
        else:
            output_path = writer.close()
            print(f"✓ Success: {output_path}")
-           with cmor4.open_dataset(output_path, decode_times=False) as ds:
+           with cmor.open_dataset(output_path, decode_times=False) as ds:
                print(f"  Time range: {ds.time.values[0]} to {ds.time.values[-1]}")
            print(f"  File size: {Path(output_path).stat().st_size / 1e6:.1f} MB")
         
@@ -867,4 +867,4 @@ See Also
 
 - :doc:`basic_usage` - Simple one-shot writes with :func:`cmorize`
 - :doc:`advanced_features` - Custom grids, formula terms
-- :class:`API Reference <cmor4.DatasetWriter>` - Complete class documentation
+- :class:`API Reference <cmor.DatasetWriter>` - Complete class documentation

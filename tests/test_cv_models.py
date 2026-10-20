@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from cmor4.cv import ControlledVocabulary
-from cmor4.exceptions import ControlledVocabularyError
-from cmor4.utils.cv_models import (
+from cmor.cv import ControlledVocabulary
+from cmor.exceptions import ControlledVocabularyError
+from cmor.utils.cv_models import (
     AttributeRule,
     DRSComponent,
     ExperimentComponent,
@@ -15,7 +15,7 @@ from cmor4.utils.cv_models import (
     SourceTypeComponent,
     TrackingIdComponent,
 )
-from cmor4.utils.dataset_metadata import DatasetMetadata
+from cmor.utils.dataset_metadata import DatasetMetadata
 
 
 def _sample_cv(
