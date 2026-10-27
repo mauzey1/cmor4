@@ -8,15 +8,22 @@ which global attributes a dataset must carry, which values those attributes
 may take, and which attributes CMOR can fill in for you. Every project
 (CMIP7, obs4MIPs, DRCDP, …) ships its own CV alongside its MIP tables.
 
-CMOR uses the CV in two passes when you create a dataset:
+CMOR applies CV defaults when it prepares dataset metadata, then validates
+controlled values. It checks required global attributes when it prepares a
+variable for writing and again before writing the final dataset:
 
 1. **Defaulting** — attributes you did not supply are filled from the CV
    (for example, ``institution`` from ``institution_id``).
-2. **Validation** — every attribute is checked against the CV, and a
-   :class:`~cmor.ControlledVocabularyError` is raised on the first problem.
+2. **Validation** — attributes with CV constraints, required attributes and
+   relationships between attributes are checked. A failed CV check raises
+   :class:`~cmor.ControlledVocabularyError`. Attributes unknown to the CV
+   are generally allowed.
 
-Values you supply are never overwritten by defaults. If you set an attribute
-yourself, CMOR validates it rather than replacing it.
+Defaults preserve nonempty values you supply. Source, institution and
+experiment defaults treat ``None`` and ``""`` as missing and replace them.
+Supplying a value does not guarantee that it is constrained: the exceptions
+in :ref:`cv-special-sections` and :ref:`cv-legacy-posix-regex` describe
+checks CMOR skips or relaxes.
 
 
 File structure
@@ -37,9 +44,10 @@ A CV file is a JSON object with a single top-level ``CV`` key:
    }
 
 :class:`~cmor.ControlledVocabulary` accepts either this full document or
-just the body of ``CV``. Each key inside ``CV`` is normally the name of a
-NetCDF global attribute. A few keys (``DRS``, ``required_global_attributes``,
-``tracking_id_prefix``) describe CMOR behavior rather than an attribute.
+just the body of ``CV``. Most keys inside ``CV`` name NetCDF global
+attributes. ``DRS`` and ``required_global_attributes`` control CMOR behavior.
+``tracking_id_prefix`` also controls generated IDs; if its CV value is a
+string, CMOR currently copies it into the global attributes as well.
 
 
 How CMOR reads an ordinary entry
@@ -62,28 +70,35 @@ without changes to CMOR.
        CMOR writes this value as a default.
    * - String containing ``<tokens>``
      - ``"variant_label": "r<realization_index>i<...>"``
-     - A template. The dataset value must equal the template rendered from
-       the other attributes. Templates are never used as defaults.
+     - A template. The dataset value may equal either the rendered template
+       or the literal, unrendered template. An ordinary template is not
+       defaulted, but one listed as required can be copied literally as a
+       single-valued required default.
    * - List
      - ``"grid_label": ["gn", "gr", "gr1"]``
      - The value must match one item, first as a literal string and then as
-       a regular expression (full match). POSIX classes such as
-       ``[[:digit:]]`` are translated to Python syntax.
+       a regular expression (full match). Some POSIX classes are translated
+       to Python syntax. The generic check is skipped for certain one-item
+       legacy POSIX regex lists (see :ref:`cv-legacy-posix-regex`).
    * - Object
      - ``"activity_id": {"CMIP": "description"}``
      - The value must be one of the object's **keys**; the values are
        descriptions. For ``realm`` and ``source_type`` the dataset value is
        split on whitespace and every token must be a key.
-   * - Anything else (``null``, empty)
+   * - ``null`` or another unsupported shape
      - ``"further_info_url": null``
      - Not constrained.
+
+Under the ordinary rules, an empty list or object rejects a nonempty
+supplied value. Dedicated sections can behave differently. An absent
+attribute is checked only if another rule requires it.
 
 Lookup objects that inject attributes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If an object's entries are themselves objects whose values are all scalars,
-selecting an entry also **adds those scalars as global attributes**. For
-example, an obs4MIPs CV might define:
+If an object's entries are themselves objects whose values are all strings
+or numbers, selecting an entry also **adds those scalars as global
+attributes**. For example, an obs4MIPs CV might define:
 
 .. code-block:: json
 
@@ -93,7 +108,7 @@ example, an obs4MIPs CV might define:
 
 Setting ``site_id="AR-SLu"`` then writes ``latitude``, ``longitude`` and
 ``location`` to the file. This injection runs last, so it never overrides an
-attribute you supplied or one filled by the special sections below. It is
+attribute you supplied or one filled by :ref:`cv-special-sections`. It is
 disabled for ``DRS``, ``experiment_id``, ``frequency``, ``institution_id``,
 ``license``, ``license_id``, ``source_id`` and ``source_type``.
 
@@ -111,30 +126,39 @@ after defaulting. CMOR can produce some of them on its own:
    * - Attribute
      - How CMOR fills it when missing
    * - ``Conventions``
-     - ``CF-1.12`` if the CV lists it, otherwise the CV's value.
+     - ``CF-1.12`` if the CV lists it; otherwise a scalar CV value or the
+       last value in a CV list. A regex-like final list value yields
+       ``CF-1.7 CMIP-6.2`` instead. With no usable CV value, CMOR uses
+       ``CF-1.12``.
    * - ``creation_date``
-     - The current time, formatted ``YYYY-MM-DDTHH:MM:SSZ``.
+     - The current local time, formatted ``YYYY-MM-DDTHH:MM:SSZ``. The
+       current implementation appends ``Z`` without converting to UTC.
    * - ``variant_label``
      - Assembled from ``realization_index``, ``initialization_index``,
-       ``physics_index`` and ``forcing_index`` (see below).
+       ``physics_index`` and ``forcing_index`` (see :ref:`cv-variant-label`).
    * - ``tracking_id``
-     - A new UUID with the project prefix (see below).
+     - A new UUID, with a prefix when one is available (see
+       :ref:`cv-tracking-id`).
    * - Others
      - The CV value, when the entry has exactly one possible value: a
-       scalar, a one-item list, or an object with one key.
+       scalar, a one-item list, or an object with one key. Regex-like
+       one-item lists do not provide a default. A required scalar template
+       can be copied literally.
 
-If a required attribute is still missing after defaulting, validation fails.
+If a required attribute is still missing when CMOR prepares a variable or
+validates final global attributes, validation fails. One exception is a
+required attribute defined by a one-item legacy POSIX regex list: CMOR
+currently allows it to remain absent.
 
-.. TODO: creation_date uses datetime.now() (local time) with a "Z" suffix;
-   confirm whether this should be UTC before documenting it as such.
 
+.. _cv-special-sections:
 
 Sections with special meaning
 -----------------------------
 
-The keys below get extra behavior on top of the generic rules. They still
-get the ordinary membership check from the table above: for example,
-``source_id`` must still be one of the keys of the ``source_id`` object.
+The following keys get extra behavior. Many also receive the ordinary check
+from the table above: for example, ``source_id`` must be a key of its catalog.
+Some dedicated checks replace or relax the ordinary check.
 
 ``source_id``
 ~~~~~~~~~~~~~
@@ -155,11 +179,14 @@ model implies. When you select a ``source_id``:
 An object mapping each experiment to its record. Selecting an experiment:
 
 * fills scalar and one-item-list values (such as ``experiment`` or
-  ``activity_id``) as defaults, except for structural fields like
-  ``start_year``, ``end_year``, ``tier``, ``parent_*`` and source-type
-  fields;
-* requires any other record attribute present in the dataset to match;
-* constrains ``source_type`` (see below);
+  ``activity_id``) as defaults. ``start_year``, ``end_year``, ``tier``,
+  ``parent_activity_id``, ``parent_experiment_id``, ``required_source_type``,
+  ``source_type`` and ``additional_allowed_model_components`` are excluded.
+  A one-item ``required_model_components`` list is currently *not* excluded
+  and may become a global attribute;
+* checks other present record attributes against the selected experiment,
+  except ``description`` and fields handled separately;
+* constrains ``source_type`` (see :ref:`cv-source-type`);
 * determines the parent attributes (see :ref:`cv-parent-attributes`).
 
 ``institution_id``
@@ -188,9 +215,12 @@ Three forms are accepted:
        "license_template": "<license_id>; ... see <license_url>"
      }
 
-  ``license_id`` must be a key of the catalog, ``license_type`` and
-  ``license_url`` must match the selected entry, and CMOR renders
-  ``license`` from the template if you don't supply it.
+  A supplied ``license_id`` must be a key of the catalog. Supplied
+  ``license_type`` and ``license_url`` must match the selected entry. CMOR
+  renders ``license`` from the template if you don't supply it, but
+  currently accepts any explicitly supplied ``license`` text in this form.
+
+.. _cv-source-type:
 
 ``source_type``
 ~~~~~~~~~~~~~~~
@@ -199,12 +229,13 @@ The project-wide vocabulary of model component types (a list or an object).
 The dataset value is a space-separated list, and every token must be in the
 vocabulary.
 
-The selected experiment can narrow this further. Every pattern in its
-``required_source_type`` (or ``required_model_components``) must be present,
-and every token must be either required or listed in
-``additional_allowed_model_components``.
-
-.. TODO: confirm the required/optional key names used by each project CV.
+The selected experiment can narrow this further. CMOR uses a nonempty
+``required_source_type`` if available, otherwise ``required_model_components``.
+It searches the full ``source_type`` string for each required pattern, then
+checks each token against the required patterns and
+``additional_allowed_model_components``. These are regular-expression
+searches, so an unanchored pattern can match a substring: required pattern
+``A`` can match ``BAD``.
 
 ``frequency``
 ~~~~~~~~~~~~~
@@ -236,16 +267,27 @@ Holds ``directory_path_template`` and ``filename_template``, the
 ``<token>`` templates CMOR uses to build output paths and file names. Other
 keys in this section are ignored.
 
+.. _cv-tracking-id:
+
 ``tracking_id`` and ``tracking_id_prefix``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each file gets a ``tracking_id`` of the form ``<prefix>/<uuid4>``. The
-prefix comes from, in order of preference:
+When ``tracking_id`` is required by the CV and you omit it, CMOR generates a
+UUID. With a prefix, its form is ``<prefix>/<uuid4>``; without one, it is
+just the UUID. An explicitly supplied ``tracking_id`` is preserved and is
+checked only when the CV has an applicable value constraint. The prefix for
+a generated ID comes from, in order of preference:
 
 1. a ``tracking_prefix`` attribute you set on the dataset;
 2. the CV's ``tracking_id_prefix`` (a string or one-item list);
 3. the literal leading part of the CV's ``tracking_id`` pattern, for
    example ``hdl:21.14100`` from ``"^hdl:21.14100/.*$"``.
+
+If ``tracking_id`` is not required and you do not supply one, CMOR does not
+generate it. A string-valued CV ``tracking_id_prefix`` currently also
+appears as a global attribute; a one-item list does not.
+
+.. _cv-variant-label:
 
 ``variant_label`` and the RIPF indices
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -292,8 +334,8 @@ metadata is allowed:
 The order CMOR applies a CV
 ---------------------------
 
-Defaults are applied in this order. Each step only fills attributes that are
-still missing, so earlier steps win over later ones:
+Defaults are applied in this order. Later steps generally fill absent keys;
+source, institution and experiment defaults also replace ``None`` or ``""``:
 
 1. scalar CV values;
 2. ``source_id`` record values;
@@ -304,19 +346,19 @@ still missing, so earlier steps win over later ones:
    ``tracking_id``) and single-valued required attributes;
 7. attributes injected by lookup objects.
 
-Validation then checks, stopping at the first error:
+``ProjectTables.dataset_info`` checks controlled values, RIPF indices,
+forcing, derived names, and source, experiment and parent consistency. It
+does not check that every required global attribute is present at this stage.
+When CMOR prepares a variable for writing and validates final global
+attributes, it checks the following in order, stopping at the first error:
 
-1. every attribute value against its CV entry;
-2. that all required attributes are present;
+1. supplied values with applicable CV constraints;
+2. required attributes, except the legacy POSIX regex case above;
 3. ``source``, ``experiment`` and ``institution`` against their ``*_id``
    records;
 4. the RIPF indices and ``variant_label``;
-5. ``forcing`` tokens.
-
-Experiment, source and parent consistency checks run separately.
-
-.. TODO: state where validate_experiment / validate_source_attributes /
-   validate_parent_attributes are called (DatasetWriter? write time?).
+5. ``forcing`` tokens;
+6. source, experiment and parent consistency.
 
 
 Common authoring mistakes
@@ -333,16 +375,21 @@ Double-nested entries
    :class:`RuntimeWarning` on load, and
    :meth:`~cmor.ControlledVocabulary.validate_structure` reports it.
 
+.. _cv-legacy-posix-regex:
+
 Legacy POSIX regular expressions
    CMIP6 CVs express some constraints as one-item lists of POSIX patterns
    (``"^[[:digit:]]\\{1,\\}$"``). CMOR skips the generic check for these,
-   relies on dedicated checks instead, and doesn't treat them as required
-   when absent. Prefer explicit lists or Python regular expressions in new
-   CVs.
+   applies any separate checks available for the attribute, and doesn't
+   treat them as required when absent. Some attributes have no separate
+   check, so even an invalid supplied value may pass. Prefer explicit lists
+   or Python regular expressions in new CVs.
 
 Templates used as defaults
-   A value containing ``<`` or ``>`` is treated as a template and is never
-   copied into a file as a default.
+   A scalar CV value containing ``<`` or ``>`` is excluded from ordinary
+   scalar defaults. If that attribute is required, the single-valued
+   required-default step can still copy the template literally. Supply the
+   intended rendered value explicitly or check the generated attribute.
 
 
 See also
