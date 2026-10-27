@@ -103,3 +103,4 @@ Next Steps
 - See :doc:`basic_usage` for more complete examples
 - Learn about :doc:`incremental_writing` for large datasets
 - Explore :doc:`advanced_features` for customization options
+- Read :doc:`controlled_vocabularies` for how Controlled Vocabulary (CV) are used
