@@ -20,30 +20,11 @@ from .utils.cv_models import (
     SourceComponent,
     SourceTypeComponent,
     TrackingIdComponent,
+    VariantLabelComponent,
     ControlledVocabularyModel,
 )
 from .utils.dataset_metadata import DatasetMetadata
 from .exceptions import ControlledVocabularyError
-
-# Variant label index keys and their allowed integer range.
-# CMOR3 stores these as C int (32-bit signed), so values above INT32_MAX
-# are rejected to keep parity with CMOR3 behaviour.
-_RIPF_KEYS: tuple[str, ...] = (
-    "realization_index",
-    "initialization_index",
-    "physics_index",
-    "forcing_index",
-)
-# Expected single-character prefix for each RIPF key.
-# CMIP7 encodes indices as prefixed strings ("r9", "i1", …);
-# CMOR3 used bare integers ("9", "1", …).  Both are accepted.
-_RIPF_PREFIXES: dict[str, str] = {
-    "realization_index": "r",
-    "initialization_index": "i",
-    "physics_index": "p",
-    "forcing_index": "f",
-}
-_RIPF_MAX: int = 2**31 - 1  # INT32_MAX — matches CMOR3's upper bound
 
 # Fallback regex for grid_label when the CV does not define an allowed set.
 # Mirrors CMOR3's built-in check: labels must start with 'g', 'c', or 'r'
@@ -84,6 +65,7 @@ class ControlledVocabulary:
     forcing: ForcingComponent | None
     frequency: FrequencyComponent | None
     tracking_id: TrackingIdComponent
+    variant_label: VariantLabelComponent
     required_attributes: tuple[str, ...]
 
     def __init__(self, data: Mapping[str, Any], path: str | Path | None = None):
@@ -100,6 +82,7 @@ class ControlledVocabulary:
         self.forcing = parsed.forcing
         self.frequency = parsed.frequency
         self.tracking_id = parsed.tracking_id
+        self.variant_label = parsed.variant_label
         self.required_attributes = parsed.required_global_attributes
         self._warn_double_nested_entries()
 
@@ -310,7 +293,7 @@ class ControlledVocabulary:
                 "creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
             )
         if "variant_label" in required:
-            variant_label = _variant_label(dataset)
+            variant_label = self.variant_label.render(dataset)
             if variant_label:
                 dataset.setdefault("variant_label", variant_label)
         if "tracking_id" in required and "tracking_id" not in dataset:
@@ -422,67 +405,9 @@ class ControlledVocabulary:
             variant_label does not match the CV-defined pattern.
         """
 
-        for key in _RIPF_KEYS:
-            value = getattr(dataset, key)
-            if value in (None, ""):
-                continue
-            value_str = str(value)
-            # Skip POSIX-regex strings that were injected from the CV rather
-            # than supplied by the user (e.g. CMIP6's realization_index regex).
-            if re.search(r"[\\^$\[\]{,}]", value_str):
-                continue
-            # Determine the numeric part.  CMOR3 checks whether the value
-            # consists solely of digits (bare integer style, e.g. "3") and
-            # if so prepends the letter prefix when assembling variant_label.
-            # Prefixed-string style (e.g. "r3") strips the leading letter.
-            prefix = _RIPF_PREFIXES[key]
-            if value_str.startswith(prefix) and len(value_str) > 1:
-                numeric_part = value_str[1:]
-            else:
-                numeric_part = value_str
-            try:
-                int_value = int(numeric_part)
-            except (TypeError, ValueError) as exc:
-                raise ControlledVocabularyError(
-                    f"{key}={value!r} must be a positive integer "
-                    f"(with optional '{prefix}' prefix, e.g. '{prefix}1')."
-                ) from exc
-            if int_value < 1 or int_value > _RIPF_MAX:
-                raise ControlledVocabularyError(
-                    f"{key}={value!r} numeric value {int_value} is out of the "
-                    f"valid range [1, {_RIPF_MAX}]."
-                )
-
-        # Only validate the variant_label format when the CV actually defines
-        # a constraint (a list of allowed values or regex patterns).  When the
-        # CV merely lists variant_label as a required attribute with no values
-        # (e.g. obs4MIPs), accept any user-supplied string.
-        variant_rule = self.rules.get("variant_label")
-        cv_constrains_vl = (
-            variant_rule is not None and variant_rule.is_choice_constraint
-        )
-
-        variant_label = dataset.variant_label_value
-        if variant_label and cv_constrains_vl:
-            vl_str = str(variant_label)
-            if not re.fullmatch(r"r\d+i\d+p\d+f\d+", vl_str):
-                raise ControlledVocabularyError(
-                    f"variant_label={vl_str!r} does not match the required "
-                    "pattern 'r<N>i<N>p<N>f<N>'."
-                )
-            return
-        if variant_label:
-            return
-
-        # Assemble variant_label from individual RIPF indices when all four
-        # are present.  Validate the result only when the CV constrains it.
-        assembled = _metadata_variant_label(dataset)
-        if assembled and cv_constrains_vl:
-            if not re.fullmatch(r"r\d+i\d+p\d+f\d+", assembled):
-                raise ControlledVocabularyError(
-                    f"variant_label={assembled!r} assembled from RIPF indices "
-                    "does not match the required pattern 'r<N>i<N>p<N>f<N>'."
-                )
+        error = self.variant_label.validation_error(dataset.to_dict())
+        if error is not None:
+            raise ControlledVocabularyError(error)
 
     def validate_dataset_values(self, dataset: DatasetMetadata) -> None:
         """Validate controlled values without requiring every global attr.
@@ -768,51 +693,3 @@ class ControlledVocabulary:
         if key == "license_id":
             return bool(self.license.licenses)
         return key in {"license_url", "license_type"}
-
-
-def _variant_label(dataset: Mapping[str, Any]) -> str | None:
-    """Assemble a variant_label from RIPF index attributes, or return existing one.
-
-    Mirrors CMOR3's ``cmor_addRIPF`` logic:
-
-    * If ``variant_label`` is already in the dataset, return it directly.
-    * Otherwise collect the four RIPF index values.  For each one, if the
-      value consists solely of digits (bare-integer style, e.g. ``"3"``),
-      prepend the canonical letter prefix (``r``, ``i``, ``p``, ``f``) before
-      concatenating.  If the value already carries its prefix letter (e.g.
-      ``"r3"``), use it as-is.  This exactly replicates the C code path in
-      ``cmor_addRIPF`` that checks ``^[[:digit:]]{1,}$`` to decide whether to
-      prepend the prefix.
-    """
-    if dataset.get("variant_label") not in (None, ""):
-        return str(dataset["variant_label"])
-    pieces = []
-    for key, prefix in zip(_RIPF_KEYS, ("r", "i", "p", "f")):
-        value = dataset.get(key)
-        if value in (None, ""):
-            return None
-        value_str = str(value)
-        # Bare integer (digits only) → prepend the letter prefix.
-        # Prefixed string (e.g. "r3") → use as-is.
-        if re.fullmatch(r"\d+", value_str):
-            pieces.append(f"{prefix}{value_str}")
-        else:
-            pieces.append(value_str)
-    return "".join(pieces)
-
-
-def _metadata_variant_label(dataset: DatasetMetadata) -> str | None:
-    """Return an explicit or RIPF-derived label from typed metadata."""
-
-    if dataset.variant_label_value:
-        return dataset.variant_label_value
-    pieces: list[str] = []
-    for key, prefix in zip(_RIPF_KEYS, ("r", "i", "p", "f"), strict=True):
-        value = getattr(dataset, key)
-        if value in (None, ""):
-            return None
-        value_str = str(value)
-        pieces.append(
-            f"{prefix}{value_str}" if re.fullmatch(r"\d+", value_str) else value_str
-        )
-    return "".join(pieces)

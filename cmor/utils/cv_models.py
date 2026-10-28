@@ -25,6 +25,15 @@ from .templates import is_unresolved_template, render_template
 
 ScalarValue = str | int | float | bool
 
+# CMIP7 accepts prefixed indices; CMOR3 also accepts bare integers.
+_RIPF_PREFIXES = {
+    "realization_index": "r",
+    "initialization_index": "i",
+    "physics_index": "p",
+    "forcing_index": "f",
+}
+_RIPF_MAX = 2**31 - 1  # CMOR3 stores indices as signed 32-bit C integers.
+
 # Sections with dedicated semantics, or internal lookup data that must not be
 # copied to NetCDF attributes by generic nested-default processing.
 _NESTED_DEFAULT_EXCLUSIONS = frozenset({
@@ -190,6 +199,90 @@ class AttributeRule(_CVModel):
             and len(self.matcher.keys) == 1
             and self.name in self.matcher.keys
         )
+
+
+class VariantLabelComponent(_CVModel):
+    """Variant-label assembly and validation of its four RIPF indices.
+
+    Indices accept bare integers or their corresponding ``r``, ``i``, ``p``,
+    or ``f`` prefix. Label format is checked only for a non-empty CV choice
+    list, preserving projects that allow arbitrary variant labels.
+    """
+
+    rule: AttributeRule
+
+    @classmethod
+    def from_definition(cls, definition: Any) -> "VariantLabelComponent":
+        """Parse the CV's ``variant_label`` definition, including its absence."""
+
+        return cls(rule=AttributeRule.from_definition("variant_label", definition))
+
+    def render(self, metadata: Mapping[str, Any]) -> str | None:
+        """Return an explicit label or assemble one when all indices are present.
+
+        Bare digits receive their canonical prefix; other strings are kept
+        as supplied, matching CMOR3's ``cmor_addRIPF`` behavior.
+        """
+
+        label = metadata.get("variant_label")
+        if label not in (None, ""):
+            return str(label)
+        pieces: list[str] = []
+        for key, prefix in _RIPF_PREFIXES.items():
+            value = metadata.get(key)
+            if value in (None, ""):
+                return None
+            value_str = str(value)
+            pieces.append(
+                f"{prefix}{value_str}" if re.fullmatch(r"\d+", value_str) else value_str
+            )
+        return "".join(pieces)
+
+    def validation_error(self, metadata: Mapping[str, Any]) -> str | None:
+        """Return the first index range or label format error, if any.
+
+        Missing indices and legacy CV regex placeholders are skipped. Literal
+        choices and project regexes remain subject to generic attribute rules.
+        """
+
+        for key, prefix in _RIPF_PREFIXES.items():
+            value = metadata.get(key)
+            if value in (None, ""):
+                continue
+            value_str = str(value)
+            if re.search(r"[\\^$\[\]{,}]", value_str):
+                continue
+            numeric_part = (
+                value_str[1:]
+                if value_str.startswith(prefix) and len(value_str) > 1
+                else value_str
+            )
+            try:
+                int_value = int(numeric_part)
+            except (TypeError, ValueError):
+                return (
+                    f"{key}={value!r} must be a positive integer "
+                    f"(with optional '{prefix}' prefix, e.g. '{prefix}1')."
+                )
+            if not 1 <= int_value <= _RIPF_MAX:
+                return (
+                    f"{key}={value!r} numeric value {int_value} is out of the "
+                    f"valid range [1, {_RIPF_MAX}]."
+                )
+
+        if self.rule.is_choice_constraint:
+            label = self.render(metadata)
+            if label and not re.fullmatch(r"r\d+i\d+p\d+f\d+", label):
+                origin = (
+                    " assembled from RIPF indices"
+                    if metadata.get("variant_label") in (None, "")
+                    else ""
+                )
+                return (
+                    f"variant_label={label!r}{origin} does not match the required "
+                    "pattern 'r<N>i<N>p<N>f<N>'."
+                )
+        return None
 
 
 class DRSComponent(_CVModel):
@@ -842,6 +935,7 @@ class ControlledVocabularyModel(_CVModel):
     forcing: ForcingComponent | None = None
     frequency: FrequencyComponent | None = None
     tracking_id: TrackingIdComponent
+    variant_label: VariantLabelComponent
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "ControlledVocabularyModel":
@@ -879,6 +973,7 @@ class ControlledVocabularyModel(_CVModel):
             tracking_id=TrackingIdComponent.from_definitions(
                 cv.get("tracking_id_prefix"), cv.get("tracking_id")
             ),
+            variant_label=VariantLabelComponent.from_definition(cv.get("variant_label")),
         )
 
 

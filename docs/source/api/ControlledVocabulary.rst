@@ -27,6 +27,8 @@ responsible for each kind of validation:
 * ``cv.drs`` contains typed directory and filename templates;
 * ``cv.frequency``, ``cv.forcing``, and ``cv.tracking_id`` own their
   specialized parsing and validation rules;
+* ``cv.variant_label`` assembles labels from realization, initialization,
+  physics, and forcing indices and validates their ranges and label format;
 * scalar, singleton-required, and selected nested defaults are collected by a
   ``cv.defaults`` component;
 * project-specific attributes are available as generic rules in ``cv.rules``.
@@ -79,4 +81,7 @@ discoverable through named, typed attributes.
    :members:
 
 .. autoclass:: TrackingIdComponent
+   :members:
+
+.. autoclass:: VariantLabelComponent
    :members:

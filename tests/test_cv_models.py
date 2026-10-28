@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+import pytest
+
 from cmor.cv import ControlledVocabulary
 from cmor.exceptions import ControlledVocabularyError
 from cmor.utils.cv_models import (
@@ -14,6 +16,7 @@ from cmor.utils.cv_models import (
     SourceComponent,
     SourceTypeComponent,
     TrackingIdComponent,
+    VariantLabelComponent,
 )
 from cmor.utils.dataset_metadata import DatasetMetadata
 
@@ -113,6 +116,7 @@ def test_specialized_components_are_selected_for_catalogs():
     assert isinstance(cv.forcing, ForcingComponent)
     assert isinstance(cv.frequency, FrequencyComponent)
     assert isinstance(cv.tracking_id, TrackingIdComponent)
+    assert isinstance(cv.variant_label, VariantLabelComponent)
     assert not hasattr(cv, "get")
     assert cv.required_attributes == (
         "Conventions",
@@ -319,3 +323,78 @@ def test_frequency_forcing_and_tracking_components_are_typed():
     assert cv.forcing.invalid_token("GHG INVALID") == "INVALID"
 
     assert cv.tracking_id.format("abc") == "hdl:21.14100/abc"
+
+
+@pytest.mark.parametrize("indices", [
+    (9, 2, 3, 4),
+    ("9", "2", "3", "4"),
+    ("r9", "i2", "p3", "f4"),
+    (9, "i2", "3", "f4"),
+])
+def test_variant_component_assembles_indices_and_drives_defaults(indices):
+    cv = ControlledVocabulary({"CV": {
+        "required_global_attributes": ["variant_label"],
+        "variant_label": [r"r\d+i\d+p\d+f\d+"],
+    }})
+    metadata = dict(zip(
+        ("realization_index", "initialization_index", "physics_index", "forcing_index"),
+        indices,
+        strict=True,
+    ))
+
+    assert cv.variant_label.render(metadata) == "r9i2p3f4"
+    assert cv.variant_label.validation_error(metadata) is None
+    prepared = cv.get_dataset_info(DatasetMetadata.from_mapping(metadata))
+    assert prepared.variant_label_value == "r9i2p3f4"
+    cv.validate_variant_indices(prepared)
+
+
+@pytest.mark.parametrize("key,prefix", [
+    ("realization_index", "r"),
+    ("initialization_index", "i"),
+    ("physics_index", "p"),
+    ("forcing_index", "f"),
+])
+def test_variant_component_validates_each_index_without_a_label_constraint(key, prefix):
+    component = VariantLabelComponent.from_definition(None)
+
+    for value in (1, str(2**31 - 1), f"{prefix}1", f"{prefix}{2**31 - 1}"):
+        assert component.validation_error({key: value}) is None
+    for value in (0, -1, 2**31, f"{prefix}0", f"{prefix}{2**31}", "x1", "1.5"):
+        error = component.validation_error({key: value, "variant_label": "r1i1p1f1"})
+        assert error is not None
+        assert key in error
+    for value in (None, "", r"^[[:digit:]]{1,}$"):
+        assert component.validation_error({key: value}) is None
+
+
+@pytest.mark.parametrize("definition", [None, [], "custom", "<member_id>"])
+def test_variant_component_preserves_unconstrained_explicit_labels(definition):
+    component = VariantLabelComponent.from_definition(definition)
+    metadata = {"variant_label": "custom", "realization_index": "r2"}
+
+    assert component.render(metadata) == "custom"
+    assert component.validation_error(metadata) is None
+    assert component.render({}) is None
+    assert component.render({"realization_index": "r2"}) is None
+
+
+def test_variant_component_reports_explicit_and_assembled_format_errors():
+    cv = ControlledVocabulary({"variant_label": [r"r\d+i\d+p\d+f\d+"]})
+    assert cv.variant_label.validation_error({"variant_label": "r1i1p1f1"}) is None
+    invalid = {"variant_label": "r1i1p1"}
+    error = cv.variant_label.validation_error(invalid)
+    assert error is not None
+    assert "required pattern" in error
+    with pytest.raises(ControlledVocabularyError, match="required pattern"):
+        cv.validate_variant_indices(DatasetMetadata.from_mapping(invalid))
+
+    # Legacy regex placeholders skip integer validation but cannot form a label.
+    error = cv.variant_label.validation_error({
+        "realization_index": r"^[[:digit:]]{1,}$",
+        "initialization_index": 1,
+        "physics_index": 1,
+        "forcing_index": 1,
+    })
+    assert error is not None
+    assert "assembled from RIPF indices" in error
