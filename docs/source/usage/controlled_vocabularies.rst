@@ -372,8 +372,7 @@ Double-nested entries
       "nominal_resolution": {"nominal_resolution": ["0.5 km", "1 km"]}
 
    instead of ``"nominal_resolution": ["0.5 km", "1 km"]``. CMOR emits a
-   :class:`RuntimeWarning` on load, and
-   :meth:`~cmor.ControlledVocabulary.validate_structure` reports it.
+   :class:`RuntimeWarning` on load describing the malformed entry.
 
 .. _cv-legacy-posix-regex:
 

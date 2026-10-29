@@ -1,4 +1,6 @@
-"""Typed components parsed from a project controlled vocabulary.
+"""Internal typed components parsed from a project controlled vocabulary.
+
+These models support CMOR's validation implementation and are not public API.
 
 The JSON files used by CMOR are intentionally extensible and contain several
 different kinds of data under one ``CV`` object.  This module turns the parts

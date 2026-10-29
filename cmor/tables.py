@@ -201,13 +201,7 @@ class ProjectTables:
         except ValidationError as exc:
             raise ControlledVocabularyError(str(exc)) from exc
         normalized_dataset = self.cv.get_dataset_info(metadata)
-        self.cv.validate_dataset_values(normalized_dataset)
-        self.cv.validate_variant_indices(normalized_dataset)
-        self.cv.validate_forcing_terms(normalized_dataset)
-        self.cv.validate_derived_attributes(normalized_dataset)
-        self.cv.validate_source_attributes(normalized_dataset)
-        self.cv.validate_experiment(normalized_dataset)
-        self.cv.validate_parent_attributes(normalized_dataset)
+        self.cv.validate_dataset_info(normalized_dataset, check_required=False)
         return DatasetInfo.from_prepared(
             normalized_dataset,
             project=self,
@@ -248,9 +242,6 @@ class ProjectTables:
         self._add_variable_global_defaults(normalized_data, variable)
         normalized_dataset = DatasetMetadata.from_mapping(normalized_data)
         self.cv.validate_dataset_info(normalized_dataset)
-        self.cv.validate_source_attributes(normalized_dataset)
-        self.cv.validate_experiment(normalized_dataset)
-        self.cv.validate_parent_attributes(normalized_dataset)
 
         # Note: Full variable and dataset-variable consistency validation
         # happens in validate_components, not here
@@ -1058,9 +1049,6 @@ class ProjectTables:
 
         metadata = DatasetMetadata.from_mapping(attrs)
         self.cv.validate_dataset_info(metadata)
-        self.cv.validate_source_attributes(metadata)
-        self.cv.validate_experiment(metadata)
-        self.cv.validate_parent_attributes(metadata)
 
     def _mark_prepared_axis(self, axis: Axis) -> Axis:
         object.__setattr__(axis, "_cmor_project_tables", self)

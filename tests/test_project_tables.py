@@ -464,7 +464,7 @@ class ProjectTablesTest(unittest.TestCase):
         project = cmip7_project("tables/CMIP7_ocean.json")
 
         self.assertIsInstance(project.cv, cmor.ControlledVocabulary)
-        self.assertIn("activity_id", project.cv.rules)
+        self.assertIn("activity_id", project.cv._rules)
         self.assertIn("tos_tavg-u-hxy-sea", project.variable_table.entries)
         self.assertIn("latitude", project.coordinate_table._all_coord)
         self.assertIn("x", project.coordinate_table._all_coord)
@@ -500,7 +500,7 @@ class ProjectTablesTest(unittest.TestCase):
 
             cv = cmor.ControlledVocabulary.from_file(cv_file)
 
-            self.assertEqual(cv.rules["activity_id"].allowed_values, ("CMIP",))
+            self.assertEqual(cv._rules["activity_id"].allowed_values, ("CMIP",))
             self.assertEqual(cv.required_attributes, ("activity_id",))
             cv.validate_dataset_info(_metadata({"activity_id": "CMIP"}))
             with self.assertRaises(cmor.ControlledVocabularyError):
@@ -700,7 +700,7 @@ class ProjectTablesTest(unittest.TestCase):
     def test_dataset_info_merges_authoritative_variable_metadata(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
-        self.assertIsNotNone(project.cv.license)
+        self.assertIsNotNone(project.cv._license)
         dataset = {
             "activity_id": "obs4MIPs",
             "contact": "submissions-obs4mips@wcrp-cmip.org",
@@ -708,7 +708,7 @@ class ProjectTablesTest(unittest.TestCase):
             "grid_label": "gnz",
             "has_aux_unc": "FALSE",
             "institution_id": "DLR-BIRA",
-            "license": project.cv.license.default_text,
+            "license": project.cv._license.default_text,
             "nominal_resolution": "500 km",
             "processing_code_location": (
                 "dataset_guides/obs4mips/example-data-tools/example.py"
@@ -1155,8 +1155,8 @@ class ProjectTablesTest(unittest.TestCase):
     def test_obs4mips_uses_project_cv_and_o3zm_table_entry(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
-        self.assertIsNotNone(project.cv.license)
-        cv_license = project.cv.license.default_text
+        self.assertIsNotNone(project.cv._license)
+        cv_license = project.cv._license.default_text
         self.assertIsNotNone(cv_license)
         with tempfile.TemporaryDirectory() as tmp_dir:
             dataset = {
@@ -1229,13 +1229,13 @@ class ProjectTablesTest(unittest.TestCase):
     def test_obs4mips_rejects_frequency_that_does_not_match_table(self):
         require_path(self, OBS4MIPS_TABLE_ROOT)
         project = obs4mips_project("Tables/obs4MIPs_Amon.json")
-        self.assertIsNotNone(project.cv.license)
+        self.assertIsNotNone(project.cv._license)
         dataset = {
             "activity_id": "obs4MIPs",
             "frequency": "day",
             "grid_label": "gn",
             "institution_id": "NOAA-NCEI",
-            "license": project.cv.license.default_text,
+            "license": project.cv._license.default_text,
             "nominal_resolution": "250 km",
             "product": "observations",
             "source_id": "CMAP-V1902",
@@ -1276,7 +1276,7 @@ class ConstructorTest(unittest.TestCase):
     def test_cv_is_loaded_as_controlled_vocabulary(self):
         project = _build_project(self.tmp)
         self.assertIsInstance(project.cv, ControlledVocabulary)
-        self.assertIn("activity_id", project.cv.rules)
+        self.assertIn("activity_id", project.cv._rules)
 
     def test_variable_entries_populated_from_table(self):
         project = _build_project(self.tmp)
@@ -3339,7 +3339,7 @@ class ValidateDatasetTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 12. validate_required_global_attributes
+# 12. _validate_required_global_attributes
 # ---------------------------------------------------------------------------
 
 
@@ -3353,7 +3353,7 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_all_required_present_passes(self):
-        self.project.cv.validate_required_global_attributes(
+        self.project.cv._validate_required_global_attributes(
             _metadata({
                 "activity_id": "CMIP",
                 "institution_id": "NCAR",
@@ -3362,7 +3362,7 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
 
     def test_missing_required_attribute_raises_with_name(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_required_global_attributes(
+            self.project.cv._validate_required_global_attributes(
                 _metadata({
                     "activity_id": "CMIP",
                 })
@@ -3371,11 +3371,11 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
 
     def test_both_missing_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.cv.validate_required_global_attributes(_metadata({}))
+            self.project.cv._validate_required_global_attributes(_metadata({}))
 
     def test_empty_string_counts_as_missing(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.cv.validate_required_global_attributes(
+            self.project.cv._validate_required_global_attributes(
                 _metadata({
                     "activity_id": "CMIP",
                     "institution_id": "",
@@ -3383,7 +3383,7 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
             )
 
     def test_returns_none_on_success(self):
-        result = self.project.cv.validate_required_global_attributes(
+        result = self.project.cv._validate_required_global_attributes(
             _metadata({
                 "activity_id": "CMIP",
                 "institution_id": "NCAR",
@@ -3397,7 +3397,7 @@ class ValidateRequiredGlobalAttributesTest(unittest.TestCase):
         _write(cv_file, {"CV": {}})
         _write(vtable, {"Header": {"table_id": "t"}, "variable_entry": {}})
         project = ProjectTables(cv_file, [vtable])
-        project.cv.validate_required_global_attributes(_metadata({}))
+        project.cv._validate_required_global_attributes(_metadata({}))
 
 
 # ---------------------------------------------------------------------------
@@ -3439,7 +3439,7 @@ class RequiredGlobalAttributesTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 14. validate_experiment
+# 14. _validate_experiment
 # ---------------------------------------------------------------------------
 
 
@@ -3459,22 +3459,22 @@ class ValidateExperimentTest(unittest.TestCase):
         }
 
     def test_valid_experiment_passes(self):
-        self.project.cv.validate_experiment(_metadata(self._historical_base()))
+        self.project.cv._validate_experiment(_metadata(self._historical_base()))
 
     def test_no_experiment_id_is_no_op(self):
         """Without an experiment_id the method must not raise."""
-        self.project.cv.validate_experiment(_metadata({}))
+        self.project.cv._validate_experiment(_metadata({}))
 
     def test_unknown_experiment_id_is_no_op(self):
         """experiment_id not present in CV is skipped silently."""
-        self.project.cv.validate_experiment(
+        self.project.cv._validate_experiment(
             _metadata({"experiment_id": "does_not_exist"})
         )
 
     def test_missing_source_type_raises(self):
         """historical requires source_type=AOGCM."""
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_experiment(
+            self.project.cv._validate_experiment(
                 _metadata({"experiment_id": "historical"})
             )
         self.assertIn("source_type", str(ctx.exception))
@@ -3482,7 +3482,7 @@ class ValidateExperimentTest(unittest.TestCase):
     def test_disallowed_source_type_raises(self):
         # BGC is defined in source_type CV but is NOT in
         # additional_allowed_model_components
-        # for historical. validate_source_type (called by validate_experiment)
+        # for historical. _validate_source_type (called by _validate_experiment)
         # checks allowed tokens via the experiment's additional_allowed list.
         # Build a project where BGC is excluded from additional_allowed:
         cv_file = self.tmp / "CV_strict.json"
@@ -3504,7 +3504,7 @@ class ValidateExperimentTest(unittest.TestCase):
         _write(vtable, {"Header": {"table_id": "t"}, "variable_entry": {}})
         project = ProjectTables(cv_file, [vtable])
         with self.assertRaises(ControlledVocabularyError):
-            project.cv.validate_experiment(
+            project.cv._validate_experiment(
                 _metadata({
                     "experiment_id": "historical",
                     "source_type": "AOGCM BGC",
@@ -3512,7 +3512,7 @@ class ValidateExperimentTest(unittest.TestCase):
             )
 
     def test_valid_additional_allowed_source_type_passes(self):
-        self.project.cv.validate_experiment(
+        self.project.cv._validate_experiment(
             _metadata({
                 "experiment_id": "historical",
                 "source_type": "AOGCM AER",
@@ -3521,7 +3521,7 @@ class ValidateExperimentTest(unittest.TestCase):
 
     def test_wrong_activity_id_for_experiment_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.cv.validate_experiment(
+            self.project.cv._validate_experiment(
                 _metadata({
                     "experiment_id": "historical",
                     "source_type": "AOGCM",
@@ -3530,12 +3530,12 @@ class ValidateExperimentTest(unittest.TestCase):
             )
 
     def test_parent_attribute_on_no_parent_experiment_raises(self):
-        """amip has no parent_experiment_id CV entry.  validate_parent_attributes
+        """amip has no parent_experiment_id CV entry.  _validate_parent_attributes
         (called by dataset_info) rejects unexpected parent attributes.
-        validate_experiment itself does not perform this check."""
+        _validate_experiment itself does not perform this check."""
         # verify the correct method rejects it
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_parent_attributes(
+            self.project.cv._validate_parent_attributes(
                 _metadata({
                     "experiment_id": "amip",
                     "parent_experiment_id": "piControl",
@@ -3544,12 +3544,14 @@ class ValidateExperimentTest(unittest.TestCase):
         self.assertIn("parent_experiment_id", str(ctx.exception))
 
     def test_returns_none_on_success(self):
-        result = self.project.cv.validate_experiment(_metadata(self._historical_base()))
+        result = self.project.cv._validate_experiment(
+            _metadata(self._historical_base())
+        )
         self.assertIsNone(result)
 
 
 # ---------------------------------------------------------------------------
-# 15. validate_source_type
+# 15. _validate_source_type
 # ---------------------------------------------------------------------------
 
 
@@ -3567,29 +3569,29 @@ class ValidateSourceTypeTest(unittest.TestCase):
         return _RICH_CV["CV"]["experiment_id"]["historical"]
 
     def test_required_type_present_passes(self):
-        self.project.cv.validate_source_type(
+        self.project.cv._validate_source_type(
             _metadata({"source_type": "AOGCM"}), self._historical_entry
         )
 
     def test_required_plus_allowed_passes(self):
-        self.project.cv.validate_source_type(
+        self.project.cv._validate_source_type(
             _metadata({"source_type": "AOGCM AER"}), self._historical_entry
         )
 
     def test_missing_source_type_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_source_type(_metadata({}), self._historical_entry)
+            self.project.cv._validate_source_type(_metadata({}), self._historical_entry)
         self.assertIn("source_type", str(ctx.exception))
 
     def test_empty_source_type_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.cv.validate_source_type(
+            self.project.cv._validate_source_type(
                 _metadata({"source_type": ""}), self._historical_entry
             )
 
     def test_missing_required_token_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_source_type(
+            self.project.cv._validate_source_type(
                 _metadata({"source_type": "AER"}), self._historical_entry
             )
         self.assertIn("missing required", str(ctx.exception))
@@ -3602,24 +3604,26 @@ class ValidateSourceTypeTest(unittest.TestCase):
             # BGC deliberately excluded
         }
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_source_type(
+            self.project.cv._validate_source_type(
                 _metadata({"source_type": "AOGCM BGC"}), exp_entry
             )
         self.assertIn("not allowed", str(ctx.exception))
 
     def test_empty_experiment_entry_is_no_op(self):
         """When experiment has no required/additional source type, no error."""
-        self.project.cv.validate_source_type(_metadata({"source_type": "ANYTHING"}), {})
+        self.project.cv._validate_source_type(
+            _metadata({"source_type": "ANYTHING"}), {}
+        )
 
     def test_returns_none_on_success(self):
-        result = self.project.cv.validate_source_type(
+        result = self.project.cv._validate_source_type(
             _metadata({"source_type": "AOGCM"}), self._historical_entry
         )
         self.assertIsNone(result)
 
 
 # ---------------------------------------------------------------------------
-# 16. validate_source_attributes
+# 16. _validate_source_attributes
 # ---------------------------------------------------------------------------
 
 
@@ -3633,7 +3637,7 @@ class ValidateSourceAttributesTest(unittest.TestCase):
         self._ctx.cleanup()
 
     def test_valid_source_attributes_pass(self):
-        self.project.cv.validate_source_attributes(
+        self.project.cv._validate_source_attributes(
             _metadata({
                 "source_id": "CESM2",
                 "institution_id": "NCAR",
@@ -3643,7 +3647,7 @@ class ValidateSourceAttributesTest(unittest.TestCase):
 
     def test_wrong_institution_for_source_id_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_source_attributes(
+            self.project.cv._validate_source_attributes(
                 _metadata({
                     "source_id": "CESM2",
                     "institution_id": "ECMWF",
@@ -3653,13 +3657,13 @@ class ValidateSourceAttributesTest(unittest.TestCase):
 
     def test_no_source_id_is_no_op(self):
         """Missing source_id skips all source-attribute validation."""
-        self.project.cv.validate_source_attributes(
+        self.project.cv._validate_source_attributes(
             _metadata({"institution_id": "ECMWF"})
         )
 
     def test_unknown_source_id_is_no_op(self):
         """source_id not in CV: nothing to cross-check."""
-        self.project.cv.validate_source_attributes(
+        self.project.cv._validate_source_attributes(
             _metadata({
                 "source_id": "TOTALLY_UNKNOWN",
                 "institution_id": "ANY",
@@ -3667,7 +3671,7 @@ class ValidateSourceAttributesTest(unittest.TestCase):
         )
 
     def test_source_id_with_correct_source_type_passes(self):
-        self.project.cv.validate_source_attributes(
+        self.project.cv._validate_source_attributes(
             _metadata({
                 "source_id": "CESM2",
                 "institution_id": "NCAR",
@@ -3677,7 +3681,7 @@ class ValidateSourceAttributesTest(unittest.TestCase):
 
     def test_source_id_with_wrong_source_type_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.cv.validate_source_attributes(
+            self.project.cv._validate_source_attributes(
                 _metadata({
                     "source_id": "CESM2",
                     "institution_id": "NCAR",
@@ -3686,7 +3690,7 @@ class ValidateSourceAttributesTest(unittest.TestCase):
             )
 
     def test_returns_none_on_success(self):
-        result = self.project.cv.validate_source_attributes(
+        result = self.project.cv._validate_source_attributes(
             _metadata({
                 "source_id": "DUMMY",
                 "institution_id": "NCAR",
@@ -3696,7 +3700,7 @@ class ValidateSourceAttributesTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 17. validate_parent_attributes
+# 17. _validate_parent_attributes
 # ---------------------------------------------------------------------------
 
 
@@ -3727,23 +3731,25 @@ class ValidateParentAttributesTest(unittest.TestCase):
         return base
 
     def test_valid_parent_attributes_pass(self):
-        self.project.cv.validate_parent_attributes(_metadata(self._valid_historical()))
+        self.project.cv._validate_parent_attributes(_metadata(self._valid_historical()))
 
     def test_no_experiment_id_is_no_op(self):
-        self.project.cv.validate_parent_attributes(_metadata({}))
+        self.project.cv._validate_parent_attributes(_metadata({}))
 
     def test_unknown_experiment_id_is_no_op(self):
-        self.project.cv.validate_parent_attributes(
+        self.project.cv._validate_parent_attributes(
             _metadata({"experiment_id": "unknown"})
         )
 
     def test_no_parent_experiment_amip_passes(self):
         """amip requires no parent; an empty dataset for it should pass."""
-        self.project.cv.validate_parent_attributes(_metadata({"experiment_id": "amip"}))
+        self.project.cv._validate_parent_attributes(
+            _metadata({"experiment_id": "amip"})
+        )
 
     def test_supplying_parent_to_no_parent_experiment_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_parent_attributes(
+            self.project.cv._validate_parent_attributes(
                 _metadata({
                     "experiment_id": "amip",
                     "parent_experiment_id": "piControl",
@@ -3755,18 +3761,18 @@ class ValidateParentAttributesTest(unittest.TestCase):
         dataset = self._valid_historical()
         del dataset["parent_experiment_id"]
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_parent_attributes(_metadata(dataset))
+            self.project.cv._validate_parent_attributes(_metadata(dataset))
         self.assertIn("parent_experiment_id", str(ctx.exception))
 
     def test_wrong_parent_experiment_id_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.cv.validate_parent_attributes(
+            self.project.cv._validate_parent_attributes(
                 _metadata(self._valid_historical(parent_experiment_id="amip"))
             )
 
     def test_wrong_parent_time_units_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_parent_attributes(
+            self.project.cv._validate_parent_attributes(
                 _metadata(
                     self._valid_historical(parent_time_units="seconds since 1850-01-01")
                 )
@@ -3775,26 +3781,26 @@ class ValidateParentAttributesTest(unittest.TestCase):
 
     def test_wrong_parent_variant_label_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_parent_attributes(
+            self.project.cv._validate_parent_attributes(
                 _metadata(self._valid_historical(parent_variant_label="not-a-variant"))
             )
         self.assertIn("parent_variant_label", str(ctx.exception))
 
     def test_non_numeric_branch_time_raises(self):
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            self.project.cv.validate_parent_attributes(
+            self.project.cv._validate_parent_attributes(
                 _metadata(self._valid_historical(branch_time_in_child="not-a-number"))
             )
         self.assertIn("branch_time_in_child", str(ctx.exception))
 
     def test_unknown_parent_source_id_raises(self):
         with self.assertRaises(ControlledVocabularyError):
-            self.project.cv.validate_parent_attributes(
+            self.project.cv._validate_parent_attributes(
                 _metadata(self._valid_historical(parent_source_id="UNKNOWN_MODEL"))
             )
 
     def test_returns_none_on_success(self):
-        result = self.project.cv.validate_parent_attributes(
+        result = self.project.cv._validate_parent_attributes(
             _metadata(self._valid_historical())
         )
         self.assertIsNone(result)
@@ -3803,7 +3809,7 @@ class ValidateParentAttributesTest(unittest.TestCase):
         """Supplying any parent-related attribute when experiment has no parent
         must raise."""
         with self.assertRaises(ControlledVocabularyError):
-            self.project.cv.validate_parent_attributes(
+            self.project.cv._validate_parent_attributes(
                 _metadata({
                     "experiment_id": "amip",
                     "parent_activity_id": "CMIP",
