@@ -1013,7 +1013,9 @@ class ControlledVocabularyModel(_CVModel):
             tracking_id=TrackingIdComponent.from_definitions(
                 cv.get("tracking_id_prefix"), cv.get("tracking_id")
             ),
-            variant_label=VariantLabelComponent.from_definition(cv.get("variant_label")),
+            variant_label=VariantLabelComponent.from_definition(
+                cv.get("variant_label")
+            ),
             grid_label=(
                 GridLabelComponent.from_definition(cv["grid_label"])
                 if "grid_label" in cv

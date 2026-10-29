@@ -327,22 +327,34 @@ def test_frequency_forcing_and_tracking_components_are_typed():
     assert cv._tracking_id.format("abc") == "hdl:21.14100/abc"
 
 
-@pytest.mark.parametrize("indices", [
-    (9, 2, 3, 4),
-    ("9", "2", "3", "4"),
-    ("r9", "i2", "p3", "f4"),
-    (9, "i2", "3", "f4"),
-])
+@pytest.mark.parametrize(
+    "indices",
+    [
+        (9, 2, 3, 4),
+        ("9", "2", "3", "4"),
+        ("r9", "i2", "p3", "f4"),
+        (9, "i2", "3", "f4"),
+    ],
+)
 def test_variant_component_assembles_indices_and_drives_defaults(indices):
-    cv = ControlledVocabulary({"CV": {
-        "required_global_attributes": ["variant_label"],
-        "variant_label": [r"r\d+i\d+p\d+f\d+"],
-    }})
-    metadata = dict(zip(
-        ("realization_index", "initialization_index", "physics_index", "forcing_index"),
-        indices,
-        strict=True,
-    ))
+    cv = ControlledVocabulary({
+        "CV": {
+            "required_global_attributes": ["variant_label"],
+            "variant_label": [r"r\d+i\d+p\d+f\d+"],
+        }
+    })
+    metadata = dict(
+        zip(
+            (
+                "realization_index",
+                "initialization_index",
+                "physics_index",
+                "forcing_index",
+            ),
+            indices,
+            strict=True,
+        )
+    )
 
     assert cv._variant_label.render(metadata) == "r9i2p3f4"
     assert cv._variant_label.validation_error(metadata) is None
@@ -351,12 +363,15 @@ def test_variant_component_assembles_indices_and_drives_defaults(indices):
     cv._validate_variant_indices(prepared)
 
 
-@pytest.mark.parametrize("key,prefix", [
-    ("realization_index", "r"),
-    ("initialization_index", "i"),
-    ("physics_index", "p"),
-    ("forcing_index", "f"),
-])
+@pytest.mark.parametrize(
+    "key,prefix",
+    [
+        ("realization_index", "r"),
+        ("initialization_index", "i"),
+        ("physics_index", "p"),
+        ("forcing_index", "f"),
+    ],
+)
 def test_variant_component_validates_each_index_without_a_label_constraint(key, prefix):
     component = VariantLabelComponent.from_definition(None)
 
@@ -422,14 +437,17 @@ def test_grid_component_drives_fallback_validation(label):
     assert str(caught.value) == error
 
 
-@pytest.mark.parametrize("definition", [
-    {"custom-label": "custom grid"},
-    ["custom-label"],
-    ["custom-.*"],
-    "custom-label",
-    "<grid>",
-    None,
-])
+@pytest.mark.parametrize(
+    "definition",
+    [
+        {"custom-label": "custom grid"},
+        ["custom-label"],
+        ["custom-.*"],
+        "custom-label",
+        "<grid>",
+        None,
+    ],
+)
 def test_grid_component_defers_to_explicit_project_definitions(definition):
     cv = ControlledVocabulary({"grid_label": definition})
     metadata = {"grid_label": "custom-label", "grid": "custom-label"}
@@ -464,52 +482,59 @@ def test_dataset_info_validation_can_defer_required_globals():
 
 
 @pytest.mark.parametrize("check_required", [True, False])
-@pytest.mark.parametrize("definition,metadata,message", [
-    (
-        {"source_id": {"model": {"institution_id": "expected"}}},
-        {"source_id": "model", "institution_id": "different"},
-        "does not match source_id",
-    ),
-    (
-        {"experiment_id": {"historical": {"activity_id": ["CMIP"]}}},
-        {"experiment_id": "historical", "activity_id": "other"},
-        "does not match experiment_id",
-    ),
-    (
-        {"experiment_id": {"historical": {"required_source_type": ["AOGCM"]}}},
-        {"experiment_id": "historical"},
-        "source_type is required",
-    ),
-    (
-        {"experiment_id": {"historical": {"parent_experiment_id": ["piControl"]}}},
-        {"experiment_id": "historical"},
-        "requires parent_experiment_id",
-    ),
-    (
-        {"experiment_id": {"amip": {}}},
-        {"experiment_id": "amip", "parent_experiment_id": "piControl"},
-        "does not allow parent_experiment_id",
-    ),
-    (
-        {"forcing": ["GHG"]},
-        {"forcing": "UNKNOWN"},
-        "forcing term",
-    ),
-    (
-        {"variant_label": [r"^r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+$"]},
-        {"variant_label": "r1i1p1"},
-        "required pattern",
-    ),
-    ({}, {"grid_label": "gr-0"}, "required format"),
-    (
-        {
-            "required_global_attributes": ["institution"],
-            "institution_id": {"PCMDI": "expected"},
-        },
-        {"institution_id": "PCMDI", "institution": "different"},
-        "does not match the value selected",
-    ),
-])
+@pytest.mark.parametrize(
+    "definition,metadata,message",
+    [
+        (
+            {"source_id": {"model": {"institution_id": "expected"}}},
+            {"source_id": "model", "institution_id": "different"},
+            "does not match source_id",
+        ),
+        (
+            {"experiment_id": {"historical": {"activity_id": ["CMIP"]}}},
+            {"experiment_id": "historical", "activity_id": "other"},
+            "does not match experiment_id",
+        ),
+        (
+            {"experiment_id": {"historical": {"required_source_type": ["AOGCM"]}}},
+            {"experiment_id": "historical"},
+            "source_type is required",
+        ),
+        (
+            {"experiment_id": {"historical": {"parent_experiment_id": ["piControl"]}}},
+            {"experiment_id": "historical"},
+            "requires parent_experiment_id",
+        ),
+        (
+            {"experiment_id": {"amip": {}}},
+            {"experiment_id": "amip", "parent_experiment_id": "piControl"},
+            "does not allow parent_experiment_id",
+        ),
+        (
+            {"forcing": ["GHG"]},
+            {"forcing": "UNKNOWN"},
+            "forcing term",
+        ),
+        (
+            {
+                "variant_label": [
+                    r"^r[[:digit:]]+i[[:digit:]]+p[[:digit:]]+f[[:digit:]]+$"
+                ]
+            },
+            {"variant_label": "r1i1p1"},
+            "required pattern",
+        ),
+        ({}, {"grid_label": "gr-0"}, "required format"),
+        (
+            {
+                "required_global_attributes": ["institution"],
+                "institution_id": {"PCMDI": "expected"},
+            },
+            {"institution_id": "PCMDI", "institution": "different"},
+            "does not match the value selected",
+        ),
+    ],
+)
 def test_dataset_info_validation_runs_all_constraints(
     definition, metadata, message, check_required
 ):
