@@ -29,6 +29,8 @@ responsible for each kind of validation:
   specialized parsing and validation rules;
 * ``cv.variant_label`` assembles labels from realization, initialization,
   physics, and forcing indices and validates their ranges and label format;
+* ``cv.grid_label`` checks the standard grid-label format when the project CV
+  does not define its own allowed values;
 * scalar, singleton-required, and selected nested defaults are collected by a
   ``cv.defaults`` component;
 * project-specific attributes are available as generic rules in ``cv.rules``.
@@ -84,4 +86,7 @@ discoverable through named, typed attributes.
    :members:
 
 .. autoclass:: VariantLabelComponent
+   :members:
+
+.. autoclass:: GridLabelComponent
    :members:

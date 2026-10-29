@@ -12,6 +12,7 @@ from cmor.utils.cv_models import (
     ExperimentComponent,
     ForcingComponent,
     FrequencyComponent,
+    GridLabelComponent,
     LicenseComponent,
     SourceComponent,
     SourceTypeComponent,
@@ -117,6 +118,7 @@ def test_specialized_components_are_selected_for_catalogs():
     assert isinstance(cv.frequency, FrequencyComponent)
     assert isinstance(cv.tracking_id, TrackingIdComponent)
     assert isinstance(cv.variant_label, VariantLabelComponent)
+    assert isinstance(cv.grid_label, GridLabelComponent)
     assert not hasattr(cv, "get")
     assert cv.required_attributes == (
         "Conventions",
@@ -398,3 +400,47 @@ def test_variant_component_reports_explicit_and_assembled_format_errors():
     })
     assert error is not None
     assert "assembled from RIPF indices" in error
+
+
+@pytest.mark.parametrize("label", [None, "", "gn", "gr1", "cn", "rn", "g999", "g"])
+def test_grid_component_accepts_standard_or_missing_labels(label):
+    component = GridLabelComponent()
+    assert component.validation_error({"grid_label": label}) is None
+    assert component.validation_error({}) is None
+
+
+@pytest.mark.parametrize("label", ["gr-0", "GN", "1gn", "g n", "gn\n", "other"])
+def test_grid_component_drives_fallback_validation(label):
+    cv = ControlledVocabulary({})
+    metadata = {"grid_label": label}
+    error = cv.grid_label.validation_error(metadata)
+
+    assert error is not None
+    assert "does not match the required format" in error
+    with pytest.raises(ControlledVocabularyError) as caught:
+        cv.validate_dataset_values(DatasetMetadata.from_mapping(metadata))
+    assert str(caught.value) == error
+
+
+@pytest.mark.parametrize("definition", [
+    {"custom-label": "custom grid"},
+    ["custom-label"],
+    ["custom-.*"],
+    "custom-label",
+    "<grid>",
+    None,
+])
+def test_grid_component_defers_to_explicit_project_definitions(definition):
+    cv = ControlledVocabulary({"grid_label": definition})
+    metadata = {"grid_label": "custom-label", "grid": "custom-label"}
+
+    assert cv.grid_label.rule is not None
+    assert cv.grid_label.validation_error(metadata) is None
+    cv.validate_dataset_values(DatasetMetadata.from_mapping(metadata))
+
+
+def test_grid_component_preserves_explicit_empty_choice_constraint():
+    cv = ControlledVocabulary({"grid_label": []})
+    assert cv.grid_label.validation_error({"grid_label": "gn"}) is None
+    with pytest.raises(ControlledVocabularyError, match="is not allowed"):
+        cv.validate_dataset_values(DatasetMetadata.from_mapping({"grid_label": "gn"}))

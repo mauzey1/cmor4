@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 import json
 from pathlib import Path
-import re
 from typing import Any, Mapping
 import uuid
 import warnings
@@ -15,6 +14,7 @@ from .utils.cv_models import (
     ExperimentComponent,
     ForcingComponent,
     FrequencyComponent,
+    GridLabelComponent,
     InstitutionComponent,
     LicenseComponent,
     SourceComponent,
@@ -25,16 +25,6 @@ from .utils.cv_models import (
 )
 from .utils.dataset_metadata import DatasetMetadata
 from .exceptions import ControlledVocabularyError
-
-# Fallback regex for grid_label when the CV does not define an allowed set.
-# Mirrors CMOR3's built-in check: labels must start with 'g', 'c', or 'r'
-# (the three grid families) and contain only lowercase letters and digits —
-# no hyphens or special characters.  Examples of valid labels: gn, gr, gr1,
-# cn, rn, g999.  Examples of invalid labels: gr-0 (hyphen), GN (uppercase),
-# 1gn (digit-first).
-# When the CV *does* define grid_label (as an enumeration or regex list),
-# validate_dataset_values already enforces it and this fallback is skipped.
-_GRID_LABEL_RE: re.Pattern[str] = re.compile(r"^[gcr][a-z0-9]*$")
 
 
 class ControlledVocabulary:
@@ -66,6 +56,7 @@ class ControlledVocabulary:
     frequency: FrequencyComponent | None
     tracking_id: TrackingIdComponent
     variant_label: VariantLabelComponent
+    grid_label: GridLabelComponent
     required_attributes: tuple[str, ...]
 
     def __init__(self, data: Mapping[str, Any], path: str | Path | None = None):
@@ -83,6 +74,7 @@ class ControlledVocabulary:
         self.frequency = parsed.frequency
         self.tracking_id = parsed.tracking_id
         self.variant_label = parsed.variant_label
+        self.grid_label = parsed.grid_label
         self.required_attributes = parsed.required_global_attributes
         self._warn_double_nested_entries()
 
@@ -455,22 +447,9 @@ class ControlledVocabulary:
                     f"{key}={value!r} is not allowed by {self.filename}."
                 )
 
-        # GAP-09: hard-coded fallback when the CV does not define grid_label.
-        # validate_dataset_values already enforces CV-defined grid_label values
-        # above, so this only fires when no CV definition exists.  It prevents
-        # obviously malformed labels (hyphens, wrong starting character, etc.)
-        # from passing silently when the CV is incomplete or absent.
-        gl = dataset.grid_label
-        if gl not in (None, "") and "grid_label" not in self.rules:
-            if not _GRID_LABEL_RE.fullmatch(str(gl)):
-                raise ControlledVocabularyError(
-                    f"grid_label={gl!r} does not match the required format. "
-                    "Grid labels must start with 'g', 'c', or 'r' followed by "
-                    "lowercase letters and digits only (no hyphens or special "
-                    "characters). "
-                    f"Valid examples: 'gn', 'gr1', 'cn', 'g999'. "
-                    "Define grid_label in the project CV to allow a custom set."
-                )
+        error = self.grid_label.validation_error(dataset.to_dict())
+        if error is not None:
+            raise ControlledVocabularyError(error)
 
     def validate_required_global_attributes(self, dataset: DatasetMetadata) -> None:
         """Require every CV-listed global attribute that CMOR can write.

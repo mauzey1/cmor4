@@ -201,6 +201,43 @@ class AttributeRule(_CVModel):
         )
 
 
+class GridLabelComponent(_CVModel):
+    """Fallback grid-label format when the project supplies no definition.
+
+    Project definitions are validated by generic attribute rules. Any explicit
+    definition disables the fallback, allowing custom grid naming conventions.
+    """
+
+    rule: AttributeRule | None = None
+
+    @classmethod
+    def from_definition(cls, definition: Any) -> "GridLabelComponent":
+        """Parse an explicit ``grid_label`` definition, even an empty one.
+
+        Use ``GridLabelComponent()`` when the CV omits the attribute entirely.
+        """
+
+        return cls(rule=AttributeRule.from_definition("grid_label", definition))
+
+    def validation_error(self, metadata: Mapping[str, Any]) -> str | None:
+        """Return a fallback format error, skipping absent or empty labels."""
+
+        label = metadata.get("grid_label")
+        if self.rule is not None or label in (None, ""):
+            return None
+        # CMOR3 grid families: g, c, or r, followed by lowercase letters/digits.
+        if not re.fullmatch(r"[gcr][a-z0-9]*", str(label)):
+            return (
+                f"grid_label={label!r} does not match the required format. "
+                "Grid labels must start with 'g', 'c', or 'r' followed by "
+                "lowercase letters and digits only (no hyphens or special "
+                "characters). "
+                "Valid examples: 'gn', 'gr1', 'cn', 'g999'. "
+                "Define grid_label in the project CV to allow a custom set."
+            )
+        return None
+
+
 class VariantLabelComponent(_CVModel):
     """Variant-label assembly and validation of its four RIPF indices.
 
@@ -936,6 +973,7 @@ class ControlledVocabularyModel(_CVModel):
     frequency: FrequencyComponent | None = None
     tracking_id: TrackingIdComponent
     variant_label: VariantLabelComponent
+    grid_label: GridLabelComponent
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "ControlledVocabularyModel":
@@ -974,6 +1012,11 @@ class ControlledVocabularyModel(_CVModel):
                 cv.get("tracking_id_prefix"), cv.get("tracking_id")
             ),
             variant_label=VariantLabelComponent.from_definition(cv.get("variant_label")),
+            grid_label=(
+                GridLabelComponent.from_definition(cv["grid_label"])
+                if "grid_label" in cv
+                else GridLabelComponent()
+            ),
         )
 
 
