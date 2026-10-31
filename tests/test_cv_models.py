@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import json
 
 import pytest
 
@@ -8,6 +9,7 @@ from cmor.cv import ControlledVocabulary
 from cmor.exceptions import ControlledVocabularyError
 from cmor.utils.cv_models import (
     AttributeRule,
+    ControlledVocabularyModel,
     DRSComponent,
     ExperimentComponent,
     ForcingComponent,
@@ -457,11 +459,94 @@ def test_grid_component_defers_to_explicit_project_definitions(definition):
     cv._validate_dataset_values(DatasetMetadata.from_mapping(metadata))
 
 
-def test_grid_component_preserves_explicit_empty_choice_constraint():
-    cv = ControlledVocabulary({"grid_label": []})
-    assert cv._grid_label.validation_error({"grid_label": "gn"}) is None
-    with pytest.raises(ControlledVocabularyError, match="is not allowed"):
-        cv._validate_dataset_values(DatasetMetadata.from_mapping({"grid_label": "gn"}))
+@pytest.mark.parametrize("definition", [[], {}])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "grid_label",
+        "custom_attribute",
+        "source_id",
+        "experiment_id",
+        "institution_id",
+        "license",
+        "source_type",
+        "forcing",
+        "frequency",
+        "tracking_id",
+        "variant_label",
+    ],
+)
+@pytest.mark.parametrize("required", [False, True])
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_empty_attribute_definitions_fail_at_load(name, definition, required, wrapped):
+    body = {name: definition, "required_global_attributes": [name] if required else []}
+    data = {"CV": body} if wrapped else body
+
+    for loader, error_type in (
+        (ControlledVocabulary, ControlledVocabularyError),
+        (ControlledVocabularyModel.from_mapping, ValueError),
+    ):
+        with pytest.raises(error_type) as caught:
+            loader(data)
+        assert type(caught.value) is error_type
+        message = str(caught.value)
+        assert repr(name) in message
+        shape = "list" if isinstance(definition, list) else "object"
+        assert f"empty {shape}" in message
+        assert "omit the definition" in message
+        if error_type is ControlledVocabularyError:
+            assert type(caught.value.__cause__) is ValueError
+            assert str(caught.value.__cause__) == message
+
+
+@pytest.mark.parametrize("definition", [[], {}])
+def test_empty_attribute_definition_error_includes_filename(tmp_path, definition):
+    path = tmp_path / "project_CV.json"
+    path.write_text(json.dumps({"CV": {"grid_label": definition}}))
+
+    with pytest.raises(ControlledVocabularyError) as caught:
+        ControlledVocabulary.from_file(path)
+    assert "grid_label" in str(caught.value)
+    assert path.name in str(caught.value)
+    assert type(caught.value.__cause__) is ValueError
+    assert path.name not in str(caught.value.__cause__)
+
+
+def test_invalid_cv_body_is_translated_to_controlled_vocabulary_error():
+    with pytest.raises(ControlledVocabularyError, match="must be an object") as caught:
+        ControlledVocabulary({"CV": []})
+    assert type(caught.value.__cause__) is ValueError
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"required_global_attributes": [], "DRS": {}, "version_metadata": {}}],
+)
+def test_empty_structural_sections_are_allowed(body):
+    cv = ControlledVocabulary({"CV": body})
+    cv.validate_dataset_info(DatasetMetadata.from_mapping({}))
+
+
+def test_nonempty_lookup_with_empty_nested_metadata_is_allowed():
+    cv = ControlledVocabulary({
+        "grid_label": {"gn": {}},
+        "experiment_id": {"historical": {"additional_allowed_model_components": []}},
+    })
+    cv.validate_dataset_info(
+        DatasetMetadata.from_mapping({
+            "grid_label": "gn",
+            "experiment_id": "historical",
+        })
+    )
+    with pytest.raises(ControlledVocabularyError, match="grid_label"):
+        cv.validate_dataset_info(DatasetMetadata.from_mapping({"grid_label": "gr"}))
+
+
+def test_nonempty_choice_list_can_allow_optional_empty_string():
+    cv = ControlledVocabulary({"grid_label": [""]})
+    cv.validate_dataset_info(DatasetMetadata.from_mapping({"grid_label": ""}))
+    with pytest.raises(ControlledVocabularyError, match="grid_label"):
+        cv.validate_dataset_info(DatasetMetadata.from_mapping({"grid_label": "gn"}))
 
 
 def test_dataset_info_validation_can_defer_required_globals():
