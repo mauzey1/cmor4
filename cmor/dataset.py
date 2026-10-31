@@ -623,8 +623,8 @@ def build_output_path(
     cv_path_tmpl: str | None = None
     cv_file_tmpl: str | None = None
     cv = getattr(getattr(dataset, "project", None), "cv", None)
-    if cv is not None and cv.drs is not None:
-        cv_path_tmpl, cv_file_tmpl = cv.drs.templates()
+    if cv is not None and cv._drs is not None:
+        cv_path_tmpl, cv_file_tmpl = cv._drs.templates()
 
     path_template = str(
         dataset.output_path_template or cv_path_tmpl or DEFAULT_OUTPUT_PATH_TEMPLATE

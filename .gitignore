@@ -6,5 +6,6 @@ __pycache__/
 .pytest_cache/
 cmor_output/
 notebooks/output/
+examples/output/
 docs/build/
 .vscode

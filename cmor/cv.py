@@ -3,57 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 import json
 from pathlib import Path
-import re
 from typing import Any, Mapping
 import uuid
 import warnings
 
-from .utils.cv_models import (
-    AttributeRule,
-    DefaultValuesComponent,
-    DRSComponent,
-    ExperimentComponent,
-    ForcingComponent,
-    FrequencyComponent,
-    InstitutionComponent,
-    LicenseComponent,
-    SourceComponent,
-    SourceTypeComponent,
-    TrackingIdComponent,
-    ControlledVocabularyModel,
-)
+from .utils import cv_models as _cv_models
 from .utils.dataset_metadata import DatasetMetadata
 from .exceptions import ControlledVocabularyError
-
-# Variant label index keys and their allowed integer range.
-# CMOR3 stores these as C int (32-bit signed), so values above INT32_MAX
-# are rejected to keep parity with CMOR3 behaviour.
-_RIPF_KEYS: tuple[str, ...] = (
-    "realization_index",
-    "initialization_index",
-    "physics_index",
-    "forcing_index",
-)
-# Expected single-character prefix for each RIPF key.
-# CMIP7 encodes indices as prefixed strings ("r9", "i1", …);
-# CMOR3 used bare integers ("9", "1", …).  Both are accepted.
-_RIPF_PREFIXES: dict[str, str] = {
-    "realization_index": "r",
-    "initialization_index": "i",
-    "physics_index": "p",
-    "forcing_index": "f",
-}
-_RIPF_MAX: int = 2**31 - 1  # INT32_MAX — matches CMOR3's upper bound
-
-# Fallback regex for grid_label when the CV does not define an allowed set.
-# Mirrors CMOR3's built-in check: labels must start with 'g', 'c', or 'r'
-# (the three grid families) and contain only lowercase letters and digits —
-# no hyphens or special characters.  Examples of valid labels: gn, gr, gr1,
-# cn, rn, g999.  Examples of invalid labels: gr-0 (hyphen), GN (uppercase),
-# 1gn (digit-first).
-# When the CV *does* define grid_label (as an enumeration or regex list),
-# validate_dataset_values already enforces it and this fallback is skipped.
-_GRID_LABEL_RE: re.Pattern[str] = re.compile(r"^[gcr][a-z0-9]*$")
 
 
 class ControlledVocabulary:
@@ -69,37 +25,41 @@ class ControlledVocabulary:
 
     Notes
     -----
-    Validation behavior is exposed through typed attributes such as ``rules``,
-    ``defaults``, ``drs``, ``license``, ``sources``, and ``experiments``.
+    Use ``get_dataset_info`` to prepare metadata and ``validate_dataset_info``
+    to validate it. The typed CV components are internal implementation details.
     """
 
-    rules: dict[str, AttributeRule]
-    defaults: DefaultValuesComponent
-    drs: DRSComponent | None
-    institutions: InstitutionComponent | None
-    license: LicenseComponent | None
-    sources: SourceComponent | None
-    experiments: ExperimentComponent | None
-    source_types: SourceTypeComponent
-    forcing: ForcingComponent | None
-    frequency: FrequencyComponent | None
-    tracking_id: TrackingIdComponent
+    _rules: dict[str, _cv_models.AttributeRule]
+    _defaults: _cv_models.DefaultValuesComponent
+    _drs: _cv_models.DRSComponent | None
+    _institutions: _cv_models.InstitutionComponent | None
+    _license: _cv_models.LicenseComponent | None
+    _sources: _cv_models.SourceComponent | None
+    _experiments: _cv_models.ExperimentComponent | None
+    _source_types: _cv_models.SourceTypeComponent
+    _forcing: _cv_models.ForcingComponent | None
+    _frequency: _cv_models.FrequencyComponent | None
+    _tracking_id: _cv_models.TrackingIdComponent
+    _variant_label: _cv_models.VariantLabelComponent
+    _grid_label: _cv_models.GridLabelComponent
     required_attributes: tuple[str, ...]
 
     def __init__(self, data: Mapping[str, Any], path: str | Path | None = None):
         self.path = Path(path) if path is not None else None
-        parsed = ControlledVocabularyModel.from_mapping(data)
-        self.rules = parsed.attributes
-        self.defaults = parsed.defaults
-        self.drs = parsed.drs
-        self.institutions = parsed.institutions
-        self.license = parsed.license
-        self.sources = parsed.sources
-        self.experiments = parsed.experiments
-        self.source_types = parsed.source_types
-        self.forcing = parsed.forcing
-        self.frequency = parsed.frequency
-        self.tracking_id = parsed.tracking_id
+        parsed = _cv_models.ControlledVocabularyModel.from_mapping(data)
+        self._rules = parsed.attributes
+        self._defaults = parsed.defaults
+        self._drs = parsed.drs
+        self._institutions = parsed.institutions
+        self._license = parsed.license
+        self._sources = parsed.sources
+        self._experiments = parsed.experiments
+        self._source_types = parsed.source_types
+        self._forcing = parsed.forcing
+        self._frequency = parsed.frequency
+        self._tracking_id = parsed.tracking_id
+        self._variant_label = parsed.variant_label
+        self._grid_label = parsed.grid_label
         self.required_attributes = parsed.required_global_attributes
         self._warn_double_nested_entries()
 
@@ -125,11 +85,11 @@ class ControlledVocabulary:
         github.com/PCMDI/cmor/issues/829.
         """
 
-        issues = self.validate_structure()
+        issues = self._validate_structure()
         for issue in issues:
             warnings.warn(issue, RuntimeWarning, stacklevel=3)
 
-    def validate_structure(self) -> list[str]:
+    def _validate_structure(self) -> list[str]:
         """Return a list of structural issues found in this CV.
 
         Currently detects double-nested entries — those where the value is a
@@ -153,12 +113,12 @@ class ControlledVocabulary:
                     }
                 }
             })
-            issues = cv.validate_structure()
+            issues = cv._validate_structure()
             # ["CV entry 'nominal_resolution' appears to be double-nested …"]
         """
 
         issues: list[str] = []
-        for key, rule in self.rules.items():
+        for key, rule in self._rules.items():
             if rule.is_double_nested:
                 issues.append(
                     f"CV entry {key!r} in {self.filename} appears to be "
@@ -231,7 +191,7 @@ class ControlledVocabulary:
     def _add_scalar_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill scalar CV defaults that are not templated."""
 
-        dataset.update(self.defaults.scalar_defaults_for(dataset))
+        dataset.update(self._defaults.scalar_defaults_for(dataset))
 
     def _add_nested_defaults(self, dataset: dict[str, Any]) -> None:
         """Inject leaf attributes from two-level nested CV entries.
@@ -268,32 +228,32 @@ class ControlledVocabulary:
         ``setdefault`` values always take precedence.
         """
 
-        dataset.update(self.defaults.nested_defaults_for(dataset))
+        dataset.update(self._defaults.nested_defaults_for(dataset))
 
     def _add_source_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill attributes supplied by a source_id CV entry."""
 
-        if self.sources is None:
+        if self._sources is None:
             return
-        for key, value in self.sources.defaults_for(dataset.get("source_id")).items():
+        for key, value in self._sources.defaults_for(dataset.get("source_id")).items():
             if key not in dataset or dataset[key] in (None, ""):
                 dataset[key] = value
 
     def _add_institution_default(self, dataset: dict[str, Any]) -> None:
         """Fill institution text from institution_id."""
 
-        if self.institutions is None:
+        if self._institutions is None:
             return
-        institution = self.institutions.name_for(dataset.get("institution_id"))
+        institution = self._institutions.name_for(dataset.get("institution_id"))
         if institution is not None and dataset.get("institution") in (None, ""):
             dataset["institution"] = institution
 
     def _add_experiment_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill scalar attributes supplied by an experiment_id CV entry."""
 
-        if self.experiments is None:
+        if self._experiments is None:
             return
-        for key, value in self.experiments.defaults_for(
+        for key, value in self._experiments.defaults_for(
             dataset.get("experiment_id")
         ).items():
             if key not in dataset or dataset[key] in (None, ""):
@@ -304,40 +264,51 @@ class ControlledVocabulary:
 
         required = self.required_attributes
         if "Conventions" in required:
-            dataset.setdefault("Conventions", self.defaults.conventions)
+            dataset.setdefault("Conventions", self._defaults.conventions)
         if "creation_date" in required:
             dataset.setdefault(
                 "creation_date", datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
             )
         if "variant_label" in required:
-            variant_label = _variant_label(dataset)
+            variant_label = self._variant_label.render(dataset)
             if variant_label:
                 dataset.setdefault("variant_label", variant_label)
         if "tracking_id" in required and "tracking_id" not in dataset:
-            dataset["tracking_id"] = self.tracking_id.format(
+            dataset["tracking_id"] = self._tracking_id.format(
                 str(uuid.uuid4()), dataset.get("tracking_prefix")
             )
         for key in required:
             if key in dataset:
                 continue
-            default = self.defaults.required.get(key)
+            default = self._defaults.required.get(key)
             if default is not None:
                 dataset[key] = default
 
     def _add_license_text(self, dataset: dict[str, Any]) -> None:
-        if "license" in dataset or self.license is None:
+        if "license" in dataset or self._license is None:
             return
-        rendered = self.license.render(dataset)
+        rendered = self._license.render(dataset)
         if rendered is not None:
             dataset["license"] = rendered
 
-    def validate_dataset_info(self, dataset: DatasetMetadata) -> None:
-        """Validate user-supplied controlled values against the project CV.
+    def validate_dataset_info(
+        self, dataset: DatasetMetadata, *, check_required: bool = True
+    ) -> None:
+        """Run all dataset metadata checks against the project CV.
+
+        This includes controlled values, grid and variant labels, forcing,
+        derived attributes, source and experiment constraints, and parent
+        metadata. Experiment validation also checks source-type composition.
 
         Parameters
         ----------
         dataset:
             Dataset metadata to validate.
+        check_required:
+            Whether to require every CV-listed global attribute. Set to
+            ``False`` during initial preparation, before variable-derived
+            attributes are available. All other checks still run, including
+            experiment-specific requirements for source and parent metadata.
 
         Returns
         -------
@@ -345,13 +316,21 @@ class ControlledVocabulary:
             Raises ``ControlledVocabularyError`` if validation fails.
         """
 
-        self.validate_dataset_values(dataset)
-        self.validate_required_global_attributes(dataset)
-        self.validate_derived_attributes(dataset)
-        self.validate_variant_indices(dataset)
-        self.validate_forcing_terms(dataset)
+        self._validate_dataset_values(dataset)
+        if check_required:
+            self._validate_required_global_attributes(dataset)
+            self._validate_derived_attributes(dataset)
+        self._validate_variant_indices(dataset)
+        self._validate_forcing_terms(dataset)
+        if not check_required:
+            # Preserve the initial-preparation order: indices and forcing
+            # errors precede derived-attribute mismatches.
+            self._validate_derived_attributes(dataset)
+        self._validate_source_attributes(dataset)
+        self._validate_experiment(dataset)
+        self._validate_parent_attributes(dataset)
 
-    def validate_forcing_terms(self, dataset: DatasetMetadata) -> None:
+    def _validate_forcing_terms(self, dataset: DatasetMetadata) -> None:
         """Validate the ``forcing`` global attribute against the CV forcing list.
 
         The ``forcing`` attribute (used in CMIP6-style projects) is a
@@ -386,17 +365,17 @@ class ControlledVocabulary:
             the CV's forcing enumeration.
         """
 
-        if self.forcing is None:
+        if self._forcing is None:
             return
-        invalid = self.forcing.invalid_token(dataset.forcing)
+        invalid = self._forcing.invalid_token(dataset.forcing)
         if invalid is not None:
             raise ControlledVocabularyError(
                 f"forcing term {invalid!r} is not valid. "
-                f"Valid values are: {sorted(self.forcing.values)!r}. "
+                f"Valid values are: {sorted(self._forcing.values)!r}. "
                 f"Check {self.filename}."
             )
 
-    def validate_variant_indices(self, dataset: DatasetMetadata) -> None:
+    def _validate_variant_indices(self, dataset: DatasetMetadata) -> None:
         """Validate variant index integers and the derived variant_label format.
 
         Each of ``realization_index``, ``initialization_index``,
@@ -422,69 +401,11 @@ class ControlledVocabulary:
             variant_label does not match the CV-defined pattern.
         """
 
-        for key in _RIPF_KEYS:
-            value = getattr(dataset, key)
-            if value in (None, ""):
-                continue
-            value_str = str(value)
-            # Skip POSIX-regex strings that were injected from the CV rather
-            # than supplied by the user (e.g. CMIP6's realization_index regex).
-            if re.search(r"[\\^$\[\]{,}]", value_str):
-                continue
-            # Determine the numeric part.  CMOR3 checks whether the value
-            # consists solely of digits (bare integer style, e.g. "3") and
-            # if so prepends the letter prefix when assembling variant_label.
-            # Prefixed-string style (e.g. "r3") strips the leading letter.
-            prefix = _RIPF_PREFIXES[key]
-            if value_str.startswith(prefix) and len(value_str) > 1:
-                numeric_part = value_str[1:]
-            else:
-                numeric_part = value_str
-            try:
-                int_value = int(numeric_part)
-            except (TypeError, ValueError) as exc:
-                raise ControlledVocabularyError(
-                    f"{key}={value!r} must be a positive integer "
-                    f"(with optional '{prefix}' prefix, e.g. '{prefix}1')."
-                ) from exc
-            if int_value < 1 or int_value > _RIPF_MAX:
-                raise ControlledVocabularyError(
-                    f"{key}={value!r} numeric value {int_value} is out of the "
-                    f"valid range [1, {_RIPF_MAX}]."
-                )
+        error = self._variant_label.validation_error(dataset.to_dict())
+        if error is not None:
+            raise ControlledVocabularyError(error)
 
-        # Only validate the variant_label format when the CV actually defines
-        # a constraint (a list of allowed values or regex patterns).  When the
-        # CV merely lists variant_label as a required attribute with no values
-        # (e.g. obs4MIPs), accept any user-supplied string.
-        variant_rule = self.rules.get("variant_label")
-        cv_constrains_vl = (
-            variant_rule is not None and variant_rule.is_choice_constraint
-        )
-
-        variant_label = dataset.variant_label_value
-        if variant_label and cv_constrains_vl:
-            vl_str = str(variant_label)
-            if not re.fullmatch(r"r\d+i\d+p\d+f\d+", vl_str):
-                raise ControlledVocabularyError(
-                    f"variant_label={vl_str!r} does not match the required "
-                    "pattern 'r<N>i<N>p<N>f<N>'."
-                )
-            return
-        if variant_label:
-            return
-
-        # Assemble variant_label from individual RIPF indices when all four
-        # are present.  Validate the result only when the CV constrains it.
-        assembled = _metadata_variant_label(dataset)
-        if assembled and cv_constrains_vl:
-            if not re.fullmatch(r"r\d+i\d+p\d+f\d+", assembled):
-                raise ControlledVocabularyError(
-                    f"variant_label={assembled!r} assembled from RIPF indices "
-                    "does not match the required pattern 'r<N>i<N>p<N>f<N>'."
-                )
-
-    def validate_dataset_values(self, dataset: DatasetMetadata) -> None:
+    def _validate_dataset_values(self, dataset: DatasetMetadata) -> None:
         """Validate controlled values without requiring every global attr.
 
         Parameters
@@ -506,12 +427,12 @@ class ControlledVocabulary:
                 "output_path_template",
                 # The 'forcing' attribute is a space/comma-separated list of
                 # abbreviations (e.g. "GHG Oz SA").  It cannot be validated
-                # as a single value against the CV; validate_forcing_terms
+                # as a single value against the CV; _validate_forcing_terms
                 # handles it with per-token checks instead.
                 "forcing",
             }:
                 continue
-            rule = self.rules.get(str(key))
+            rule = self._rules.get(str(key))
             # CMIP6 CVs express several constraints as POSIX BRE regex arrays
             # (single-element lists whose entry contains BRE metacharacters like
             # \{, [[:digit:]], or ^ anchors).  CMOR uses Python re which has
@@ -530,24 +451,11 @@ class ControlledVocabulary:
                     f"{key}={value!r} is not allowed by {self.filename}."
                 )
 
-        # GAP-09: hard-coded fallback when the CV does not define grid_label.
-        # validate_dataset_values already enforces CV-defined grid_label values
-        # above, so this only fires when no CV definition exists.  It prevents
-        # obviously malformed labels (hyphens, wrong starting character, etc.)
-        # from passing silently when the CV is incomplete or absent.
-        gl = dataset.grid_label
-        if gl not in (None, "") and "grid_label" not in self.rules:
-            if not _GRID_LABEL_RE.fullmatch(str(gl)):
-                raise ControlledVocabularyError(
-                    f"grid_label={gl!r} does not match the required format. "
-                    "Grid labels must start with 'g', 'c', or 'r' followed by "
-                    "lowercase letters and digits only (no hyphens or special "
-                    "characters). "
-                    f"Valid examples: 'gn', 'gr1', 'cn', 'g999'. "
-                    "Define grid_label in the project CV to allow a custom set."
-                )
+        error = self._grid_label.validation_error(dataset.to_dict())
+        if error is not None:
+            raise ControlledVocabularyError(error)
 
-    def validate_required_global_attributes(self, dataset: DatasetMetadata) -> None:
+    def _validate_required_global_attributes(self, dataset: DatasetMetadata) -> None:
         """Require every CV-listed global attribute that CMOR can write.
 
         Parameters
@@ -572,7 +480,7 @@ class ControlledVocabulary:
         bre_required = {
             name
             for name in self.required_attributes
-            if (rule := self.rules.get(name)) is not None
+            if (rule := self._rules.get(name)) is not None
             and rule.skips_generic_validation
         }
 
@@ -588,7 +496,7 @@ class ControlledVocabulary:
                 f"Required global attributes are missing: {missing_text}."
             )
 
-    def validate_experiment(self, dataset: DatasetMetadata) -> None:
+    def _validate_experiment(self, dataset: DatasetMetadata) -> None:
         """Validate experiment-specific CV attributes.
 
         Parameters
@@ -603,37 +511,37 @@ class ControlledVocabulary:
             are inconsistent.
         """
 
-        if self.experiments is None:
+        if self._experiments is None:
             return
         ignored_keys = set()
         if "experiment" not in self.required_attributes:
             ignored_keys.add("experiment")
-        error = self.experiments.validation_error(
+        error = self._experiments.validation_error(
             dataset.experiment_id,
             dataset.to_dict(),
-            self.source_types,
+            self._source_types,
             ignored_keys=ignored_keys,
         )
         if error is not None:
             raise ControlledVocabularyError(error)
 
-    def validate_derived_attributes(self, dataset: DatasetMetadata) -> None:
+    def _validate_derived_attributes(self, dataset: DatasetMetadata) -> None:
         """Validate required derived text against its selected ID entry."""
 
         values = dataset.to_dict()
         expected: dict[str, Any] = {}
-        if self.sources is not None:
-            source = self.sources.defaults_for(dataset.source_id).get("source")
+        if self._sources is not None:
+            source = self._sources.defaults_for(dataset.source_id).get("source")
             if source is not None:
                 expected["source"] = source
-        if self.experiments is not None:
-            experiment = self.experiments.defaults_for(dataset.experiment_id).get(
+        if self._experiments is not None:
+            experiment = self._experiments.defaults_for(dataset.experiment_id).get(
                 "experiment"
             )
             if experiment is not None:
                 expected["experiment"] = experiment
-        if self.institutions is not None:
-            institution = self.institutions.name_for(dataset.institution_id)
+        if self._institutions is not None:
+            institution = self._institutions.name_for(dataset.institution_id)
             if institution is not None:
                 expected["institution"] = institution
 
@@ -648,7 +556,7 @@ class ControlledVocabulary:
                 f"{key}_id CV entry {expected_value!r}."
             )
 
-    def validate_source_type(
+    def _validate_source_type(
         self,
         dataset: DatasetMetadata,
         experiment_entry: Mapping[str, Any],
@@ -669,7 +577,7 @@ class ControlledVocabulary:
             or disallowed.
         """
 
-        error = self.source_types.validation_error(
+        error = self._source_types.validation_error(
             dataset.source_type,
             experiment_entry,
             experiment_id=dataset.experiment_id,
@@ -677,7 +585,7 @@ class ControlledVocabulary:
         if error is not None:
             raise ControlledVocabularyError(error)
 
-    def validate_source_attributes(self, dataset: DatasetMetadata) -> None:
+    def _validate_source_attributes(self, dataset: DatasetMetadata) -> None:
         """Validate source_id-specific CV attributes.
 
         Parameters
@@ -692,18 +600,18 @@ class ControlledVocabulary:
             is inconsistent.
         """
 
-        if self.sources is None:
+        if self._sources is None:
             return
         ignored_keys = set()
         if "source" not in self.required_attributes:
             ignored_keys.add("source")
-        error = self.sources.validation_error(
+        error = self._sources.validation_error(
             dataset.source_id, dataset.to_dict(), ignored_keys=ignored_keys
         )
         if error is not None:
             raise ControlledVocabularyError(error)
 
-    def validate_parent_attributes(self, dataset: DatasetMetadata) -> None:
+    def _validate_parent_attributes(self, dataset: DatasetMetadata) -> None:
         """Validate CMIP-style parent experiment attributes.
 
         Parameters
@@ -718,10 +626,10 @@ class ControlledVocabulary:
             or inconsistent.
         """
 
-        if self.experiments is None:
+        if self._experiments is None:
             return
-        error = self.experiments.parent_validation_error(
-            dataset.experiment_id, dataset.to_dict(), self.sources
+        error = self._experiments.parent_validation_error(
+            dataset.experiment_id, dataset.to_dict(), self._sources
         )
         if error is not None:
             raise ControlledVocabularyError(error)
@@ -751,68 +659,20 @@ class ControlledVocabulary:
 
         metadata = dataset.to_dict()
         if key in {"license", "license_id", "license_url", "license_type"}:
-            if self.license is not None:
-                return self.license.accepts(key, value, metadata)
+            if self._license is not None:
+                return self._license.accepts(key, value, metadata)
         if key == "source_type":
-            return self.source_types.accepts(value)
-        rule = self.rules.get(key)
+            return self._source_types.accepts(value)
+        rule = self._rules.get(key)
         return rule is None or rule.accepts(value, metadata)
 
     def controls(self, key: str) -> bool:
         """Return whether a typed component constrains *key*."""
 
-        if key in self.rules:
+        if key in self._rules:
             return True
-        if self.license is None:
+        if self._license is None:
             return False
         if key == "license_id":
-            return bool(self.license.licenses)
+            return bool(self._license.licenses)
         return key in {"license_url", "license_type"}
-
-
-def _variant_label(dataset: Mapping[str, Any]) -> str | None:
-    """Assemble a variant_label from RIPF index attributes, or return existing one.
-
-    Mirrors CMOR3's ``cmor_addRIPF`` logic:
-
-    * If ``variant_label`` is already in the dataset, return it directly.
-    * Otherwise collect the four RIPF index values.  For each one, if the
-      value consists solely of digits (bare-integer style, e.g. ``"3"``),
-      prepend the canonical letter prefix (``r``, ``i``, ``p``, ``f``) before
-      concatenating.  If the value already carries its prefix letter (e.g.
-      ``"r3"``), use it as-is.  This exactly replicates the C code path in
-      ``cmor_addRIPF`` that checks ``^[[:digit:]]{1,}$`` to decide whether to
-      prepend the prefix.
-    """
-    if dataset.get("variant_label") not in (None, ""):
-        return str(dataset["variant_label"])
-    pieces = []
-    for key, prefix in zip(_RIPF_KEYS, ("r", "i", "p", "f")):
-        value = dataset.get(key)
-        if value in (None, ""):
-            return None
-        value_str = str(value)
-        # Bare integer (digits only) → prepend the letter prefix.
-        # Prefixed string (e.g. "r3") → use as-is.
-        if re.fullmatch(r"\d+", value_str):
-            pieces.append(f"{prefix}{value_str}")
-        else:
-            pieces.append(value_str)
-    return "".join(pieces)
-
-
-def _metadata_variant_label(dataset: DatasetMetadata) -> str | None:
-    """Return an explicit or RIPF-derived label from typed metadata."""
-
-    if dataset.variant_label_value:
-        return dataset.variant_label_value
-    pieces: list[str] = []
-    for key, prefix in zip(_RIPF_KEYS, ("r", "i", "p", "f"), strict=True):
-        value = getattr(dataset, key)
-        if value in (None, ""):
-            return None
-        value_str = str(value)
-        pieces.append(
-            f"{prefix}{value_str}" if re.fullmatch(r"\d+", value_str) else value_str
-        )
-    return "".join(pieces)

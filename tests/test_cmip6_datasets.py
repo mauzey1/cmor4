@@ -232,7 +232,7 @@ class TestTableLoading(unittest.TestCase):
     def test_cmip6_cv_mip_era_is_cmip6(self) -> None:
         """The loaded CMIP6 CV identifies the project as CMIP6."""
         project = _cmip6_project()
-        self.assertIn("CMIP6", project.cv.rules["mip_era"].allowed_values)
+        self.assertIn("CMIP6", project.cv._rules["mip_era"].allowed_values)
 
     def test_cmip6_omon_variable_masso_is_available(self) -> None:
         """The Omon table's ``masso`` variable can be resolved."""
@@ -252,14 +252,14 @@ class TestTableLoading(unittest.TestCase):
     def test_cmip6_cv_has_expected_activity_ids(self) -> None:
         """CMIP6 CV contains well-known activity IDs such as CMIP and ScenarioMIP."""
         project = _cmip6_project()
-        activity_ids = project.cv.rules["activity_id"].allowed_values
+        activity_ids = project.cv._rules["activity_id"].allowed_values
         for expected in ("CMIP", "ScenarioMIP", "DCPP"):
             self.assertIn(expected, activity_ids)
 
     def test_cmip6_cv_grid_labels_include_gn_and_gr(self) -> None:
         """CMIP6 CV defines the standard grid labels gn and gr."""
         project = _cmip6_project()
-        grid_labels = project.cv.rules["grid_label"].allowed_values
+        grid_labels = project.cv._rules["grid_label"].allowed_values
         self.assertIn("gn", grid_labels)
         self.assertIn("gr", grid_labels)
 
@@ -1052,8 +1052,8 @@ class TestDrsTemplates(unittest.TestCase):
 
     def test_cmip6_cv_defines_drs_path_template(self) -> None:
         """The CMIP6 CV includes a directory_path_template in its DRS section."""
-        self.assertIsNotNone(self.project.cv.drs)
-        path_tmpl, _ = self.project.cv.drs.templates()
+        self.assertIsNotNone(self.project.cv._drs)
+        path_tmpl, _ = self.project.cv._drs.templates()
         self.assertIsNotNone(
             path_tmpl, "CMIP6 CV should define a directory_path_template"
         )
@@ -1063,8 +1063,8 @@ class TestDrsTemplates(unittest.TestCase):
 
     def test_cmip6_cv_defines_drs_filename_template(self) -> None:
         """The CMIP6 CV includes a filename_template in its DRS section."""
-        self.assertIsNotNone(self.project.cv.drs)
-        _, file_tmpl = self.project.cv.drs.templates()
+        self.assertIsNotNone(self.project.cv._drs)
+        _, file_tmpl = self.project.cv._drs.templates()
         self.assertIsNotNone(file_tmpl, "CMIP6 CV should define a filename_template")
         assert file_tmpl is not None  # Type narrowing for mypy
         self.assertIn("variable_id", file_tmpl)
@@ -1072,8 +1072,8 @@ class TestDrsTemplates(unittest.TestCase):
 
     def test_drs_path_example_structure(self) -> None:
         """The CMIP6 DRS path template follows CMIP6/<activity>/<inst>/…."""
-        self.assertIsNotNone(self.project.cv.drs)
-        path_tmpl, _ = self.project.cv.drs.templates()
+        self.assertIsNotNone(self.project.cv._drs)
+        path_tmpl, _ = self.project.cv._drs.templates()
         assert path_tmpl is not None  # Type narrowing for mypy
         # The template starts with <mip_era> which resolves to CMIP6
         self.assertTrue(

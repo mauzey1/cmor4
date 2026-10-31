@@ -11,3 +11,4 @@ This guide provides practical examples of using CMOR to create CF-compliant clim
    basic_usage
    incremental_writing
    advanced_features
+   controlled_vocabularies

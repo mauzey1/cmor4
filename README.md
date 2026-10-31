@@ -43,15 +43,15 @@ python -m unittest discover -s tests
 Run code style checks:
 
 ```bash
-ruff check src tests
-ruff format src tests --check
+ruff check cmor tests
+ruff format cmor tests --check
 ```
 
 Run code formatting:
 
 ```bash
-ruff check src tests --fix
-ruff format src tests
+ruff check cmor tests --fix
+ruff format cmor tests
 ```
 
 ## Workflow
