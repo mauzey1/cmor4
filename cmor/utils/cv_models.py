@@ -22,7 +22,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..exceptions import ControlledVocabularyError
 from .templates import is_unresolved_template, render_template
 
 
@@ -992,7 +991,7 @@ class ControlledVocabularyModel(_CVModel):
                 continue
             if isinstance(definition, (list, Mapping)) and not definition:
                 shape = "list" if isinstance(definition, list) else "object"
-                raise ControlledVocabularyError(
+                raise ValueError(
                     f"CV entry {name!r} is an empty {shape} and allows no values. "
                     "Provide at least one allowed value or omit the definition "
                     "if no value constraint is intended."

@@ -482,14 +482,21 @@ def test_empty_attribute_definitions_fail_at_load(name, definition, required, wr
     body = {name: definition, "required_global_attributes": [name] if required else []}
     data = {"CV": body} if wrapped else body
 
-    for loader in (ControlledVocabulary, ControlledVocabularyModel.from_mapping):
-        with pytest.raises(ControlledVocabularyError) as caught:
+    for loader, error_type in (
+        (ControlledVocabulary, ControlledVocabularyError),
+        (ControlledVocabularyModel.from_mapping, ValueError),
+    ):
+        with pytest.raises(error_type) as caught:
             loader(data)
+        assert type(caught.value) is error_type
         message = str(caught.value)
         assert repr(name) in message
         shape = "list" if isinstance(definition, list) else "object"
         assert f"empty {shape}" in message
         assert "omit the definition" in message
+        if error_type is ControlledVocabularyError:
+            assert type(caught.value.__cause__) is ValueError
+            assert str(caught.value.__cause__) == message
 
 
 @pytest.mark.parametrize("definition", [[], {}])
@@ -501,6 +508,14 @@ def test_empty_attribute_definition_error_includes_filename(tmp_path, definition
         ControlledVocabulary.from_file(path)
     assert "grid_label" in str(caught.value)
     assert path.name in str(caught.value)
+    assert type(caught.value.__cause__) is ValueError
+    assert path.name not in str(caught.value.__cause__)
+
+
+def test_invalid_cv_body_is_translated_to_controlled_vocabulary_error():
+    with pytest.raises(ControlledVocabularyError, match="must be an object") as caught:
+        ControlledVocabulary({"CV": []})
+    assert type(caught.value.__cause__) is ValueError
 
 
 @pytest.mark.parametrize(

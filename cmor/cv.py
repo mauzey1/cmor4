@@ -48,12 +48,11 @@ class ControlledVocabulary:
         self.path = Path(path) if path is not None else None
         try:
             parsed = _cv_models.ControlledVocabularyModel.from_mapping(data)
-        except ControlledVocabularyError as error:
-            if self.path is None:
-                raise
-            raise ControlledVocabularyError(
-                f"{error} Check {self.filename}."
-            ) from error
+        except ValueError as error:
+            message = str(error)
+            if self.path is not None:
+                message += f" Check {self.filename}."
+            raise ControlledVocabularyError(message) from error
         self._rules = parsed.attributes
         self._defaults = parsed.defaults
         self._drs = parsed.drs
