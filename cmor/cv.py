@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
-from pathlib import Path
-from typing import Any, Mapping
 import uuid
 import warnings
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Mapping
 
-from .utils import cv_models as _cv_models
-from .utils.dataset_metadata import DatasetMetadata
+from . import _cv_models
+from ._metadata import DatasetMetadata
 from .exceptions import ControlledVocabularyError
 
 
@@ -182,7 +182,9 @@ class ControlledVocabulary:
             Dataset metadata with controlled-vocabulary defaults applied.
         """
         normalized_dataset = dataset.to_dict()
-        self._add_scalar_defaults(normalized_dataset)
+        normalized_dataset.update(
+            self._defaults.scalar_defaults_for(normalized_dataset)
+        )
         self._add_source_defaults(normalized_dataset)
         self._add_institution_default(normalized_dataset)
         self._add_experiment_defaults(normalized_dataset)
@@ -190,51 +192,11 @@ class ControlledVocabulary:
         self._add_runtime_global_defaults(normalized_dataset)
         # Run after all dedicated handlers so their setdefault values win over
         # anything this generic handler would inject.
-        self._add_nested_defaults(normalized_dataset)
+        normalized_dataset.update(
+            self._defaults.nested_defaults_for(normalized_dataset)
+        )
 
         return DatasetMetadata.from_mapping(normalized_dataset)
-
-    def _add_scalar_defaults(self, dataset: dict[str, Any]) -> None:
-        """Fill scalar CV defaults that are not templated."""
-
-        dataset.update(self._defaults.scalar_defaults_for(dataset))
-
-    def _add_nested_defaults(self, dataset: dict[str, Any]) -> None:
-        """Inject leaf attributes from two-level nested CV entries.
-
-        CMOR3 supports a pattern where a CV key maps user-selectable codes to
-        flat dicts of scalar attributes.  When the user picks a code, every
-        scalar in the corresponding dict is written as a global attribute.
-        This mirrors CMOR3's ``_CV_checkGblAttributes`` handling for such
-        entries and enables features like obs4MIPs ``site_id`` location
-        injection or custom project contact-info blocks.
-
-        Example — obs4MIPs ``site_id``::
-
-            CV:   {"site_id": {"AR-SLu": {"latitude": "-33.47",
-                                           "location":  "San Luis",
-                                           "longitude": "-66.46"}}}
-            User: {"site_id": "AR-SLu"}
-            Result: ``latitude``, ``location``, ``longitude`` added to dataset.
-
-        Only injects when the looked-up entry is a :class:`~collections.abc.Mapping`
-        whose values are **all** scalars (``str``, ``int``, or ``float``).
-        Entries containing nested Mappings or lists are CV validation tables
-        and are not injected.
-
-        Keys with dedicated handlers (``institution_id``, ``source_id``,
-        ``experiment_id``, ``license_id``, ``license``) are skipped to avoid
-        double-processing.  Additionally, ``frequency`` is skipped because its
-        nested dicts contain internal time-validation scalars
-        (``approx_interval``, ``approx_interval_error``, etc.) that are read
-        directly by the axis validator and must not appear as output global
-        attributes.
-
-        Because this method runs *after* all dedicated handlers, their
-        ``setdefault`` values always take precedence.
-        """
-
-        dataset.update(self._defaults.nested_defaults_for(dataset))
 
     def _add_source_defaults(self, dataset: dict[str, Any]) -> None:
         """Fill attributes supplied by a source_id CV entry."""
@@ -322,21 +284,22 @@ class ControlledVocabulary:
             Raises ``ControlledVocabularyError`` if validation fails.
         """
 
-        self._validate_dataset_values(dataset)
+        values = dataset.to_dict()
+        self._validate_dataset_values(values)
         if check_required:
-            self._validate_required_global_attributes(dataset)
-            self._validate_derived_attributes(dataset)
-        self._validate_variant_indices(dataset)
-        self._validate_forcing_terms(dataset)
+            self._validate_required_global_attributes(values)
+            self._validate_derived_attributes(values)
+        self._validate_variant_indices(values)
+        self._validate_forcing_terms(values)
         if not check_required:
             # Preserve the initial-preparation order: indices and forcing
             # errors precede derived-attribute mismatches.
-            self._validate_derived_attributes(dataset)
-        self._validate_source_attributes(dataset)
-        self._validate_experiment(dataset)
-        self._validate_parent_attributes(dataset)
+            self._validate_derived_attributes(values)
+        self._validate_source_attributes(values)
+        self._validate_experiment(values)
+        self._validate_parent_attributes(values)
 
-    def _validate_forcing_terms(self, dataset: DatasetMetadata) -> None:
+    def _validate_forcing_terms(self, dataset: Mapping[str, Any]) -> None:
         """Validate the ``forcing`` global attribute against the CV forcing list.
 
         The ``forcing`` attribute (used in CMIP6-style projects) is a
@@ -373,7 +336,7 @@ class ControlledVocabulary:
 
         if self._forcing is None:
             return
-        invalid = self._forcing.invalid_token(dataset.forcing)
+        invalid = self._forcing.invalid_token(dataset.get("forcing"))
         if invalid is not None:
             raise ControlledVocabularyError(
                 f"forcing term {invalid!r} is not valid. "
@@ -381,7 +344,7 @@ class ControlledVocabulary:
                 f"Check {self.filename}."
             )
 
-    def _validate_variant_indices(self, dataset: DatasetMetadata) -> None:
+    def _validate_variant_indices(self, dataset: Mapping[str, Any]) -> None:
         """Validate variant index integers and the derived variant_label format.
 
         Each of ``realization_index``, ``initialization_index``,
@@ -407,11 +370,11 @@ class ControlledVocabulary:
             variant_label does not match the CV-defined pattern.
         """
 
-        error = self._variant_label.validation_error(dataset.to_dict())
+        error = self._variant_label.validation_error(dataset)
         if error is not None:
             raise ControlledVocabularyError(error)
 
-    def _validate_dataset_values(self, dataset: DatasetMetadata) -> None:
+    def _validate_dataset_values(self, dataset: Mapping[str, Any]) -> None:
         """Validate controlled values without requiring every global attr.
 
         Parameters
@@ -426,7 +389,7 @@ class ControlledVocabulary:
             allowed.
         """
 
-        for key, value in dataset.to_dict().items():
+        for key, value in dataset.items():
             if key.startswith("_") or key in {
                 "outpath",
                 "output_file_template",
@@ -450,18 +413,18 @@ class ControlledVocabulary:
             # etc.) that use the CV's enumeration entries.
             if rule is not None and rule.skips_generic_validation:
                 continue
-            if self.controls(str(key)) and not self.value_allowed(
+            if self.controls(str(key)) and not self._value_allowed(
                 str(key), value, dataset
             ):
                 raise ControlledVocabularyError(
                     f"{key}={value!r} is not allowed by {self.filename}."
                 )
 
-        error = self._grid_label.validation_error(dataset.to_dict())
+        error = self._grid_label.validation_error(dataset)
         if error is not None:
             raise ControlledVocabularyError(error)
 
-    def _validate_required_global_attributes(self, dataset: DatasetMetadata) -> None:
+    def _validate_required_global_attributes(self, dataset: Mapping[str, Any]) -> None:
         """Require every CV-listed global attribute that CMOR can write.
 
         Parameters
@@ -476,7 +439,7 @@ class ControlledVocabulary:
             missing.
         """
 
-        dataset_values = dataset.to_dict()
+        dataset_values = dataset
         # Attributes whose CV definition is a POSIX BRE regex array cannot be
         # auto-generated by CMOR.  For CMIP6 this includes 'license' (among
         # others).  Rather than requiring the user to supply these manually in
@@ -502,7 +465,7 @@ class ControlledVocabulary:
                 f"Required global attributes are missing: {missing_text}."
             )
 
-    def _validate_experiment(self, dataset: DatasetMetadata) -> None:
+    def _validate_experiment(self, dataset: Mapping[str, Any]) -> None:
         """Validate experiment-specific CV attributes.
 
         Parameters
@@ -523,31 +486,31 @@ class ControlledVocabulary:
         if "experiment" not in self.required_attributes:
             ignored_keys.add("experiment")
         error = self._experiments.validation_error(
-            dataset.experiment_id,
-            dataset.to_dict(),
+            dataset.get("experiment_id"),
+            dataset,
             self._source_types,
             ignored_keys=ignored_keys,
         )
         if error is not None:
             raise ControlledVocabularyError(error)
 
-    def _validate_derived_attributes(self, dataset: DatasetMetadata) -> None:
+    def _validate_derived_attributes(self, dataset: Mapping[str, Any]) -> None:
         """Validate required derived text against its selected ID entry."""
 
-        values = dataset.to_dict()
+        values = dataset
         expected: dict[str, Any] = {}
         if self._sources is not None:
-            source = self._sources.defaults_for(dataset.source_id).get("source")
+            source = self._sources.defaults_for(dataset.get("source_id")).get("source")
             if source is not None:
                 expected["source"] = source
         if self._experiments is not None:
-            experiment = self._experiments.defaults_for(dataset.experiment_id).get(
-                "experiment"
-            )
+            experiment = self._experiments.defaults_for(
+                dataset.get("experiment_id")
+            ).get("experiment")
             if experiment is not None:
                 expected["experiment"] = experiment
         if self._institutions is not None:
-            institution = self._institutions.name_for(dataset.institution_id)
+            institution = self._institutions.name_for(dataset.get("institution_id"))
             if institution is not None:
                 expected["institution"] = institution
 
@@ -564,7 +527,7 @@ class ControlledVocabulary:
 
     def _validate_source_type(
         self,
-        dataset: DatasetMetadata,
+        dataset: Mapping[str, Any],
         experiment_entry: Mapping[str, Any],
     ) -> None:
         """Validate experiment-specific required source_type tokens.
@@ -584,14 +547,14 @@ class ControlledVocabulary:
         """
 
         error = self._source_types.validation_error(
-            dataset.source_type,
+            dataset.get("source_type"),
             experiment_entry,
-            experiment_id=dataset.experiment_id,
+            experiment_id=dataset.get("experiment_id"),
         )
         if error is not None:
             raise ControlledVocabularyError(error)
 
-    def _validate_source_attributes(self, dataset: DatasetMetadata) -> None:
+    def _validate_source_attributes(self, dataset: Mapping[str, Any]) -> None:
         """Validate source_id-specific CV attributes.
 
         Parameters
@@ -612,12 +575,12 @@ class ControlledVocabulary:
         if "source" not in self.required_attributes:
             ignored_keys.add("source")
         error = self._sources.validation_error(
-            dataset.source_id, dataset.to_dict(), ignored_keys=ignored_keys
+            dataset.get("source_id"), dataset, ignored_keys=ignored_keys
         )
         if error is not None:
             raise ControlledVocabularyError(error)
 
-    def _validate_parent_attributes(self, dataset: DatasetMetadata) -> None:
+    def _validate_parent_attributes(self, dataset: Mapping[str, Any]) -> None:
         """Validate CMIP-style parent experiment attributes.
 
         Parameters
@@ -635,7 +598,7 @@ class ControlledVocabulary:
         if self._experiments is None:
             return
         error = self._experiments.parent_validation_error(
-            dataset.experiment_id, dataset.to_dict(), self._sources
+            dataset.get("experiment_id"), dataset, self._sources
         )
         if error is not None:
             raise ControlledVocabularyError(error)
@@ -663,7 +626,9 @@ class ControlledVocabulary:
             ``True`` when the value is accepted by the component.
         """
 
-        metadata = dataset.to_dict()
+        return self._value_allowed(key, value, dataset.to_dict())
+
+    def _value_allowed(self, key: str, value: Any, metadata: Mapping[str, Any]) -> bool:
         if key in {"license", "license_id", "license_url", "license_type"}:
             if self._license is not None:
                 return self._license.accepts(key, value, metadata)

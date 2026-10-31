@@ -1,38 +1,22 @@
+"""Public dataset creation, file access, and output naming entry points."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
-import re
 from typing import Any, Mapping, Sequence
 
 import numpy as np
 import xarray as xr
 
-from .utils.templates import render_template
-from .utils.time_utils import decode_time_value, add_time_delta, date_part
 from .axis import Axis
 from .datasetinfo import DatasetInfo
 from .grid import Grid
-from .utils.construction import (
-    add_grid_coords,
-    add_zfactor,
-    build_axis_mappings,
-    derive_forecast_coords,
-    set_formula_terms,
-)
-from .utils.chunking import (
-    calculate_cmip7_chunks,
-    is_cmip7_dataset,
-    validate_cmip7_chunksizes,
-)
-from .utils.validation import (
-    ValidationContext,
-    _dataset_for_variable,
-    validate_data_chunk,
-    validate_final_dataset,
-    validate_metadata,
-)
-from .utils.dataset_metadata import DatasetMetadata, INTERNAL_DATASET_KEYS
+from . import _assembly, _netcdf
+from ._assembly import ValidationContext
+from ._metadata import INTERNAL_DATASET_KEYS, DatasetMetadata
+from ._templates import render_template
+from ._time import add_time_delta, date_part, decode_time_value
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -123,9 +107,9 @@ def create_dataset(
         requested metadata, or if CMIP7 chunking requirements are not met.
     """
 
-    dataset, variable = _dataset_for_variable(dataset, variable)
-    ctx = validate_metadata(dataset, variable, axes, zfactors, grid)
-    data_array = validate_data_chunk(ctx, data)
+    dataset, variable = _assembly._dataset_for_variable(dataset, variable)
+    ctx = _assembly.validate_metadata(dataset, variable, axes, zfactors, grid)
+    data_array = _assembly.validate_data_chunk(ctx, data)
     ds = create_dataset_from_validated_data(
         ctx,
         data_array,
@@ -149,251 +133,7 @@ def create_dataset_from_validated_data(
     memory for a second validation pass.
     """
 
-    dataset = ctx.dataset
-    variable = ctx.variable
-    axes = ctx.axes
-    grid = ctx.grid
-    var_name, var_labels = variable.names()
-
-    (
-        coords,
-        data_vars,
-        axis_dims,
-        scalar_coord_names,
-        auxiliary_coord_names,
-    ) = build_axis_mappings(axes, calendar=dataset.calendar)
-
-    forecast_coord_name = derive_forecast_coords(
-        axes,
-        coords,
-        getattr(dataset, "project", None),
-        calendar=str(dataset.calendar or "standard"),
-    )
-    if forecast_coord_name is not None:
-        auxiliary_coord_names.append(forecast_coord_name)
-
-    # Write lat/lon and vertex arrays directly as dataset coords, bypassing
-    # the Axis pipeline — same pattern as CMOR3's cmor_grid associated_variables.
-    if grid is not None:
-        add_grid_coords(
-            grid,
-            tuple(variable.dimensions or ()),
-            getattr(dataset, "project", None),
-            coords,
-            data_vars,
-            auxiliary_coord_names,
-        )
-
-    if grid and grid.has_mapping:
-        data_vars[grid.variable_name] = (
-            (),
-            np.int32(-2147483647),
-            grid.mapping_attributes(),
-        )
-        auxiliary_coord_names.extend(
-            str(name) for name in (grid.coordinates or ()) if name
-        )
-
-    zfactor_names: list[str] = []
-    for zfactor in ctx.zfactors:
-        zfactor_names.append(add_zfactor(zfactor, data_vars, axis_dims))
-
-    var_attrs = variable.attributes(var_labels)
-    explicit_coordinates = variable.coordinates
-    if explicit_coordinates:
-        coord_attr = (
-            " ".join(str(value) for value in explicit_coordinates)
-            if isinstance(explicit_coordinates, (list, tuple))
-            else str(explicit_coordinates)
-        )
-    else:
-        coord_names = [*scalar_coord_names, *auxiliary_coord_names]
-        coord_attr = " ".join(dict.fromkeys(coord_names))
-    if coord_attr:
-        var_attrs["coordinates"] = coord_attr
-    if grid and grid.variable_name in data_vars:
-        var_attrs["grid_mapping"] = grid.variable_name
-
-    # Collect any CF external variables referenced in cell_measures but not
-    # written to this file and expose them as a global attribute so that
-    # downstream tools and ESGF QC checkers can locate them.
-    all_provided_names = set(coords.keys()) | set(data_vars.keys())
-    external_vars = _collect_external_variables(variable, all_provided_names)
-    if external_vars:
-        # Merge computed external_variables with user-supplied attrs;
-        # user-supplied attrs take precedence (they come later in the update).
-        merged_attrs: dict[str, Any] = {
-            "external_variables": " ".join(sorted(external_vars))
-        }
-        if attrs:
-            merged_attrs.update(attrs)
-        attrs = merged_attrs
-
-    data_vars[var_name] = (ctx.dims, data_array, var_attrs)
-    ds = xr.Dataset(
-        data_vars=data_vars,
-        coords=coords,
-        attrs=dataset.global_attributes(variable, attrs),
-    )
-
-    if zfactor_names:
-        set_formula_terms(ds, axes, variable, zfactor_names)
-
-    missing_value = variable.missing_value or variable.fill_value
-    if missing_value is not None:
-        ds[var_name].attrs["missing_value"] = missing_value
-        ds[var_name].encoding["_FillValue"] = missing_value
-
-    # Extract user-provided chunksizes for the data variable.
-    # Priority: variable-specific encoding["var_name"]["chunksizes"] >
-    #           top-level encoding["chunksizes"] >
-    #           variable metadata (chunksizes/chunks)
-    user_provided_chunks = None
-    if encoding:
-        var_encoding = encoding.get(var_name)
-        if isinstance(var_encoding, Mapping) and "chunksizes" in var_encoding:
-            user_provided_chunks = var_encoding["chunksizes"]
-        elif "chunksizes" in encoding and not isinstance(
-            encoding["chunksizes"], Mapping
-        ):
-            user_provided_chunks = encoding["chunksizes"]
-
-    # Fallback to variable metadata for chunksizes if not in encoding
-    chunksizes = user_provided_chunks or variable.chunksizes or variable.chunks
-
-    # For CMIP7 datasets, validate user-provided chunksizes meet the
-    # ≥4 MiB requirement. Allow all other encoding parameters to pass through.
-    if user_provided_chunks and is_cmip7_dataset(dataset):
-        data_array = ds[var_name]
-        validate_cmip7_chunksizes(
-            user_provided_chunks,
-            var_name,
-            data_array.dims,
-            data_array.shape,
-            data_array.dtype,
-        )
-
-    # Auto-generate CMIP7-compliant chunks if no chunksizes were provided
-    # (neither in encoding nor in variable metadata)
-    if chunksizes is None and is_cmip7_dataset(dataset):
-        data_array = ds[var_name]
-        cmip7_chunks = calculate_cmip7_chunks(
-            data_array.dims,
-            data_array.shape,
-            data_array.dtype,
-            data_array.dims,
-        )
-        ds[var_name].encoding["chunksizes"] = tuple(
-            cmip7_chunks[d] for d in data_array.dims
-        )
-    elif chunksizes:
-        ds[var_name].encoding["chunksizes"] = tuple(int(value) for value in chunksizes)
-
-    # For CMIP7 datasets, identify time-related variables that must have
-    # a single chunk (time coordinate and its bounds/climatology).
-    if is_cmip7_dataset(dataset):
-        protected_chunks: set[str] = set()
-        for coord_name in ds.coords:
-            coord_name_str = str(coord_name)
-            lower = coord_name_str.lower()
-            # Only protect time coordinates, not other coordinates
-            if lower != "time" and not lower.startswith("time"):
-                continue
-            protected_chunks.add(coord_name_str)
-            coord = ds[coord_name_str]
-            # Also protect time bounds and climatology bounds
-            for attr_name in ("bounds", "climatology"):
-                bounds_name = coord.attrs.get(attr_name)
-                if bounds_name is not None and str(bounds_name) in ds:
-                    protected_chunks.add(str(bounds_name))
-    else:
-        protected_chunks = set()
-
-    # Apply user-provided encoding to variables
-    if encoding:
-        for name in ds.variables:
-            name_str = str(name)
-
-            # Start with top-level encoding parameters, excluding chunksizes
-            # and nested dicts.
-            # This mimics xarray's encoding behavior
-            for key, value in encoding.items():
-                if key == "chunksizes" or isinstance(value, Mapping):
-                    continue
-                ds[name_str].encoding[key] = value
-
-            # Apply variable-specific encoding overrides
-            var_specific = encoding.get(name_str)
-            if isinstance(var_specific, Mapping):
-                for key, value in var_specific.items():
-                    if key == "chunksizes":
-                        # Handle chunksizes for non-data variables
-                        if name_str == var_name:
-                            # Data variable chunksizes already applied above
-                            continue
-
-                        array = ds[name_str]
-                        if len(value) != array.ndim:
-                            raise ValueError(
-                                f"Variable {name_str!r}: chunksizes length "
-                                f"{len(value)} does not match dimensions {array.dims}"
-                            )
-                        normalized_chunksizes = tuple(int(v) for v in value)
-
-                        # For CMIP7, enforce single chunk for time and time_bnds
-                        if (
-                            name_str in protected_chunks
-                            and normalized_chunksizes != array.shape
-                        ):
-                            raise ValueError(
-                                f"Variable {name_str!r}: CMIP7 requires time "
-                                "coordinates and time bounds to have a single "
-                                f"chunk. Got chunk sizes {normalized_chunksizes} "
-                                f"but variable shape is {array.shape}."
-                            )
-                        array.encoding["chunksizes"] = normalized_chunksizes
-                    else:
-                        # Apply other variable-specific encoding parameters
-                        ds[name_str].encoding[key] = value
-
-    # For CMIP7, automatically apply single-chunk encoding to time coordinates
-    # and time bounds if not already set by user
-    if protected_chunks:
-        for name in protected_chunks:
-            array = ds[name]
-            # Skip scalar variables and empty arrays
-            if array.ndim != 0 and not any(size == 0 for size in array.shape):
-                # Set chunk size to full array shape (single chunk)
-                array.encoding["chunksizes"] = tuple(int(size) for size in array.shape)
-
-    # Suppress the _FillValue attribute on coordinate variables and their bounds
-    coordinate_names = {str(name) for name in ds.coords}
-    for data_var in ds.variables.values():
-        coordinates = data_var.attrs.get("coordinates")
-        if coordinates:
-            coordinate_names.update(
-                name for name in str(coordinates).split() if name in ds.variables
-            )
-
-    coordinate_bounds_names: set[str] = set()
-    for coord_name in coordinate_names:
-        if coord_name not in ds.variables:
-            continue
-        coord = ds[coord_name]
-        for attr_name in ("bounds", "climatology"):
-            bounds_name = coord.attrs.get(attr_name)
-            if bounds_name is not None and str(bounds_name) in ds.variables:
-                coordinate_bounds_names.add(str(bounds_name))
-
-    for name in coordinate_names | coordinate_bounds_names:
-        if name not in ds.variables:
-            continue
-        ds[name].attrs.pop("_FillValue", None)
-        ds[name].encoding["_FillValue"] = None
-
-    validate_final_dataset(ds, ctx, zfactor_names)
-
-    return ds
+    return _assembly.build_dataset(ctx, data_array, attrs=attrs, encoding=encoding)
 
 
 def write_netcdf(
@@ -438,28 +178,7 @@ def write_netcdf(
     output_path = (
         Path(path) if path is not None else build_output_path(dataset, variable, ds)
     )
-
-    # Honour create_subdirectories.  The flag mirrors CMOR3's own behaviour:
-    # when False, the output directory must already exist; CMOR3 errors when
-    # it cannot create the directory (e.g. a non-existent /CMIP6 root).
-    # Default is True for backwards-compatibility with CMOR's original
-    # always-create behaviour.
-    create_subdirs = (
-        True if dataset.create_subdirectories is None else dataset.create_subdirectories
-    )
-    if create_subdirs:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-    elif not output_path.parent.exists():
-        raise ValueError(
-            f"Output directory {str(output_path.parent)!r} does not exist "
-            "and create_subdirectories is disabled. "
-            "Create the directory first or set create_subdirectories=True "
-            "in the dataset metadata."
-        )
-
-    ds.to_netcdf(output_path, **to_netcdf_kwargs)
-
-    return output_path
+    return _netcdf.write_dataset(ds, dataset, output_path, **to_netcdf_kwargs)
 
 
 def cmorize(
@@ -512,17 +231,18 @@ def cmorize(
         Path to the written NetCDF file.
     """
 
-    dataset, variable = _dataset_for_variable(dataset, variable)
-    ctx = validate_metadata(dataset, variable, axes, zfactors, grid)
-    data_array = validate_data_chunk(ctx, data)
-    ds = create_dataset_from_validated_data(
-        ctx,
-        data_array,
+    return create_dataset(
+        dataset,
+        variable,
+        axes,
+        data,
+        zfactors=zfactors,
+        grid=grid,
+        path=path,
         attrs=attrs,
         encoding=encoding,
+        **to_netcdf_kwargs,
     )
-    output_path = write_netcdf(ds, dataset, variable, path=path, **to_netcdf_kwargs)
-    return output_path
 
 
 def open_dataset(path: str | Path, **kwargs: Any) -> xr.Dataset:
@@ -542,42 +262,6 @@ def open_dataset(path: str | Path, **kwargs: Any) -> xr.Dataset:
     """
 
     return xr.open_dataset(path, **kwargs)
-
-
-def _collect_external_variables(
-    variable: Variable,
-    provided_names: set[str],
-) -> set[str]:
-    """Return CF external variable names cited in cell_measures but not provided.
-
-    CF Conventions require that any variable named in a ``cell_measures``
-    attribute but not included in the file is listed in the global
-    ``external_variables`` attribute so that data consumers know where to
-    find it.  This helper parses the ``measure: varname`` tokens from the
-    variable's ``cell_measures`` field and returns those whose names are not
-    among the coordinates and data variables already written.
-
-    Parameters
-    ----------
-    variable:
-        Variable metadata record, which may carry a ``cell_measures`` entry.
-    provided_names:
-        Names of all coordinates and data variables that will be written to
-        the output file.
-
-    Returns
-    -------
-    set[str]
-        External variable names that are referenced but not provided.
-    """
-    cell_measures = str(variable.cell_measures or "")
-    if not cell_measures.strip():
-        return set()
-    return {
-        name
-        for name in re.findall(r":\s*(\S+)", cell_measures)
-        if name not in provided_names
-    }
 
 
 def build_output_path(
@@ -614,7 +298,7 @@ def build_output_path(
         Rendered output path, including the ``.nc`` filename.
     """
 
-    dataset, variable = _dataset_for_variable(dataset, variable)
+    dataset, variable = _assembly._dataset_for_variable(dataset, variable)
     root = Path(str(dataset.outpath or ".")).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
 
@@ -674,7 +358,7 @@ def string_from_template(
         Rendered template string.
     """
 
-    dataset, variable = _dataset_for_variable(dataset, variable)
+    dataset, variable = _assembly._dataset_for_variable(dataset, variable)
     return render_template(template, _template_tokens(dataset, variable, ds), separator)
 
 

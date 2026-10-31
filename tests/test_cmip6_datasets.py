@@ -58,7 +58,7 @@ import numpy as np
 
 import cmor
 from dataset_helpers import open_created_dataset
-from cmor.dataset import _collect_external_variables
+from cmor._assembly import _collect_external_variables
 
 # ---------------------------------------------------------------------------
 # Location of the CMIP6 tables submodule

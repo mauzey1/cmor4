@@ -1,15 +1,21 @@
-"""Grid metadata record for runtime grid dimensions and CF projections."""
+"""Grid metadata, CF projection registry, and grid shape validation."""
 
 from __future__ import annotations
 
-from typing import Any
 import warnings
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 import numpy as np
 from pydantic import Field, model_validator
 
 from .axis import Axis
-from .utils.metadata import MetadataModel, StrSeq, StrTuple
+from ._metadata import MetadataModel, StrSeq, StrTuple
+from .exceptions import TableValidationError
+
+if TYPE_CHECKING:
+    import xarray as xr
+
+    from ._coordinate_tables import GridMappingTableEntry as GridMappingEntry
 
 _LATITUDE_PARAMS: frozenset[str] = frozenset({
     "grid_north_pole_latitude",
@@ -227,7 +233,7 @@ class Grid(MetadataModel):
             ``["j", "i"]``).  These become the dimension tuple for the
             lat/lon coordinate arrays.
         coord_table:
-            Optional :class:`~cmor.utils.tables.CoordinateTable` used to pull
+            Optional :class:`~cmor._coordinate_tables.CoordinateTable` used to pull
             CF metadata (``standard_name``, ``long_name``, ``units``) for
             latitude and longitude from the project tables.  When ``None``,
             hard-coded CF defaults are used.
@@ -277,45 +283,27 @@ class Grid(MetadataModel):
             }
             return attrs
 
-        if self.latitude is not None:
-            lat_arr = np.asarray(self.latitude)
-            lat_attrs = _cf_attrs("latitude", "degrees_north", "latitude")
-            coords["latitude"] = (dims, lat_arr, lat_attrs)
-            auxiliary_coord_names.append("latitude")
-
-        if self.longitude is not None:
-            lon_arr = np.asarray(self.longitude)
-            lon_attrs = _cf_attrs("longitude", "degrees_east", "longitude")
-            coords["longitude"] = (dims, lon_arr, lon_attrs)
-            auxiliary_coord_names.append("longitude")
-
-        # Vertex arrays — dimensioned (*spatial_dims, vertices_dim)
-        if self.latitude_vertices is not None or self.longitude_vertices is not None:
-            vdim = self.vertices_dim
-            vert_dims = dims + (vdim,)
-
-            if self.latitude_vertices is not None:
-                blat_arr = np.asarray(self.latitude_vertices)
-                blat_attrs = _cf_attrs("vertices_latitude", "degrees_north", "latitude")
-                data_vars["vertices_latitude"] = (vert_dims, blat_arr, blat_attrs)
-                # Set bounds pointer on the latitude coord
-                if "latitude" in coords:
-                    lat_entry = coords["latitude"]
-                    updated_attrs = dict(lat_entry[2])
-                    updated_attrs["bounds"] = "vertices_latitude"
-                    coords["latitude"] = (lat_entry[0], lat_entry[1], updated_attrs)
-
-            if self.longitude_vertices is not None:
-                blon_arr = np.asarray(self.longitude_vertices)
-                blon_attrs = _cf_attrs(
-                    "vertices_longitude", "degrees_east", "longitude"
+        for name, units, values, vertices in (
+            ("latitude", "degrees_north", self.latitude, self.latitude_vertices),
+            ("longitude", "degrees_east", self.longitude, self.longitude_vertices),
+        ):
+            if values is not None:
+                coords[name] = (dims, np.asarray(values), _cf_attrs(name, units, name))
+                auxiliary_coord_names.append(name)
+            if vertices is not None:
+                bounds_name = f"vertices_{name}"
+                data_vars[bounds_name] = (
+                    dims + (self.vertices_dim,),
+                    np.asarray(vertices),
+                    _cf_attrs(bounds_name, units, name),
                 )
-                data_vars["vertices_longitude"] = (vert_dims, blon_arr, blon_attrs)
-                if "longitude" in coords:
-                    lon_entry = coords["longitude"]
-                    updated_attrs = dict(lon_entry[2])
-                    updated_attrs["bounds"] = "vertices_longitude"
-                    coords["longitude"] = (lon_entry[0], lon_entry[1], updated_attrs)
+                if name in coords:
+                    entry = coords[name]
+                    coords[name] = (
+                        entry[0],
+                        entry[1],
+                        {**entry[2], "bounds": bounds_name},
+                    )
 
         return coords, data_vars, auxiliary_coord_names
 
@@ -438,3 +426,494 @@ def _primary_num(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+_COMMON_GRID_MAPPING_ATTRIBUTES: frozenset[str] = frozenset({
+    "crs_wkt",
+    "earth_radius",
+    "GeoTransform",
+    "geographic_coordinate_system_name",
+    "geographic_crs_name",
+    "geoid_name",
+    "geopotential_datum_name",
+    "grid_mapping_name",
+    "horizontal_datum_name",
+    "inverse_flattening",
+    "long_name",
+    "longitude_of_prime_meridian",
+    "prime_meridian_name",
+    "projected_coordinate_system_name",
+    "projected_crs_name",
+    "reference_ellipsoid_name",
+    "semi_major_axis",
+    "semi_minor_axis",
+    "spatial_ref",
+    "towgs84",
+})
+
+
+_TEXT_GRID_MAPPING_ATTRIBUTES: frozenset[str] = frozenset({
+    "crs_wkt",
+    "fixed_angle_axis",
+    "GeoTransform",
+    "geographic_coordinate_system_name",
+    "geographic_crs_name",
+    "geoid_name",
+    "geopotential_datum_name",
+    "grid_mapping_name",
+    "horizontal_datum_name",
+    "long_name",
+    "prime_meridian_name",
+    "projected_coordinate_system_name",
+    "projected_crs_name",
+    "reference_ellipsoid_name",
+    "spatial_ref",
+    "sweep_angle_axis",
+})
+
+
+_GRID_MAPPING_ATTRIBUTES: dict[str, frozenset[str]] = {
+    "albers_conical_equal_area": frozenset({
+        "standard_parallel",
+        "longitude_of_central_meridian",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "azimuthal_equidistant": frozenset({
+        "longitude_of_projection_origin",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "geostationary": frozenset({
+        "latitude_of_projection_origin",
+        "longitude_of_projection_origin",
+        "perspective_point_height",
+        "false_easting",
+        "false_northing",
+        "sweep_angle_axis",
+        "fixed_angle_axis",
+    }),
+    "lambert_azimuthal_equal_area": frozenset({
+        "longitude_of_projection_origin",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "lambert_conformal_conic": frozenset({
+        "standard_parallel",
+        "longitude_of_central_meridian",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "lambert_cylindrical_equal_area": frozenset({
+        "longitude_of_central_meridian",
+        "standard_parallel",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "latitude_longitude": frozenset(),
+    "mercator": frozenset({
+        "longitude_of_projection_origin",
+        "standard_parallel",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "oblique_mercator": frozenset({
+        "azimuth_of_central_line",
+        "latitude_of_projection_origin",
+        "longitude_of_projection_origin",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "orthographic": frozenset({
+        "longitude_of_projection_origin",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "polar_stereographic": frozenset({
+        "longitude_of_projection_origin",
+        "straight_vertical_longitude_from_pole",
+        "latitude_of_projection_origin",
+        "standard_parallel",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "rotated_latitude_longitude": frozenset({
+        "grid_north_pole_latitude",
+        "grid_north_pole_longitude",
+        "north_pole_grid_longitude",
+    }),
+    "sinusoidal": frozenset({
+        "longitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "stereographic": frozenset({
+        "longitude_of_projection_origin",
+        "latitude_of_projection_origin",
+        "scale_factor_at_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "transverse_mercator": frozenset({
+        "scale_factor_at_central_meridian",
+        "longitude_of_central_meridian",
+        "latitude_of_projection_origin",
+        "false_easting",
+        "false_northing",
+    }),
+    "vertical_perspective": frozenset({
+        "latitude_of_projection_origin",
+        "longitude_of_projection_origin",
+        "perspective_point_height",
+        "false_easting",
+        "false_northing",
+    }),
+}
+
+
+def _allowed_grid_mapping_attributes(mapping_name: str) -> frozenset[str] | None:
+    """Return CF-1.12 attributes allowed for *mapping_name*, or ``None``."""
+    specific = _GRID_MAPPING_ATTRIBUTES.get(mapping_name)
+    if specific is None:
+        return None
+    allowed = set(_COMMON_GRID_MAPPING_ATTRIBUTES)
+    allowed.update(specific)
+    if "standard_parallel" in allowed:
+        allowed.update({"standard_parallel1", "standard_parallel2"})
+    return frozenset(allowed)
+
+
+def _validate_grid_mapping(
+    entry: GridMappingEntry | None,
+    data: Grid | Mapping[str, Any],
+    *,
+    axes: Sequence[Axis] = (),
+    dimensions: Sequence[Any] | str | None = None,
+) -> None:
+    """Validate grid-mapping metadata against a grid-table mapping entry."""
+    if isinstance(data, Grid):
+        mapping_name = data.mapping_name
+        grid_mapping_name = data.grid_mapping_name
+        params = dict(data.params)
+        if dimensions is None:
+            dimensions = data.dimensions
+        if not axes:
+            axes = data.axes
+    else:
+        mapping_name = data.get("mapping_name")
+        grid_mapping_name = data.get("grid_mapping_name")
+        params = dict(data.get("params") or {})
+
+    entry_name = entry.name if entry is not None else None
+    if entry is not None:
+        for key, value in (
+            ("mapping_name", mapping_name),
+            ("grid_mapping_name", grid_mapping_name),
+        ):
+            expected = getattr(entry, key)
+            if expected not in (None, "", [], ()) and value is not None:
+                if str(value) != str(expected):
+                    raise TableValidationError(
+                        f"grid mapping {entry.name!r} {key}={value!r} does "
+                        f"not match table value {expected!r}."
+                    )
+
+    supplied_mapping_name = (
+        grid_mapping_name or mapping_name or params.get("grid_mapping_name")
+    )
+    table_mapping_name = None
+    if entry is not None:
+        table_mapping_name = entry.grid_mapping_name or entry.mapping_name
+        if (
+            table_mapping_name is None
+            and _allowed_grid_mapping_attributes(entry.name) is not None
+        ):
+            table_mapping_name = entry.name
+        if (
+            table_mapping_name is not None
+            and supplied_mapping_name is not None
+            and str(supplied_mapping_name) != str(table_mapping_name)
+        ):
+            raise TableValidationError(
+                f"grid mapping {entry.name!r} grid_mapping_name="
+                f"{supplied_mapping_name!r} does not match table value "
+                f"{table_mapping_name!r}."
+            )
+
+    cf_mapping_name = supplied_mapping_name or table_mapping_name
+    cf_mapping_name = str(cf_mapping_name) if cf_mapping_name else None
+    cf_allowed_params: frozenset[str] | None = None
+    if cf_mapping_name is not None:
+        cf_allowed_params = _allowed_grid_mapping_attributes(cf_mapping_name)
+        if cf_allowed_params is None:
+            raise TableValidationError(
+                f"grid_mapping_name {cf_mapping_name!r} is not a CF-1.12 "
+                "grid mapping name."
+            )
+
+    required_params = (
+        set(entry.required_parameter_names()) if entry is not None else set()
+    )
+    optional_params = (
+        set(entry.optional_parameter_names()) if entry is not None else set()
+    )
+    text_params = set(entry.text_parameter_names()) if entry is not None else set()
+    allowed_params = set(required_params | optional_params | text_params)
+    if cf_allowed_params is not None:
+        allowed_params.update(cf_allowed_params)
+        text_params.update(_TEXT_GRID_MAPPING_ATTRIBUTES)
+    if "standard_parallel" in allowed_params:
+        allowed_params.update({"standard_parallel1", "standard_parallel2"})
+    if {"standard_parallel1", "standard_parallel2"} & allowed_params:
+        allowed_params.add("standard_parallel")
+
+    if allowed_params:
+        unknown = sorted(
+            str(param) for param in params if str(param) not in allowed_params
+        )
+        if unknown:
+            label = entry_name or cf_mapping_name or "<unknown>"
+            raise TableValidationError(
+                f"grid mapping {label!r} does not allow projection "
+                f"parameter(s): {', '.join(unknown)}."
+            )
+
+    # Legacy grid tables declare projection parameters as ``parameter1``,
+    # ``parameter2``, ... and callers may provide those values as top-level
+    # grid arguments.  GridTable.build() later moves them into ``Grid.params``;
+    # include the same effective values here so construction-time validation
+    # cannot be bypassed by using the table-native input form.
+    effective_params = dict(params)
+    if not isinstance(data, Grid):
+        for param in allowed_params:
+            if param not in effective_params and data.get(param) is not None:
+                effective_params[param] = data[param]
+
+    supplied_params = {
+        str(key) for key, value in effective_params.items() if value is not None
+    }
+    missing_params: list[str] = []
+    for param in required_params:
+        supplied = param in supplied_params
+        if param == "standard_parallel":
+            supplied = supplied or (
+                {"standard_parallel1", "standard_parallel2"} <= supplied_params
+            )
+        elif param in {"standard_parallel1", "standard_parallel2"}:
+            supplied = supplied or "standard_parallel" in supplied_params
+        if not supplied:
+            missing_params.append(param)
+    if missing_params:
+        label = entry_name or cf_mapping_name or "<unknown>"
+        warnings.warn(
+            f"grid mapping {label!r} is missing table-declared "
+            f"parameter(s): {', '.join(missing_params)}. Table defaults will "
+            "be used when available.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+
+    for name, value in effective_params.items():
+        name = str(name)
+        if allowed_params and name not in allowed_params:
+            continue
+        if isinstance(value, Mapping):
+            value = value.get("value", value.get("values"))
+        if (
+            isinstance(value, (list, tuple))
+            and len(value) == 2
+            and isinstance(value[1], str)
+        ):
+            value = value[0]
+        if name in text_params:
+            if not isinstance(value, str):
+                label = entry_name or cf_mapping_name or "<unknown>"
+                raise TableValidationError(
+                    f"grid mapping {label!r} parameter {name!r} must be a string."
+                )
+            continue
+        arr = np.asarray(value)
+        values = arr.reshape(-1).tolist() if arr.ndim else [arr.item()]
+        for item in values:
+            try:
+                float(item)
+            except (TypeError, ValueError) as exc:
+                label = entry_name or cf_mapping_name or "<unknown>"
+                raise TableValidationError(
+                    f"grid mapping {label!r} parameter {name!r} must be numeric."
+                ) from exc
+
+    required_axes = entry.required_axis_names() if entry is not None else ()
+    if not required_axes:
+        return
+    assert entry is not None
+    if axes:
+        if len(axes) != len(required_axes):
+            raise TableValidationError(
+                f"grid mapping {entry.name!r} requires {len(required_axes)} "
+                f"grid axis/axes ({', '.join(required_axes)}) but "
+                f"{len(axes)} were supplied."
+            )
+        for index, (axis, expected) in enumerate(zip(axes, required_axes, strict=True)):
+            expected_text = str(expected)
+            if expected_text.upper() in {"X", "Y", "Z", "T"}:
+                matches = str(axis.axis or "").upper() == expected_text.upper()
+            else:
+                matches = expected_text in {
+                    str(value)
+                    for value in (
+                        axis.name,
+                        axis.table_entry,
+                        axis.axis_entry,
+                        axis.coordinate,
+                        axis.out_name,
+                        axis.generic_level_name,
+                    )
+                    if value
+                }
+            if not matches:
+                actual = axis.axis or axis.table_entry or axis.name or axis.out_name
+                raise TableValidationError(
+                    f"grid mapping {entry.name!r} requires grid axis "
+                    f"{expected!r} at position {index}; got {actual!r}."
+                )
+    elif dimensions is not None:
+        dims = (dimensions,) if isinstance(dimensions, str) else tuple(dimensions)
+        if len(dims) != len(required_axes):
+            raise TableValidationError(
+                f"grid mapping {entry.name!r} requires {len(required_axes)} "
+                f"grid axis/axes ({', '.join(required_axes)}) but "
+                f"dimensions={dims!r} declares {len(dims)}."
+            )
+
+
+def _validate_grid_coords(ds: xr.Dataset, grid: Grid) -> None:
+    """Verify that lat/lon/vertex coords declared by the grid were written."""
+
+    for name in ("latitude", "longitude"):
+        arr = getattr(grid, name)
+        if arr is None:
+            continue
+        if name not in ds.coords:
+            raise ValueError(
+                f"Grid coordinate {name!r} was not created in the dataset."
+            )
+    for field, var_name in (
+        ("latitude_vertices", "vertices_latitude"),
+        ("longitude_vertices", "vertices_longitude"),
+    ):
+        if getattr(grid, field) is None:
+            continue
+        if var_name not in ds.data_vars:
+            raise ValueError(
+                f"Grid vertex variable {var_name!r} was not created in the dataset."
+            )
+
+
+def _validate_grid_dimensions(
+    grid: Grid,
+    axes: Sequence[Axis],
+) -> None:
+    """Validate that grid dimensions correspond to spatial axes in the right order.
+
+    When ``grid.axes`` is non-empty the dimensional axes are already owned by
+    the grid; validation checks that each axis carries coordinate values and
+    that the lat/lon array shapes match the axis lengths in declared order.
+
+    When ``grid.axes`` is empty (name-based path) every name in
+    ``grid.dimensions`` must resolve to one of the supplied *axes* by any
+    recognised name variant, and the same shape checks apply.
+
+    Parameters
+    ----------
+    grid
+        Grid whose dimensional axes are to be validated.
+    axes
+        The axis objects supplied alongside the grid (non-grid axes such as
+        time).  Only consulted on the name-based path.
+
+    Raises
+    ------
+    TableValidationError
+        If a grid dimension name cannot be matched to any axis, or if the
+        lat/lon array size along a given axis index does not match the axis
+        length.
+    """
+    if getattr(grid, "axes", None):
+        # --- Axis-based path: grid owns its dimensional Axis objects -------
+        grid_axes = list(grid.axes)
+
+        lat = grid.latitude
+        lon = grid.longitude
+        for array, label in ((lat, "latitude"), (lon, "longitude")):
+            if array is None:
+                continue
+            arr = np.asarray(array)
+            for i, axis in enumerate(grid_axes):
+                axis_len = len(axis.values_array())
+                if arr.shape[i] != axis_len:
+                    dim_name = str(axis.out_name or axis.name)
+                    raise TableValidationError(
+                        f"Grid {label} array shape {arr.shape} does not match "
+                        f"the axis lengths implied by grid.axes. "
+                        f"Axis {dim_name!r} (index {i}) has {axis_len} "
+                        f"coordinate values but {label} has size "
+                        f"{arr.shape[i]} along that axis."
+                    )
+        return
+
+    # --- Name-based path: match dimension strings to supplied axes ----------
+    if not grid.dimensions:
+        return
+
+    # Build a lookup from every recognised name variant to the axis object.
+    name_to_axis: dict[str, Axis] = {}
+    for axis in axes:
+        for value in (
+            axis.name,
+            axis.table_entry,
+            axis.axis_entry,
+            axis.coordinate,
+            axis.out_name,
+            axis.generic_level_name,
+        ):
+            if value:
+                name_to_axis.setdefault(str(value), axis)
+
+    grid_dims = [str(d) for d in grid.dimensions]
+
+    for dim_name in grid_dims:
+        if dim_name not in name_to_axis:
+            raise TableValidationError(
+                f"Grid dimension {dim_name!r} does not correspond to any "
+                "of the supplied axes.  Each grid spatial dimension must "
+                "match an axis by name, out_name, or table_entry."
+            )
+
+    lat = grid.latitude
+    lon = grid.longitude
+    for array, label in ((lat, "latitude"), (lon, "longitude")):
+        if array is None:
+            continue
+        arr = np.asarray(array)
+        for i, dim_name in enumerate(grid_dims):
+            axis = name_to_axis[dim_name]
+            axis_len = len(axis.values_array())
+            if arr.shape[i] != axis_len:
+                raise TableValidationError(
+                    f"Grid {label} array shape {arr.shape} does not match "
+                    f"the axis lengths implied by grid dimensions "
+                    f"{grid_dims!r}. "
+                    f"Dimension {dim_name!r} (index {i}) has {axis_len} "
+                    f"coordinate values but {label} has size "
+                    f"{arr.shape[i]} along that axis."
+                )

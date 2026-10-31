@@ -1,11 +1,16 @@
+"""Shared calendar arithmetic, time formatting, and writer time-axis helpers."""
+
 from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any, Sequence
 
-import numpy as np
 import cftime
+import numpy as np
+
+if TYPE_CHECKING:
+    from .axis import Axis
 
 
 def decode_time_value(value: Any, units: Any, calendar: Any = "standard") -> Any | None:
@@ -134,4 +139,60 @@ def date_part(value: Any, precision: str) -> str:
     return (
         f"{value.year:04d}{value.month:02d}{value.day:02d}"
         f"{value.hour:02d}{value.minute:02d}{value.second:02d}"
+    )
+
+
+def find_time_axis(axes: Sequence[Axis]) -> tuple[int, Axis]:
+    """Return the time axis index and axis from a sequence of axes."""
+
+    for index, axis in enumerate(axes):
+        names = {
+            str(value).lower()
+            for value in (
+                axis.name,
+                axis.out_name,
+                axis.table_entry,
+                axis.axis_entry,
+                axis.coordinate,
+                axis.standard_name,
+            )
+            if value
+        }
+        if (
+            str(axis.axis or "").upper() == "T"
+            or "time" in names
+            or any(name.startswith("time") for name in names)
+        ):
+            return index, axis
+    raise ValueError(
+        "No time axis was found. Pass an axis with axis='T' or time-like axis metadata."
+    )
+
+
+def metadata_time_axis(axis: Axis) -> Axis:
+    values = axis.values_array()
+    value = values.reshape(-1)[0] if values.size else 0.0
+    value_item = value.item() if hasattr(value, "item") else value
+    updates: dict[str, Any] = {"values": [value_item]}
+    if axis.bounds is not None:
+        bounds = bounds_as_pairs(
+            axis.bounds_array(),
+            len(values) if values.size else 1,
+        )
+        updates["bounds"] = bounds[:1].tolist()
+    else:
+        updates["bounds"] = [[float(value) - 0.5, float(value) + 0.5]]
+    return axis.updated(**updates)
+
+
+def bounds_as_pairs(bounds: np.ndarray, time_len: int) -> np.ndarray:
+    if bounds.ndim == 1 and bounds.size == time_len + 1:
+        return np.stack((bounds[:-1], bounds[1:]), axis=-1)
+    if bounds.ndim == 1 and time_len == 1 and bounds.size == 2:
+        return bounds.reshape(1, 2)
+    if bounds.shape[:1] == (time_len,) and bounds.shape[-1] >= 2:
+        return bounds
+    raise ValueError(
+        f"time_bounds shape {bounds.shape!r} does not match time_values length "
+        f"{time_len}."
     )

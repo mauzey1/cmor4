@@ -12,8 +12,8 @@ import xarray as xr
 
 import cmor
 import cmor.exceptions
-import cmor.utils.time_utils as time_utils
-import cmor.utils.validation as axis_validation
+import cmor._time as time_utils
+import cmor.axis as axis_validation
 from dataset_helpers import open_created_dataset
 from table_helpers import cmip7_project
 

@@ -1,0 +1,1888 @@
+{
+  "exports": [
+    "Axis",
+    "AxisValidationError",
+    "ControlledVocabularyError",
+    "build_output_path",
+    "cmorize",
+    "create_dataset",
+    "ControlledVocabulary",
+    "DatasetWriter",
+    "Grid",
+    "open_dataset",
+    "DatasetInfo",
+    "ProjectTables",
+    "string_from_template",
+    "TableValidationError",
+    "Variable",
+    "VariableValidationError",
+    "write_netcdf",
+    "ZFactor"
+  ],
+  "modules": {
+    "cmor.axis": {
+      "Axis": {
+        "signature": [
+          [
+            "extra",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "name",
+            "KEYWORD_ONLY",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "values",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "dimensions",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "units",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "standard_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "long_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "axis",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "positive",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "formula",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "valid_min",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "valid_max",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "out_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "table_entry",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "axis_entry",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "coordinate",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "grid_table_entry",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "grid_coordinate",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "scalar",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "auxiliary",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "auxiliary_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "auxiliary_attrs",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "climatology",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "calendar",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "generic_level_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "z_factors",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "z_bounds_factors",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "requested",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "requested_bounds",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds_values",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "must_have_bounds",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "stored_direction",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "tolerance",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds_dim",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds_attrs",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "attrs",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "isgridaxis",
+            "KEYWORD_ONLY",
+            "False"
+          ]
+        ],
+        "methods": {
+          "to_dict": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "updated": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "updates",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "is_netcdf_attr_value": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_attrs": [
+            [
+              "values",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_array": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "include_units",
+              "KEYWORD_ONLY",
+              "True"
+            ]
+          ],
+          "auxiliary_attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "bounds_attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "values_array": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "bounds_array": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ]
+        },
+        "properties": []
+      }
+    },
+    "cmor.cv": {
+      "ControlledVocabulary": {
+        "signature": [
+          [
+            "data",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "path",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ]
+        ],
+        "methods": {
+          "from_file": [
+            [
+              "path",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "get_dataset_info": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "dataset",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "validate_dataset_info": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "dataset",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "check_required",
+              "KEYWORD_ONLY",
+              "True"
+            ]
+          ],
+          "value_allowed": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "key",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "dataset",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "controls": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "key",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ]
+        },
+        "properties": [
+          "filename"
+        ]
+      }
+    },
+    "cmor.dataset": {
+      "create_dataset": {
+        "signature": [
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axes",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "data",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "zfactors",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "grid",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "path",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "attrs",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "encoding",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "to_netcdf_kwargs",
+            "VAR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "create_dataset_from_validated_data": {
+        "signature": [
+          [
+            "ctx",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "data_array",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "attrs",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "encoding",
+            "KEYWORD_ONLY",
+            "None"
+          ]
+        ]
+      },
+      "write_netcdf": {
+        "signature": [
+          [
+            "ds",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "path",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ],
+          [
+            "to_netcdf_kwargs",
+            "VAR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "cmorize": {
+        "signature": [
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axes",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "data",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "zfactors",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "grid",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "path",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "attrs",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "encoding",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "to_netcdf_kwargs",
+            "VAR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "open_dataset": {
+        "signature": [
+          [
+            "path",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "kwargs",
+            "VAR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "build_output_path": {
+        "signature": [
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "ds",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ]
+        ]
+      },
+      "string_from_template": {
+        "signature": [
+          [
+            "template",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "ds",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ],
+          [
+            "separator",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ]
+        ]
+      }
+    },
+    "cmor.datasetinfo": {
+      "DatasetInfo": {
+        "signature": [
+          [
+            "data",
+            "POSITIONAL_ONLY",
+            "None"
+          ],
+          [
+            "extra",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "mip_era",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "activity_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "institution_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "source_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "experiment_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "grid_label",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "license_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "realization_index",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "initialization_index",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "physics_index",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "forcing_index",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "calendar",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "frequency",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "nominal_resolution",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "outpath",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "version",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "variant_label",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "realm",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "source_type",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "forcing",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "member_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "region",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "create_subdirectories",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "output_file_template",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "output_path_template",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "tracking_prefix",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "variable_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "branded_variable",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "branding_suffix",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "temporal_label",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "vertical_label",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "horizontal_label",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "area_label",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "table_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "table_info",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "parent_experiment_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "parent_activity_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "parent_mip_era",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "parent_source_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "parent_time_units",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "parent_variant_label",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "branch_time_in_child",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "branch_time_in_parent",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "project",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "user_info",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ]
+        ],
+        "methods": {
+          "to_dict": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "updated": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "updates",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "is_netcdf_attr_value": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_attrs": [
+            [
+              "values",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_array": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "from_mapping": [
+            [
+              "values",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "variant_label": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "global_attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "variable",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "extra_attrs",
+              "POSITIONAL_OR_KEYWORD",
+              "None"
+            ]
+          ],
+          "from_prepared": [
+            [
+              "values",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "project",
+              "KEYWORD_ONLY",
+              "None"
+            ],
+            [
+              "user_info",
+              "KEYWORD_ONLY",
+              "None"
+            ]
+          ]
+        },
+        "properties": []
+      }
+    },
+    "cmor.exceptions": {
+      "AxisValidationError": {
+        "signature": null,
+        "methods": {},
+        "properties": []
+      },
+      "ControlledVocabularyError": {
+        "signature": null,
+        "methods": {},
+        "properties": []
+      },
+      "TableValidationError": {
+        "signature": null,
+        "methods": {},
+        "properties": []
+      },
+      "VariableValidationError": {
+        "signature": null,
+        "methods": {},
+        "properties": []
+      }
+    },
+    "cmor.grid": {
+      "Grid": {
+        "signature": [
+          [
+            "extra",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "axes",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "dimensions",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "table_entry",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "mapping_entry",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "mapping_var",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "mapping_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "grid_mapping_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "coordinates",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "params",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "attrs",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "latitude",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "longitude",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "latitude_vertices",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "longitude_vertices",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "vertices_dim",
+            "KEYWORD_ONLY",
+            "'vertices'"
+          ]
+        ],
+        "methods": {
+          "to_dict": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "updated": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "updates",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "is_netcdf_attr_value": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_attrs": [
+            [
+              "values",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_array": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "variable_dimensions": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "variable",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "to_dataset_coords": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "spatial_dims",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "coord_table",
+              "POSITIONAL_OR_KEYWORD",
+              "None"
+            ]
+          ],
+          "mapping_attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ]
+        },
+        "properties": [
+          "has_mapping",
+          "variable_name"
+        ]
+      }
+    },
+    "cmor.tables": {
+      "ProjectTables": {
+        "signature": [
+          [
+            "cv_file",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable_tables",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "coordinate_table",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ],
+          [
+            "formula_table",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ],
+          [
+            "grid_table",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ],
+          [
+            "long_name_override_table",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ],
+          [
+            "cell_measures_table",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ]
+        ],
+        "methods": {
+          "from_directory": [
+            [
+              "root",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "cv_file",
+              "KEYWORD_ONLY",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "variable_tables",
+              "KEYWORD_ONLY",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "coordinate_table",
+              "KEYWORD_ONLY",
+              "None"
+            ],
+            [
+              "formula_table",
+              "KEYWORD_ONLY",
+              "None"
+            ],
+            [
+              "grid_table",
+              "KEYWORD_ONLY",
+              "None"
+            ],
+            [
+              "long_name_override_table",
+              "KEYWORD_ONLY",
+              "None"
+            ],
+            [
+              "cell_measures_table",
+              "KEYWORD_ONLY",
+              "None"
+            ]
+          ],
+          "dataset_info": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "dataset",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "variable": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "name",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "values",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "axis": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "name",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "values",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "scalar_axes_for": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "variable",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "axes",
+              "POSITIONAL_OR_KEYWORD",
+              "()"
+            ]
+          ],
+          "complete_axes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "variable",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "axes",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "grid": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "name",
+              "POSITIONAL_OR_KEYWORD",
+              "None"
+            ],
+            [
+              "axes",
+              "KEYWORD_ONLY",
+              "()"
+            ],
+            [
+              "values",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "zfactor": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "name",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "values",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "validate_dataset": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "dataset_info",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "variable",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "axes",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "grid",
+              "KEYWORD_ONLY",
+              "None"
+            ],
+            [
+              "zfactors",
+              "KEYWORD_ONLY",
+              "()"
+            ]
+          ],
+          "validate_global_attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "attrs",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ]
+        },
+        "properties": []
+      }
+    },
+    "cmor.variable": {
+      "Variable": {
+        "signature": [
+          [
+            "extra",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "name",
+            "KEYWORD_ONLY",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "variable_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "table_id",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "dimensions",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "units",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "standard_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "long_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "cell_methods",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "cell_measures",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "comment",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "flag_values",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "flag_meanings",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "missing_value",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "fill_value",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "chunksizes",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "chunks",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "coordinates",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "formula_terms",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "positive",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "frequency",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "realm",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "table_info",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "valid_min",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "valid_max",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "ok_min_mean_abs",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "ok_max_mean_abs",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "attrs",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ]
+        ],
+        "methods": {
+          "to_dict": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "updated": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "updates",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "is_netcdf_attr_value": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_attrs": [
+            [
+              "values",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_array": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "names": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "labels",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ]
+        },
+        "properties": []
+      }
+    },
+    "cmor.writer": {
+      "DatasetWriter": {
+        "signature": [
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axes",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "path",
+            "POSITIONAL_OR_KEYWORD",
+            "None"
+          ],
+          [
+            "zfactors",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "grid",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "existing",
+            "KEYWORD_ONLY",
+            "'error'"
+          ],
+          [
+            "encoding",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "attrs",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "staging_dir",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "to_netcdf_kwargs",
+            "VAR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ],
+        "methods": {
+          "write": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "data",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "time_values",
+              "KEYWORD_ONLY",
+              "None"
+            ],
+            [
+              "time_bounds",
+              "KEYWORD_ONLY",
+              "None"
+            ],
+            [
+              "zfactors",
+              "KEYWORD_ONLY",
+              "None"
+            ]
+          ],
+          "close": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "preserve_definition",
+              "KEYWORD_ONLY",
+              "False"
+            ]
+          ]
+        },
+        "properties": []
+      }
+    },
+    "cmor.zfactor": {
+      "ZFactor": {
+        "signature": [
+          [
+            "extra",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "name",
+            "KEYWORD_ONLY",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "values",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "dimensions",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "units",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "standard_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "long_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "out_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "table_entry",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "formula_entry",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds_name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds_dim",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "bounds_attrs",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ],
+          [
+            "valid_min",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "valid_max",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "ok_min_mean_abs",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "ok_max_mean_abs",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "attrs",
+            "KEYWORD_ONLY",
+            "<factory>"
+          ]
+        ],
+        "methods": {
+          "to_dict": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "updated": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "updates",
+              "VAR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "is_netcdf_attr_value": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_attrs": [
+            [
+              "values",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "netcdf_array": [
+            [
+              "value",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "bounds_attributes": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "values_array": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "bounds_array": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ]
+        },
+        "properties": []
+      }
+    }
+  }
+}

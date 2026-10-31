@@ -59,15 +59,19 @@ import xarray as xr
 
 from cmor import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
 from dataset_helpers import open_created_dataset
+from cmor._assembly import _collect_external_variables
 from cmor.dataset import (
-    _collect_external_variables,
     build_output_path,
     create_dataset,
     write_netcdf,
 )
 from cmor.exceptions import AxisValidationError, ControlledVocabularyError
-from cmor.utils.dataset_metadata import DatasetMetadata
-from cmor.utils.validation import _is_time_axis, _validate_time_interval, validate_axes
+from cmor._metadata import DatasetMetadata
+from cmor.axis import (
+    _is_time_axis,
+    _validate_time_interval,
+    _validate_axes as validate_axes,
+)
 from table_helpers import cmip7_project, drcdp_project, obs4mips_project
 import test_cmor as _tc4
 
@@ -562,7 +566,9 @@ class TestVariantIndexValidation(unittest.TestCase):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
             cv._validate_variant_indices(
-                _metadata({"realization_index": "1209374928349823498274987234987"})
+                _metadata({
+                    "realization_index": "1209374928349823498274987234987"
+                }).to_dict()
             )
         self.assertIn("realization_index", str(ctx.exception))
 
@@ -570,18 +576,22 @@ class TestVariantIndexValidation(unittest.TestCase):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError):
             cv._validate_variant_indices(
-                _metadata({"initialization_index": str(2**31)})
+                _metadata({"initialization_index": str(2**31)}).to_dict()
             )
 
     def test_physics_index_overflow_raises(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError):
-            cv._validate_variant_indices(_metadata({"physics_index": str(2**63)}))
+            cv._validate_variant_indices(
+                _metadata({"physics_index": str(2**63)}).to_dict()
+            )
 
     def test_forcing_index_overflow_raises(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError):
-            cv._validate_variant_indices(_metadata({"forcing_index": str(2**31)}))
+            cv._validate_variant_indices(
+                _metadata({"forcing_index": str(2**31)}).to_dict()
+            )
 
     # -----------------------------------------------------------------------
     # Overflow error cases — prefixed-string style (CMIP7)
@@ -592,13 +602,17 @@ class TestVariantIndexValidation(unittest.TestCase):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError):
             cv._validate_variant_indices(
-                _metadata({"realization_index": "r1209374928349823498274987234987"})
+                _metadata({
+                    "realization_index": "r1209374928349823498274987234987"
+                }).to_dict()
             )
 
     def test_prefixed_forcing_index_overflow_raises(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError):
-            cv._validate_variant_indices(_metadata({"forcing_index": f"f{2**31}"}))
+            cv._validate_variant_indices(
+                _metadata({"forcing_index": f"f{2**31}"}).to_dict()
+            )
 
     # -----------------------------------------------------------------------
     # Non-integer / zero / negative error cases
@@ -608,25 +622,33 @@ class TestVariantIndexValidation(unittest.TestCase):
         """Zero is not a valid realization index (must be ≥1)."""
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv._validate_variant_indices(_metadata({"realization_index": "0"}))
+            cv._validate_variant_indices(
+                _metadata({"realization_index": "0"}).to_dict()
+            )
         self.assertIn("realization_index", str(ctx.exception))
 
     def test_negative_index_raises(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError):
-            cv._validate_variant_indices(_metadata({"realization_index": "-1"}))
+            cv._validate_variant_indices(
+                _metadata({"realization_index": "-1"}).to_dict()
+            )
 
     def test_non_integer_realization_index_raises(self):
         """A completely non-numeric value must raise."""
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv._validate_variant_indices(_metadata({"realization_index": "ensemble_1"}))
+            cv._validate_variant_indices(
+                _metadata({"realization_index": "ensemble_1"}).to_dict()
+            )
         self.assertIn("realization_index", str(ctx.exception))
 
     def test_float_string_raises(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError):
-            cv._validate_variant_indices(_metadata({"realization_index": "1.5"}))
+            cv._validate_variant_indices(
+                _metadata({"realization_index": "1.5"}).to_dict()
+            )
 
     # -----------------------------------------------------------------------
     # variant_label format — explicit value validated via CV constraint
@@ -659,7 +681,7 @@ class TestVariantIndexValidation(unittest.TestCase):
         # Malformed label (missing 'f' component) is rejected.
         with self.assertRaises(ControlledVocabularyError) as ctx:
             cv_with_constraint._validate_variant_indices(
-                _metadata({"variant_label": "r1i1p1"})
+                _metadata({"variant_label": "r1i1p1"}).to_dict()
             )
         self.assertIn("variant_label", str(ctx.exception))
 
@@ -667,7 +689,7 @@ class TestVariantIndexValidation(unittest.TestCase):
         cv_no_constraint = self._cv()  # _MINIMAL_CV has no variant_label entry
         # This must NOT raise — obs4MIPs-style free-form labels are allowed.
         cv_no_constraint._validate_variant_indices(
-            _metadata({"variant_label": "CMORGuide"})
+            _metadata({"variant_label": "CMORGuide"}).to_dict()
         )
 
     def test_wrong_prefix_on_index_is_caught_before_assembly(self):
@@ -683,7 +705,7 @@ class TestVariantIndexValidation(unittest.TestCase):
                     "initialization_index": "i1",
                     "physics_index": "p1",
                     "forcing_index": "r1",  # 'r' prefix is wrong for forcing_index
-                })
+                }).to_dict()
             )
         # Should be caught at the integer-parsing level for forcing_index,
         # since stripping 'f' from 'r1' leaves 'r1' which is not an integer.
@@ -701,16 +723,18 @@ class TestVariantIndexValidation(unittest.TestCase):
                 "initialization_index": "1",
                 "physics_index": "1",
                 "forcing_index": "1",
-            })
+            }).to_dict()
         )
 
     def test_max_int32_value_passes(self):
         cv = self._cv()
-        cv._validate_variant_indices(_metadata({"realization_index": str(2**31 - 1)}))
+        cv._validate_variant_indices(
+            _metadata({"realization_index": str(2**31 - 1)}).to_dict()
+        )
 
     def test_large_but_valid_index_passes(self):
         cv = self._cv()
-        cv._validate_variant_indices(_metadata({"realization_index": "9999"}))
+        cv._validate_variant_indices(_metadata({"realization_index": "9999"}).to_dict())
 
     # -----------------------------------------------------------------------
     # Happy-path cases — prefixed strings (CMIP7 style)
@@ -724,7 +748,7 @@ class TestVariantIndexValidation(unittest.TestCase):
                 "initialization_index": "i1",
                 "physics_index": "p1",
                 "forcing_index": "f1",
-            })
+            }).to_dict()
         )
 
     def test_valid_prefixed_large_indices_pass(self):
@@ -735,12 +759,14 @@ class TestVariantIndexValidation(unittest.TestCase):
                 "initialization_index": "i3",
                 "physics_index": "p2",
                 "forcing_index": "f4",
-            })
+            }).to_dict()
         )
 
     def test_max_int32_prefixed_passes(self):
         cv = self._cv()
-        cv._validate_variant_indices(_metadata({"realization_index": f"r{2**31 - 1}"}))
+        cv._validate_variant_indices(
+            _metadata({"realization_index": f"r{2**31 - 1}"}).to_dict()
+        )
 
     # -----------------------------------------------------------------------
     # Edge cases
@@ -748,23 +774,25 @@ class TestVariantIndexValidation(unittest.TestCase):
 
     def test_indices_absent_passes(self):
         cv = self._cv()
-        cv._validate_variant_indices(_metadata({}))
+        cv._validate_variant_indices(_metadata({}).to_dict())
 
     def test_explicit_variant_label_valid_passes(self):
         cv = self._cv()
-        cv._validate_variant_indices(_metadata({"variant_label": "r3i2p1f4"}))
+        cv._validate_variant_indices(_metadata({"variant_label": "r3i2p1f4"}).to_dict())
 
     def test_explicit_variant_label_large_indices_passes(self):
         cv = self._cv()
-        cv._validate_variant_indices(_metadata({"variant_label": "r100i200p50f3"}))
+        cv._validate_variant_indices(
+            _metadata({"variant_label": "r100i200p50f3"}).to_dict()
+        )
 
     def test_none_value_skipped(self):
         cv = self._cv()
-        cv._validate_variant_indices(_metadata({"realization_index": None}))
+        cv._validate_variant_indices(_metadata({"realization_index": None}).to_dict())
 
     def test_empty_string_value_skipped(self):
         cv = self._cv()
-        cv._validate_variant_indices(_metadata({"realization_index": ""}))
+        cv._validate_variant_indices(_metadata({"realization_index": ""}).to_dict())
 
     # -----------------------------------------------------------------------
     # Integration via ProjectTables
@@ -865,26 +893,30 @@ class TestForcingTermsValidation(unittest.TestCase):
     def test_unknown_single_token_raises(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv._validate_forcing_terms(_metadata({"forcing": "UNKNOWN"}))
+            cv._validate_forcing_terms(_metadata({"forcing": "UNKNOWN"}).to_dict())
         self.assertIn("UNKNOWN", str(ctx.exception))
 
     def test_unknown_token_in_multi_token_string_raises(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv._validate_forcing_terms(_metadata({"forcing": "GHG Oz BADTERM"}))
+            cv._validate_forcing_terms(
+                _metadata({"forcing": "GHG Oz BADTERM"}).to_dict()
+            )
         self.assertIn("BADTERM", str(ctx.exception))
 
     def test_comma_separated_with_unknown_token_raises(self):
         """Comma-separated format is also supported (CMOR3 parity)."""
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv._validate_forcing_terms(_metadata({"forcing": "GHG, Oz, BADTERM"}))
+            cv._validate_forcing_terms(
+                _metadata({"forcing": "GHG, Oz, BADTERM"}).to_dict()
+            )
         self.assertIn("BADTERM", str(ctx.exception))
 
     def test_error_message_includes_valid_values(self):
         cv = self._cv()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv._validate_forcing_terms(_metadata({"forcing": "JUNK"}))
+            cv._validate_forcing_terms(_metadata({"forcing": "JUNK"}).to_dict())
         msg = str(ctx.exception)
         self.assertIn("GHG", msg)  # valid values listed
 
@@ -894,19 +926,21 @@ class TestForcingTermsValidation(unittest.TestCase):
 
     def test_single_valid_token_passes(self):
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": "GHG"}))
+        cv._validate_forcing_terms(_metadata({"forcing": "GHG"}).to_dict())
 
     def test_space_separated_valid_tokens_pass(self):
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": "GHG Oz SA Sl Vl BC OC"}))
+        cv._validate_forcing_terms(
+            _metadata({"forcing": "GHG Oz SA Sl Vl BC OC"}).to_dict()
+        )
 
     def test_comma_separated_valid_tokens_pass(self):
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": "GHG, Oz, SA"}))
+        cv._validate_forcing_terms(_metadata({"forcing": "GHG, Oz, SA"}).to_dict())
 
     def test_mixed_comma_and_space_separated_tokens_pass(self):
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": "GHG, Oz SA, Vl"}))
+        cv._validate_forcing_terms(_metadata({"forcing": "GHG, Oz SA, Vl"}).to_dict())
 
     def test_annotation_in_parentheses_is_stripped(self):
         """Parenthetical annotation is truncated before tokenising — CMOR3 parity.
@@ -917,7 +951,7 @@ class TestForcingTermsValidation(unittest.TestCase):
         """
         cv = self._cv()
         cv._validate_forcing_terms(
-            _metadata({"forcing": "GHG Oz (GHG = CO2, N2O, CH4, UNKNOWNGAS)"})
+            _metadata({"forcing": "GHG Oz (GHG = CO2, N2O, CH4, UNKNOWNGAS)"}).to_dict()
         )
 
     def test_annotation_truncation_not_just_removal(self):
@@ -930,12 +964,16 @@ class TestForcingTermsValidation(unittest.TestCase):
         cv = self._cv()
         # 'Oz' appears after the closing paren; CMOR3 truncates at '(' so
         # only 'GHG' is validated — 'Oz' and 'BADTERM' are both dropped.
-        cv._validate_forcing_terms(_metadata({"forcing": "GHG (note BADTERM here) Oz"}))
+        cv._validate_forcing_terms(
+            _metadata({"forcing": "GHG (note BADTERM here) Oz"}).to_dict()
+        )
 
     def test_comma_replaced_with_space_before_truncation(self):
         """Commas become spaces before the '(' truncation step."""
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": "GHG,Oz,SA (annotation)"}))
+        cv._validate_forcing_terms(
+            _metadata({"forcing": "GHG,Oz,SA (annotation)"}).to_dict()
+        )
 
     # -----------------------------------------------------------------------
     # Edge cases — no-ops
@@ -945,28 +983,30 @@ class TestForcingTermsValidation(unittest.TestCase):
         """CMIP7 / obs4MIPs CVs have no forcing key — validation is a no-op."""
         cv = self._cv_no_forcing()
         # Even a completely unknown token should not raise.
-        cv._validate_forcing_terms(_metadata({"forcing": "ANYTHING_AT_ALL"}))
+        cv._validate_forcing_terms(_metadata({"forcing": "ANYTHING_AT_ALL"}).to_dict())
 
     def test_dataset_without_forcing_attribute_passes(self):
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({}))
+        cv._validate_forcing_terms(_metadata({}).to_dict())
 
     def test_empty_forcing_string_passes(self):
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": ""}))
+        cv._validate_forcing_terms(_metadata({"forcing": ""}).to_dict())
 
     def test_none_forcing_passes(self):
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": None}))
+        cv._validate_forcing_terms(_metadata({"forcing": None}).to_dict())
 
     def test_only_whitespace_passes(self):
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": "   "}))
+        cv._validate_forcing_terms(_metadata({"forcing": "   "}).to_dict())
 
     def test_only_annotation_passes(self):
         """A forcing string that is purely an annotation (starts with '(')."""
         cv = self._cv()
-        cv._validate_forcing_terms(_metadata({"forcing": "(just an annotation)"}))
+        cv._validate_forcing_terms(
+            _metadata({"forcing": "(just an annotation)"}).to_dict()
+        )
 
     def test_forcing_dict_cv_also_works(self):
         """CV forcing defined as a mapping (CMIP6 style)."""
@@ -980,9 +1020,11 @@ class TestForcingTermsValidation(unittest.TestCase):
                 },
             }
         })
-        cv_dict._validate_forcing_terms(_metadata({"forcing": "GHG Oz"}))
+        cv_dict._validate_forcing_terms(_metadata({"forcing": "GHG Oz"}).to_dict())
         with self.assertRaises(ControlledVocabularyError):
-            cv_dict._validate_forcing_terms(_metadata({"forcing": "GHG UNKNOWN"}))
+            cv_dict._validate_forcing_terms(
+                _metadata({"forcing": "GHG UNKNOWN"}).to_dict()
+            )
 
     # -----------------------------------------------------------------------
     # Integration via validate_dataset and ProjectTables
@@ -1448,10 +1490,12 @@ class TestCVStructureValidation(unittest.TestCase):
             "CV": {"nominal_resolution": ["100 km", "250 km"]}
         })
         # Correct CV: "100 km" passes, the key-name string does not.
-        cv_correct._validate_dataset_values(_metadata({"nominal_resolution": "100 km"}))
+        cv_correct._validate_dataset_values(
+            _metadata({"nominal_resolution": "100 km"}).to_dict()
+        )
         with self.assertRaises(ControlledVocabularyError):
             cv_correct._validate_dataset_values(
-                _metadata({"nominal_resolution": "nominal_resolution"})
+                _metadata({"nominal_resolution": "nominal_resolution"}).to_dict()
             )
 
         cv_broken = self._make_broken_cv({
@@ -1462,11 +1506,11 @@ class TestCVStructureValidation(unittest.TestCase):
         # a key of the inner dict).
         with self.assertRaises(ControlledVocabularyError):
             cv_broken._validate_dataset_values(
-                _metadata({"nominal_resolution": "100 km"})
+                _metadata({"nominal_resolution": "100 km"}).to_dict()
             )
         # The key-name string passes silently — wrong.
         cv_broken._validate_dataset_values(
-            _metadata({"nominal_resolution": "nominal_resolution"})
+            _metadata({"nominal_resolution": "nominal_resolution"}).to_dict()
         )
 
     # -----------------------------------------------------------------------
@@ -1996,18 +2040,18 @@ class TestGridLabelFallback(unittest.TestCase):
         """gr-0 is rejected — mirrors CMOR3 test_python_CMIP6_CV_badgridgr."""
         cv = self._cv_without_grid_label()
         with self.assertRaises(ControlledVocabularyError) as ctx:
-            cv._validate_dataset_values(_metadata({"grid_label": "gr-0"}))
+            cv._validate_dataset_values(_metadata({"grid_label": "gr-0"}).to_dict())
         self.assertIn("gr-0", str(ctx.exception))
 
     def test_uppercase_label_rejected_by_fallback(self):
         cv = self._cv_without_grid_label()
         with self.assertRaises(ControlledVocabularyError):
-            cv._validate_dataset_values(_metadata({"grid_label": "GN"}))
+            cv._validate_dataset_values(_metadata({"grid_label": "GN"}).to_dict())
 
     def test_digit_first_label_rejected_by_fallback(self):
         cv = self._cv_without_grid_label()
         with self.assertRaises(ControlledVocabularyError):
-            cv._validate_dataset_values(_metadata({"grid_label": "1gn"}))
+            cv._validate_dataset_values(_metadata({"grid_label": "1gn"}).to_dict())
 
     def test_wrong_starting_character_rejected(self):
         """Labels starting with something other than g, c, or r are invalid."""
@@ -2015,20 +2059,24 @@ class TestGridLabelFallback(unittest.TestCase):
         for bad in ("abc", "xgn", "zonal", "native"):
             with self.subTest(label=bad):
                 with self.assertRaises(ControlledVocabularyError):
-                    cv._validate_dataset_values(_metadata({"grid_label": bad}))
+                    cv._validate_dataset_values(
+                        _metadata({"grid_label": bad}).to_dict()
+                    )
 
     def test_special_characters_rejected(self):
         cv = self._cv_without_grid_label()
         for bad in ("gn!", "gr_1", "g.999", "c@n"):
             with self.subTest(label=bad):
                 with self.assertRaises(ControlledVocabularyError):
-                    cv._validate_dataset_values(_metadata({"grid_label": bad}))
+                    cv._validate_dataset_values(
+                        _metadata({"grid_label": bad}).to_dict()
+                    )
 
     def test_empty_string_not_checked(self):
         """An empty or None grid_label skips the fallback check."""
         cv = self._cv_without_grid_label()
-        cv._validate_dataset_values(_metadata({"grid_label": ""}))
-        cv._validate_dataset_values(_metadata({}))
+        cv._validate_dataset_values(_metadata({"grid_label": ""}).to_dict())
+        cv._validate_dataset_values(_metadata({}).to_dict())
 
     # -----------------------------------------------------------------------
     # Fallback happy-path: labels that should pass
@@ -2038,18 +2086,18 @@ class TestGridLabelFallback(unittest.TestCase):
         cv = self._cv_without_grid_label()
         for valid in ("gn", "gr", "gr1", "gr2", "cn", "rn", "gna", "grz"):
             with self.subTest(label=valid):
-                cv._validate_dataset_values(_metadata({"grid_label": valid}))
+                cv._validate_dataset_values(_metadata({"grid_label": valid}).to_dict())
 
     def test_cmip7_style_numeric_passes(self):
         cv = self._cv_without_grid_label()
         for valid in ("g100", "g101", "g999", "g1"):
             with self.subTest(label=valid):
-                cv._validate_dataset_values(_metadata({"grid_label": valid}))
+                cv._validate_dataset_values(_metadata({"grid_label": valid}).to_dict())
 
     def test_single_letter_label_passes(self):
         """A label consisting of just the starting character is valid."""
         cv = self._cv_without_grid_label()
-        cv._validate_dataset_values(_metadata({"grid_label": "g"}))
+        cv._validate_dataset_values(_metadata({"grid_label": "g"}).to_dict())
 
     # -----------------------------------------------------------------------
     # CV definition takes precedence over the fallback
@@ -2059,10 +2107,10 @@ class TestGridLabelFallback(unittest.TestCase):
         """When the CV defines grid_label, only CV-listed values are accepted."""
         cv = self._cv_with_grid_label()
         # 'gn' is in the CV → accepted
-        cv._validate_dataset_values(_metadata({"grid_label": "gn"}))
+        cv._validate_dataset_values(_metadata({"grid_label": "gn"}).to_dict())
         # 'gr' is NOT in the CV (only 'gr1' is) → rejected by CV, not fallback
         with self.assertRaises(ControlledVocabularyError):
-            cv._validate_dataset_values(_metadata({"grid_label": "gr"}))
+            cv._validate_dataset_values(_metadata({"grid_label": "gr"}).to_dict())
 
     def test_cv_defined_value_outside_fallback_regex_is_accepted(self):
         """A CV-defined label that wouldn't pass the fallback regex is still accepted.
@@ -2080,18 +2128,20 @@ class TestGridLabelFallback(unittest.TestCase):
             }
         })
         # 'custom-label' is explicitly in the CV → accepted
-        cv._validate_dataset_values(_metadata({"grid_label": "custom-label"}))
+        cv._validate_dataset_values(_metadata({"grid_label": "custom-label"}).to_dict())
 
     def test_cmip7_real_project_grid_label_validated_by_cv(self):
         """With real CMIP7 tables, grid_label is validated against the CV dict."""
         project = cmip7_project()
 
         # A CMIP7 CV-defined label passes
-        project.cv._validate_dataset_values(_metadata({"grid_label": "g101"}))
+        project.cv._validate_dataset_values(_metadata({"grid_label": "g101"}).to_dict())
 
         # A label not in the CMIP7 CV dict is rejected (by CV, not fallback)
         with self.assertRaises(ControlledVocabularyError):
-            project.cv._validate_dataset_values(_metadata({"grid_label": "gn"}))
+            project.cv._validate_dataset_values(
+                _metadata({"grid_label": "gn"}).to_dict()
+            )
 
     def test_fallback_not_applied_when_cmip7_cv_defines_grid_label(self):
         """The fallback must not run when the CMIP7 CV enumerates grid_label.
@@ -2101,7 +2151,7 @@ class TestGridLabelFallback(unittest.TestCase):
         """
         project = cmip7_project()
         # 'g100' is in the CMIP7 CV — should pass cleanly, no fallback noise
-        project.cv._validate_dataset_values(_metadata({"grid_label": "g100"}))
+        project.cv._validate_dataset_values(_metadata({"grid_label": "g100"}).to_dict())
 
 
 if __name__ == "__main__":

@@ -1,43 +1,24 @@
+"""Incremental writer state and its private temporary Zarr storage."""
+
 from __future__ import annotations
 
-from dataclasses import replace
-import os
+import shutil
+import tempfile
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
 
+import dask.array as da
 import numpy as np
-import xarray as xr
+import zarr
 
+from . import _assembly, _netcdf
+from ._time import bounds_as_pairs, find_time_axis, metadata_time_axis
 from .axis import Axis
-from .dataset import (
-    build_output_path,
-    create_dataset_from_validated_data,
-    write_netcdf,
-)
+from .dataset import build_output_path
 from .datasetinfo import DatasetInfo
 from .grid import Grid
-from .utils.validation import (
-    named_dimensions,
-    validate_data_chunk,
-    validate_metadata,
-    validate_variable_values,
-)
-from .utils.writer_helpers import (
-    APPEND_IGNORED_GLOBAL_ATTRS,
-    APPEND_IGNORED_VARIABLE_ATTRS,
-    array_values_equal,
-    attribute_diff_messages,
-    bounds_as_pairs,
-    find_time_axis,
-    metadata_time_axis,
-    normalize_attrs,
-    prepare_append_attrs,
-    prepare_append_encoding,
-    temporary_netcdf_path,
-    time_coord_name,
-)
-from .utils.zarr_staging import ZarrStagingStore
-from .variable import Variable
+from .variable import Variable, _validate_variable_values
 from .zfactor import ZFactor
 
 
@@ -292,7 +273,7 @@ class DatasetWriter:
         metadata_axes = list(input_axes)
         metadata_axes[input_time_index] = metadata_time_axis(input_time_axis)
 
-        self._ctx = validate_metadata(
+        self._ctx = _assembly.validate_metadata(
             dataset,
             variable,
             metadata_axes,
@@ -320,7 +301,7 @@ class DatasetWriter:
             else None
         )
 
-        self._staging = ZarrStagingStore.create(staging_dir)
+        self._staging = _ZarrStagingStore.create(staging_dir)
         self.staging_root = self._staging.root
         self.staging_path = self._staging.path
 
@@ -450,14 +431,14 @@ class DatasetWriter:
                 "for every write."
             )
         chunk_axes = self._axes_with_time(chunk_time_values, chunk_time_bounds)
-        chunk_ctx = validate_metadata(
+        chunk_ctx = _assembly.validate_metadata(
             self._ctx.dataset,
             self._ctx.variable,
             chunk_axes,
             self._ctx.zfactors,
             self._ctx.grid,
         )
-        validated_data = validate_data_chunk(chunk_ctx, data_array)
+        validated_data = _assembly.validate_data_chunk(chunk_ctx, data_array)
         self._validate_chunk_shape(validated_data, len(chunk_time_values))
         zfactor_chunks = self._validate_zfactor_chunks(
             zfactors,
@@ -564,52 +545,55 @@ class DatasetWriter:
         if self._staging.array(var_name) is None or self._write_count == 0:
             raise ValueError("Cannot close DatasetWriter before any data is written.")
 
-        try:
-            final_axes = self._final_axes()
-            final_ctx = validate_metadata(
-                self._ctx.dataset,
-                self._ctx.variable,
-                final_axes,
-                self._ctx.zfactors,
-                self._ctx.grid,
-            )
-            final_ctx = replace(final_ctx, zfactors=self._final_zfactors(final_ctx))
-            data = self._staging.lazy_array(var_name)
-            ds = create_dataset_from_validated_data(
-                final_ctx,
-                data,
-                attrs=self.attrs,
-                encoding=self.encoding,
-            )
-            output_path = self.path or build_output_path(
-                self._ctx.dataset,
-                self._ctx.variable,
+        final_axes = self._final_axes()
+        final_ctx = _assembly.validate_metadata(
+            self._ctx.dataset,
+            self._ctx.variable,
+            final_axes,
+            self._ctx.zfactors,
+            self._ctx.grid,
+        )
+        final_ctx = replace(final_ctx, zfactors=self._final_zfactors(final_ctx))
+        data = self._staging.lazy_array(var_name)
+        ds = _assembly.build_dataset(
+            final_ctx,
+            data,
+            attrs=self.attrs,
+            encoding=self.encoding,
+        )
+        output_path = self.path or build_output_path(
+            self._ctx.dataset,
+            self._ctx.variable,
+            ds,
+        )
+        if self.existing == "append":
+            output_path = _netcdf.append_to_existing(
+                output_path,
                 ds,
+                dataset=self._ctx.dataset,
+                variable=self._ctx.variable,
+                time_dim=self._time_dim,
+                time_axis=self._time_axis,
+                to_netcdf_kwargs=self.to_netcdf_kwargs,
             )
-            if self.existing == "append":
-                output_path = self._append_to_existing(output_path, ds)
-            elif self.existing == "error" and output_path.exists():
-                raise FileExistsError(
-                    f"Output file {str(output_path)!r} already exists. "
-                    "Use existing='replace' to overwrite it."
-                )
-            else:
-                output_path = write_netcdf(
-                    ds,
-                    self._ctx.dataset,
-                    self._ctx.variable,
-                    path=output_path,
-                    **self.to_netcdf_kwargs,
-                )
-        except Exception:
-            raise
+        elif self.existing == "error" and output_path.exists():
+            raise FileExistsError(
+                f"Output file {str(output_path)!r} already exists. "
+                "Use existing='replace' to overwrite it."
+            )
         else:
-            if preserve_definition:
-                self._prepare_next_segment()
-            else:
-                self._closed = True
-                self._staging.cleanup()
-            return output_path
+            output_path = _netcdf.write_dataset(
+                ds,
+                self._ctx.dataset,
+                output_path,
+                **self.to_netcdf_kwargs,
+            )
+        if preserve_definition:
+            self._prepare_next_segment()
+        else:
+            self._closed = True
+            self._staging.cleanup()
+        return output_path
 
     def __enter__(self) -> DatasetWriter:
         return self
@@ -725,12 +709,6 @@ class DatasetWriter:
         data: np.ndarray,
         chunk_time_len: int,
     ) -> None:
-        if data.ndim != len(self._ctx.dims):
-            expected_dims = " x ".join(self._ctx.dims) if self._ctx.dims else "scalar"
-            raise ValueError(
-                f"Data for {self._ctx.variable.names()[0]!r} has {data.ndim} "
-                f"dimensions, but variable dimensions resolve to {expected_dims!r}."
-            )
         expected_shape = []
         for index, dim in enumerate(self._ctx.dims):
             if index == self._time_dim_index:
@@ -854,7 +832,7 @@ class DatasetWriter:
                 dims,
                 chunk_time_len,
             )
-            validate_variable_values(
+            _validate_variable_values(
                 zfactor,
                 chunk_ctx.axes,
                 data,
@@ -933,248 +911,90 @@ class DatasetWriter:
         return tuple(final_zfactors)
 
     def _zfactor_dims(self, zfactor: ZFactor) -> tuple[str, ...]:
-        return named_dimensions(zfactor.dimensions or (), self._ctx.axis_dims)
+        return _assembly.named_dimensions(zfactor.dimensions or (), self._ctx.axis_dims)
 
     def _final_axes(self) -> tuple[Axis, ...]:
-        axes = list(self._ctx.axes)
         values = np.concatenate(self._time_values, axis=0)
-        updates: dict[str, Any] = {"values": values.tolist()}
+        bounds = None
         if self._saw_time_bounds:
             if len(self._time_bounds) != len(self._time_values):
                 raise ValueError(
                     "time_bounds must be supplied for every write or omitted "
                     "for every write."
                 )
-            updates["bounds"] = np.concatenate(self._time_bounds, axis=0).tolist()
-        elif self._time_axis.bounds is not None:
-            updates["bounds"] = None
-        axes[self._time_axis_index] = self._time_axis.updated(**updates)
-        return tuple(axes)
+            bounds = np.concatenate(self._time_bounds, axis=0)
+        return self._axes_with_time(values, bounds)
 
-    def _append_to_existing(self, output_path: Path, new_ds: xr.Dataset) -> Path:
-        if not output_path.exists():
-            raise FileNotFoundError(
-                f"Cannot append because output file {str(output_path)!r} "
-                "does not exist."
+
+@dataclass
+class _ZarrStagingStore:
+    """Manage temporary Zarr arrays used by DatasetWriter."""
+
+    root: Path
+    path: Path
+    _group: Any
+    _arrays: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def create(cls, staging_dir: str | Path | None = None) -> _ZarrStagingStore:
+        root = Path(
+            tempfile.mkdtemp(
+                prefix="cmor-datasetwriter-",
+                dir=str(staging_dir) if staging_dir is not None else None,
             )
-
-        temp_path: Path | None = None
-        check_path: Path | None = None
-        existing_ds = xr.open_dataset(
-            output_path,
-            decode_times=False,
-            mask_and_scale=False,
         )
-        existing_check_ds = xr.open_dataset(
-            output_path,
-            decode_times=False,
-            mask_and_scale=False,
-            decode_coords=False,
-        )
-        new_check_ds: xr.Dataset | None = None
-        try:
-            check_path = temporary_netcdf_path(output_path)
-            write_netcdf(
-                new_ds,
-                self._ctx.dataset,
-                self._ctx.variable,
-                path=check_path,
-                **self.to_netcdf_kwargs,
+        path = root / "staging.zarr"
+        return cls(root=root, path=path, _group=zarr.open_group(str(path), mode="w"))
+
+    def append(self, name: str, data: np.ndarray, time_dim_index: int) -> Any:
+        array = self._arrays.get(name)
+        if array is None:
+            shape = list(data.shape)
+            shape[time_dim_index] = 0
+            chunks = tuple(max(1, int(size)) for size in data.shape)
+            create = (
+                self._group.create_array
+                if hasattr(self._group, "create_array")
+                else self._group.create_dataset
             )
-            if not check_path.exists() or check_path.stat().st_size == 0:
-                raise OSError(
-                    "Append compatibility check did not create a valid "
-                    f"temporary file {str(check_path)!r}."
-                )
-            new_check_ds = xr.open_dataset(
-                check_path,
-                decode_times=False,
-                mask_and_scale=False,
-                decode_coords=False,
+            array = create(name, shape=tuple(shape), chunks=chunks, dtype=data.dtype)
+
+        new_shape = list(array.shape)
+        start = int(new_shape[time_dim_index])
+        stop = start + int(data.shape[time_dim_index])
+        new_shape[time_dim_index] = stop
+        array.resize(tuple(new_shape))
+        index = [slice(None)] * data.ndim
+        index[time_dim_index] = slice(start, stop)
+        array[tuple(index)] = data
+        self._arrays[name] = array
+        return array
+
+    def array(self, name: str) -> Any | None:
+        return self._arrays.get(name)
+
+    def has_array(self, name: str) -> bool:
+        return name in self._arrays
+
+    def lazy_array(self, name: str) -> Any:
+        array = self.array(name)
+        if array is None:
+            raise ValueError(f"No staged Zarr array exists for {name!r}.")
+        data = da.from_zarr(array)
+        byteorder = getattr(data.dtype, "byteorder", None)
+        if byteorder not in (None, "=", "|"):
+            dtype = data.dtype.newbyteorder("=")
+            data = data.map_blocks(
+                lambda block: block.astype(dtype, copy=False),
+                meta=np.array([], dtype=dtype),
             )
-            self._validate_append_compatible(existing_check_ds, new_check_ds)
-            merged_ds = xr.concat(
-                [existing_ds, new_ds],
-                dim=self._time_dim,
-                data_vars="minimal",
-                coords="minimal",
-                compat="override",
-                combine_attrs="override",
-            )
-            self._validate_merged_time(merged_ds)
-            prepare_append_encoding(merged_ds, new_ds)
-            prepare_append_attrs(merged_ds, existing_ds, new_ds)
-            temp_path = temporary_netcdf_path(output_path)
-            write_netcdf(
-                merged_ds,
-                self._ctx.dataset,
-                self._ctx.variable,
-                path=temp_path,
-                **self.to_netcdf_kwargs,
-            )
-            if not temp_path.exists() or temp_path.stat().st_size == 0:
-                raise OSError(
-                    "Append write did not create a valid temporary file "
-                    f"{str(temp_path)!r}."
-                )
-        except Exception:
-            if temp_path is not None:
-                temp_path.unlink(missing_ok=True)
-            raise
-        finally:
-            if new_check_ds is not None:
-                new_check_ds.close()
-            if check_path is not None:
-                check_path.unlink(missing_ok=True)
-            existing_check_ds.close()
-            existing_ds.close()
+        return data
 
-        os.replace(temp_path, output_path)
-        return output_path
+    def reset(self) -> None:
+        shutil.rmtree(self.path, ignore_errors=True)
+        self._group = zarr.open_group(str(self.path), mode="w")
+        self._arrays.clear()
 
-    def _validate_append_compatible(
-        self,
-        existing_ds: xr.Dataset,
-        new_ds: xr.Dataset,
-    ) -> None:
-        issues: list[str] = []
-        var_name = self._ctx.variable.names()[0]
-
-        if var_name not in existing_ds:
-            issues.append(f"existing file is missing data variable {var_name!r}")
-        if var_name not in new_ds:
-            issues.append(f"new dataset is missing data variable {var_name!r}")
-
-        existing_variables = {str(name) for name in existing_ds.variables}
-        new_variables = {str(name) for name in new_ds.variables}
-        if existing_variables != new_variables:
-            missing = sorted(new_variables - existing_variables)
-            extra = sorted(existing_variables - new_variables)
-            if missing:
-                issues.append(f"existing file is missing variables {missing!r}")
-            if extra:
-                issues.append(f"existing file has unexpected variables {extra!r}")
-
-        for dim, size in new_ds.sizes.items():
-            if dim == self._time_dim:
-                continue
-            existing_size = existing_ds.sizes.get(dim)
-            if existing_size != size:
-                issues.append(
-                    f"dimension {dim!r} has size {existing_size!r} in the "
-                    f"existing file and {size!r} in the new dataset"
-                )
-
-        existing_attrs = normalize_attrs(
-            existing_ds.attrs,
-            ignored=APPEND_IGNORED_GLOBAL_ATTRS,
-        )
-        new_attrs = normalize_attrs(
-            new_ds.attrs,
-            ignored=APPEND_IGNORED_GLOBAL_ATTRS,
-        )
-        if existing_attrs != new_attrs:
-            issues.extend(
-                attribute_diff_messages(
-                    "global attribute",
-                    existing_attrs,
-                    new_attrs,
-                )
-            )
-
-        for name in sorted(existing_variables & new_variables):
-            existing_var = existing_ds[name]
-            new_var = new_ds[name]
-            if existing_var.dims != new_var.dims:
-                issues.append(
-                    f"variable {name!r} has dimensions {existing_var.dims!r} "
-                    f"in the existing file and {new_var.dims!r} in the new dataset"
-                )
-                continue
-            if np.dtype(existing_var.dtype) != np.dtype(new_var.dtype):
-                issues.append(
-                    f"variable {name!r} has dtype {existing_var.dtype!r} in "
-                    f"the existing file and {new_var.dtype!r} in the new dataset"
-                )
-            existing_var_attrs = normalize_attrs(
-                existing_var.attrs,
-                ignored=APPEND_IGNORED_VARIABLE_ATTRS,
-            )
-            new_var_attrs = normalize_attrs(
-                new_var.attrs,
-                ignored=APPEND_IGNORED_VARIABLE_ATTRS,
-            )
-            if existing_var_attrs != new_var_attrs:
-                issues.extend(
-                    attribute_diff_messages(
-                        f"variable {name!r} attribute",
-                        existing_var_attrs,
-                        new_var_attrs,
-                    )
-                )
-
-            if self._time_dim in existing_var.dims:
-                for dim, existing_size in existing_var.sizes.items():
-                    if dim == self._time_dim:
-                        continue
-                    new_size = new_var.sizes[dim]
-                    if existing_size != new_size:
-                        issues.append(
-                            f"variable {name!r} dimension {dim!r} has size "
-                            f"{existing_size!r} in the existing file and "
-                            f"{new_size!r} in the new dataset"
-                        )
-                continue
-
-            if existing_var.shape != new_var.shape:
-                issues.append(
-                    f"variable {name!r} has shape {existing_var.shape!r} "
-                    f"in the existing file and {new_var.shape!r} in the new dataset"
-                )
-                continue
-            if not array_values_equal(existing_var.values, new_var.values):
-                issues.append(f"variable {name!r} values differ")
-
-        if issues:
-            details = "\n".join(f"- {issue}" for issue in issues)
-            raise ValueError(
-                "Existing file is not compatible with append mode:\n" + details
-            )
-
-    def _validate_merged_time(self, merged_ds: xr.Dataset) -> None:
-        time_name = time_coord_name(merged_ds, self._time_dim, self._time_axis)
-        values = np.asarray(merged_ds[time_name].values)
-        if values.ndim != 1:
-            raise ValueError(
-                f"Time coordinate {time_name!r} must be one-dimensional after append."
-            )
-        if values.size > 1 and np.any(values[1:] <= values[:-1]):
-            raise ValueError(
-                "Appended time values must be strictly monotonic with the "
-                "existing file."
-            )
-
-        bounds_name = merged_ds[time_name].attrs.get("bounds") or merged_ds[
-            time_name
-        ].attrs.get("climatology")
-        if not bounds_name or str(bounds_name) not in merged_ds:
-            return
-
-        bounds = bounds_as_pairs(
-            np.asarray(merged_ds[str(bounds_name)].values),
-            int(values.size),
-        )
-        if bounds.shape[0] <= 1:
-            return
-        previous_ends = bounds[:-1, 1]
-        next_starts = bounds[1:, 0]
-        numeric_bounds = np.issubdtype(np.asarray(previous_ends).dtype, np.number)
-        if numeric_bounds and not np.allclose(
-            previous_ends,
-            next_starts,
-            rtol=0.0,
-            atol=1.0e-12,
-        ):
-            raise ValueError(
-                "Appended time bounds must be contiguous with the existing file."
-            )
+    def cleanup(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+        self._arrays.clear()

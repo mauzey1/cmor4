@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from pydantic import Field
 
-from .utils.dataset_metadata import DatasetMetadata
+from ._metadata import DatasetMetadata
 
 
 class DatasetInfo(DatasetMetadata):

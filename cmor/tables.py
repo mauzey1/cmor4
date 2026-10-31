@@ -1,3 +1,5 @@
+"""Public project-table orchestration over private table and domain modules."""
+
 from __future__ import annotations
 
 import hashlib
@@ -5,30 +7,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-import numpy as np
 from pydantic import ValidationError
 
-from .utils.templates import is_unresolved_template as _is_unresolved_template
-from .utils.tables import (
-    CoordinateTable,
-    FormulaTable,
-    GridTable,
-    VariableEntry,
-    VariableTable,
+from ._coordinate_tables import CoordinateTable, FormulaTable, GridTable
+from ._metadata import DatasetMetadata
+from ._templates import is_unresolved_template as _is_unresolved_template
+from ._variable_tables import VariableEntry, VariableTable
+from .axis import (
+    Axis,
+    _validate_axes,
+    _validate_axis_values_early,
+    _validate_calendar,
 )
-from .axis import Axis
 from .cv import ControlledVocabulary
 from .datasetinfo import DatasetInfo
 from .exceptions import ControlledVocabularyError, TableValidationError
-from .grid import Grid
-from .utils.unit_conversion import units_are_convertible as _units_are_convertible
-from .utils.dataset_metadata import DatasetMetadata
-from .utils.validation import (
-    _validate_calendar,
-    validate_axes as _validate_axes,
-    validate_axis_values_early as _validate_axis_values_early,
-    validate_grid_mapping as _validate_grid_mapping,
-)
+from .grid import Grid, _validate_grid_mapping
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -103,7 +97,7 @@ class ProjectTables:
         )
         self.grid_table = GridTable.from_file(self.grid_table_file)
         self.coordinate_table = CoordinateTable.from_file(
-            self.coordinate_table_file, self.grid_table_file
+            self.coordinate_table_file, self.grid_table
         )
         self.formula_table = FormulaTable.from_file(self.formula_table_file)
 
@@ -863,29 +857,7 @@ class ProjectTables:
         # Axis validation: only validate axes not prepared by this instance
         for axis in axes:
             if not self._is_prepared_axis(axis):
-                # Check if this is a grid coordinate (auxiliary lat/lon)
-                adict = axis.to_dict()
-                if ae := self.coordinate_table.resolve_grid_coord(axis):
-                    # Grid coordinates validated against grid coordinate table
-                    ae.validate_metadata(
-                        adict,
-                        ("units", "standard_name", "long_name"),
-                        "grid coordinate",
-                    )
-                elif ae := self.coordinate_table.resolve_coord(axis):
-                    # Regular coordinates validated against coordinate table
-                    ae.validate_metadata(
-                        adict,
-                        (
-                            "units",
-                            "standard_name",
-                            "long_name",
-                            "axis",
-                            "positive",
-                            "formula",
-                        ),
-                        "axis",
-                    )
+                self.coordinate_table.validate_metadata(axis)
 
         # Dataset-axis consistency checks
         # (must_have_bounds, time interval,etc.)
@@ -939,76 +911,11 @@ class ProjectTables:
 
         # Grid validation: ensure stored attributes match tables
         if grid is not None:
-            requested = str(grid.table_entry or grid.mapping_entry or grid.name or "")
-            _gm = self.grid_table.resolve_mapping(requested) if requested else None
-            entry_name, entry = (_gm.name, _gm) if _gm else (None, None)
-            if entry is not None:
-                for key, user_val in (
-                    ("mapping_name", grid.mapping_name),
-                    ("grid_mapping_name", grid.grid_mapping_name),
-                ):
-                    expected = getattr(entry, key)
-                    if (
-                        expected is not None
-                        and user_val is not None
-                        and str(user_val) != str(expected)
-                    ):
-                        raise TableValidationError(
-                            f"grid mapping {entry_name!r} {key}="
-                            f"{user_val!r} does not match table value "
-                            f"{expected!r}."
-                        )
-
-            # Validate dimensional axes and lat/lon shape consistency.
-            grid_axes = getattr(grid, "axes", [])
-            if grid_axes:
-                _validate_grid_dimensions(grid, axes)
-            elif grid.dimensions:
-                _validate_grid_dimensions(grid, axes)
+            self.grid_table.validate_metadata(grid, axes)
 
         # ZFactor validation: ensure stored attributes match tables
         for zfactor in zfactors:
-            formula_entry = self.formula_table.resolve(zfactor)
-            formula_entry_name = formula_entry.name if formula_entry else None
-            if formula_entry is None:
-                continue
-
-            # Units must be dimensionally convertible, not just equal.
-            # Use the same cf_units-based check as Variable units validation.
-            table_units = formula_entry.units
-            user_units = zfactor.units
-            if (
-                table_units is not None
-                and str(table_units) != "?"
-                and user_units not in (None, "")
-                and str(user_units) != str(table_units)
-                and not _units_are_convertible(str(user_units), str(table_units))
-            ):
-                raise TableValidationError(
-                    f"formula term {formula_entry_name!r} units={user_units!r} does "
-                    f"not match table value {table_units!r} and the two are "
-                    f"not dimensionally convertible."
-                )
-
-            # Validate remaining metadata (standard_name, long_name)
-            # by exact match.
-            formula_entry.validate_metadata(
-                zfactor.to_dict(),
-                ("standard_name", "long_name"),
-                "formula term",
-            )
-
-            # When the formula-term table entry has no declared
-            # dimensions the term is expected to be a scalar.  Accept a
-            # size-1 array (CMOR3-compatible) but reject larger arrays.
-            if not formula_entry.dimensions and zfactor.values is not None:
-                arr = np.asarray(zfactor.values)
-                if arr.ndim > 0 and arr.size != 1:
-                    raise TableValidationError(
-                        f"formula term {formula_entry_name!r} has no declared "
-                        "dimensions (expected a scalar value) but values "
-                        f"with shape {arr.shape} were provided."
-                    )
+            self.formula_table.validate_metadata(zfactor)
 
     def _validate_dataset_variable_consistency(
         self,
@@ -1101,106 +1008,6 @@ class ProjectTables:
                 dataset.setdefault(
                     key,
                     value[0] if isinstance(value, list) and len(value) == 1 else value,
-                )
-
-
-def _validate_grid_dimensions(
-    grid: Grid,
-    axes: Sequence[Axis],
-) -> None:
-    """Validate that grid dimensions correspond to spatial axes in the right order.
-
-    When ``grid.axes`` is non-empty the dimensional axes are already owned by
-    the grid; validation checks that each axis carries coordinate values and
-    that the lat/lon array shapes match the axis lengths in declared order.
-
-    When ``grid.axes`` is empty (name-based path) every name in
-    ``grid.dimensions`` must resolve to one of the supplied *axes* by any
-    recognised name variant, and the same shape checks apply.
-
-    Parameters
-    ----------
-    grid
-        Grid whose dimensional axes are to be validated.
-    axes
-        The axis objects supplied alongside the grid (non-grid axes such as
-        time).  Only consulted on the name-based path.
-
-    Raises
-    ------
-    TableValidationError
-        If a grid dimension name cannot be matched to any axis, or if the
-        lat/lon array size along a given axis index does not match the axis
-        length.
-    """
-    if getattr(grid, "axes", None):
-        # --- Axis-based path: grid owns its dimensional Axis objects -------
-        grid_axes = list(grid.axes)
-
-        lat = grid.latitude
-        lon = grid.longitude
-        for array, label in ((lat, "latitude"), (lon, "longitude")):
-            if array is None:
-                continue
-            arr = np.asarray(array)
-            for i, axis in enumerate(grid_axes):
-                axis_len = len(axis.values_array())
-                if arr.shape[i] != axis_len:
-                    dim_name = str(axis.out_name or axis.name)
-                    raise TableValidationError(
-                        f"Grid {label} array shape {arr.shape} does not match "
-                        f"the axis lengths implied by grid.axes. "
-                        f"Axis {dim_name!r} (index {i}) has {axis_len} "
-                        f"coordinate values but {label} has size "
-                        f"{arr.shape[i]} along that axis."
-                    )
-        return
-
-    # --- Name-based path: match dimension strings to supplied axes ----------
-    if not grid.dimensions:
-        return
-
-    # Build a lookup from every recognised name variant to the axis object.
-    name_to_axis: dict[str, Axis] = {}
-    for axis in axes:
-        for value in (
-            axis.name,
-            axis.table_entry,
-            axis.axis_entry,
-            axis.coordinate,
-            axis.out_name,
-            axis.generic_level_name,
-        ):
-            if value:
-                name_to_axis.setdefault(str(value), axis)
-
-    grid_dims = [str(d) for d in grid.dimensions]
-
-    for dim_name in grid_dims:
-        if dim_name not in name_to_axis:
-            raise TableValidationError(
-                f"Grid dimension {dim_name!r} does not correspond to any "
-                "of the supplied axes.  Each grid spatial dimension must "
-                "match an axis by name, out_name, or table_entry."
-            )
-
-    lat = grid.latitude
-    lon = grid.longitude
-    for array, label in ((lat, "latitude"), (lon, "longitude")):
-        if array is None:
-            continue
-        arr = np.asarray(array)
-        for i, dim_name in enumerate(grid_dims):
-            axis = name_to_axis[dim_name]
-            axis_len = len(axis.values_array())
-            if arr.shape[i] != axis_len:
-                raise TableValidationError(
-                    f"Grid {label} array shape {arr.shape} does not match "
-                    f"the axis lengths implied by grid dimensions "
-                    f"{grid_dims!r}. "
-                    f"Dimension {dim_name!r} (index {i}) has {axis_len} "
-                    f"coordinate values but {label} has size "
-                    f"{arr.shape[i]} along that axis."
                 )
 
 

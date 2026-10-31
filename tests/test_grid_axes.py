@@ -29,8 +29,8 @@ import numpy as np
 from cmor import Axis, DatasetInfo, Grid, ProjectTables, Variable
 from dataset_helpers import open_created_dataset
 from cmor.exceptions import TableValidationError
-from cmor.utils.construction import add_grid_coords
-from cmor.tables import _validate_grid_dimensions
+from cmor._assembly import add_grid_coords
+from cmor.grid import _validate_grid_dimensions
 
 # ---------------------------------------------------------------------------
 # Minimal helpers
@@ -167,7 +167,7 @@ class TestVariableDimensions(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 4. add_grid_coords() in utils.construction
+# 4. add_grid_coords() in _assembly
 # ---------------------------------------------------------------------------
 # Note: there is no _grid_axes() wrapper. create_dataset() directly appends
 # grid.axes to the axis list (or nothing when grid is None). The round-trip
