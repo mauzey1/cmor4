@@ -8,4 +8,5 @@ cmor_output/
 notebooks/output/
 examples/output/
 docs/build/
+issues/
 .vscode

@@ -89,9 +89,19 @@ without changes to CMOR.
      - ``"further_info_url": null``
      - Not constrained.
 
-Under the ordinary rules, an empty list or object rejects a nonempty
-supplied value. Dedicated sections can behave differently. An absent
-attribute is checked only if another rule requires it.
+An empty list or object used as a top-level attribute definition is a CV
+authoring error: it provides no allowed values. CMOR raises
+``ControlledVocabularyError`` when loading the CV, even if the attribute is
+optional or absent from the dataset. The error names the entry and source
+filename when available. Omit the definition if no value constraint is intended.
+
+Empty structural sections (``required_global_attributes``, ``DRS``, and
+``version_metadata``) and an empty CV body are allowed. Nested metadata is
+not subject to this check: ``"grid_label": {"gn": {}}`` provides an allowed
+key, and an experiment's ``"additional_allowed_model_components": []`` can
+mean there are no additional components. A nonempty choice list such as
+``[""]`` can explicitly allow an empty string for an optional attribute.
+An absent attribute is checked only if another rule requires it.
 
 Lookup objects that inject attributes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

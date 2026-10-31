@@ -46,7 +46,14 @@ class ControlledVocabulary:
 
     def __init__(self, data: Mapping[str, Any], path: str | Path | None = None):
         self.path = Path(path) if path is not None else None
-        parsed = _cv_models.ControlledVocabularyModel.from_mapping(data)
+        try:
+            parsed = _cv_models.ControlledVocabularyModel.from_mapping(data)
+        except ControlledVocabularyError as error:
+            if self.path is None:
+                raise
+            raise ControlledVocabularyError(
+                f"{error} Check {self.filename}."
+            ) from error
         self._rules = parsed.attributes
         self._defaults = parsed.defaults
         self._drs = parsed.drs
