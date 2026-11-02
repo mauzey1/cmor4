@@ -139,12 +139,6 @@ class _NamedDocument(TableModel):
             }
 
 
-def validate_json_file(model: type[TableModel], path: Path) -> TableModel:
-    """Parse a table document directly from JSON with Pydantic."""
-
-    return model.model_validate_json(path.read_text())
-
-
 def units_are_convertible(user_units: str, table_units: str) -> bool:
     """Return True if *user_units* and *table_units* are dimensionally
     compatible.
