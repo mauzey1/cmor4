@@ -37,7 +37,7 @@ class VariableTableRow(DimensionedTableEntry):
     ok_max_mean_abs: Any = None
 
 
-class VariableTableEntry(VariableTableRow):
+class VariableEntry(VariableTableRow):
     """A validated variable row plus its source-table provenance."""
 
     table_id: str = Field(min_length=1)
@@ -54,13 +54,13 @@ class VariableTableDocument(_NamedDocument):
     header: TableHeader | None = Field(default=None, alias="Header")
     variable_entry: dict[str, VariableTableRow] = Field(default_factory=dict)
 
-    def resolved_entries(self, table_file: Path) -> dict[str, VariableTableEntry]:
+    def resolved_entries(self, table_file: Path) -> dict[str, VariableEntry]:
         header = self.header or TableHeader()
         table_id = str(header.table_id or table_file.stem)
         if table_id.startswith("Table "):
             table_id = table_id.removeprefix("Table ")
         return {
-            name: VariableTableEntry.model_validate({
+            name: VariableEntry.model_validate({
                 **row.model_dump(),
                 "table_id": table_id,
                 "table_file": table_file,
@@ -68,9 +68,6 @@ class VariableTableDocument(_NamedDocument):
             })
             for name, row in self.variable_entry.items()
         }
-
-
-VariableEntry = VariableTableEntry
 
 
 class VariableRemappingTable:

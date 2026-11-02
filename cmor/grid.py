@@ -15,7 +15,7 @@ from .exceptions import TableValidationError
 if TYPE_CHECKING:
     import xarray as xr
 
-    from ._coordinate_tables import GridMappingTableEntry as GridMappingEntry
+    from ._coordinate_tables import GridMappingEntry
 
 _LATITUDE_PARAMS: frozenset[str] = frozenset({
     "grid_north_pole_latitude",

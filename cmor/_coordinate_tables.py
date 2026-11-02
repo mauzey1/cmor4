@@ -41,7 +41,7 @@ def _numeric_table_value(value: Any) -> Any:
             return value
 
 
-class CoordinateTableEntry(DimensionedTableEntry):
+class AxisEntry(DimensionedTableEntry):
     """One coordinate-table or grid-coordinate row."""
 
     axis: str | None = None
@@ -88,7 +88,7 @@ class CoordinateTableEntry(DimensionedTableEntry):
         return [parsed[index : index + 2] for index in range(0, len(parsed), 2)]
 
 
-class FormulaTableEntry(DimensionedTableEntry):
+class ZFactorEntry(DimensionedTableEntry):
     """One formula-term table row."""
 
     valid_min: Any = None
@@ -97,7 +97,7 @@ class FormulaTableEntry(DimensionedTableEntry):
     ok_max_mean_abs: Any = None
 
 
-class GridMappingTableEntry(NamedTableEntry):
+class GridMappingEntry(NamedTableEntry):
     """One grid-mapping row, including extension-defined projection fields."""
 
     mapping_name: str | None = None
@@ -196,13 +196,13 @@ class GridMappingTableEntry(NamedTableEntry):
 class CoordinateTableDocument(_NamedDocument):
     sections: ClassVar[tuple[str, ...]] = ("axis_entry",)
     header: TableHeader | None = Field(default=None, alias="Header")
-    axis_entry: dict[str, CoordinateTableEntry] = Field(default_factory=dict)
+    axis_entry: dict[str, AxisEntry] = Field(default_factory=dict)
 
 
 class FormulaTableDocument(_NamedDocument):
     sections: ClassVar[tuple[str, ...]] = ("formula_entry",)
     header: TableHeader | None = Field(default=None, alias="Header")
-    formula_entry: dict[str, FormulaTableEntry] = Field(default_factory=dict)
+    formula_entry: dict[str, ZFactorEntry] = Field(default_factory=dict)
 
 
 class GridTableDocument(_NamedDocument):
@@ -212,9 +212,9 @@ class GridTableDocument(_NamedDocument):
         "mapping_entry",
     )
     header: TableHeader | None = Field(default=None, alias="Header")
-    axis_entry: dict[str, CoordinateTableEntry] = Field(default_factory=dict)
-    variable_entry: dict[str, CoordinateTableEntry] = Field(default_factory=dict)
-    mapping_entry: dict[str, GridMappingTableEntry] = Field(default_factory=dict)
+    axis_entry: dict[str, AxisEntry] = Field(default_factory=dict)
+    variable_entry: dict[str, AxisEntry] = Field(default_factory=dict)
+    mapping_entry: dict[str, GridMappingEntry] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _mark_grid_coordinates(self) -> GridTableDocument:
@@ -228,12 +228,6 @@ class GridTableDocument(_NamedDocument):
             },
         )
         return self
-
-
-# Reader terminology for the specialized immutable row models.
-AxisEntry = CoordinateTableEntry
-ZFactorEntry = FormulaTableEntry
-GridMappingEntry = GridMappingTableEntry
 
 
 class CoordinateTable:

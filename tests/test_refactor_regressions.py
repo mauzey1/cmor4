@@ -14,7 +14,7 @@ from cmor import _assembly, _netcdf
 from cmor import axis as axis_module
 from cmor._metadata import DatasetMetadata
 from cmor._netcdf import prepare_append_encoding
-from cmor._coordinate_tables import CoordinateTableEntry, GridTableDocument
+from cmor._coordinate_tables import AxisEntry, GridTableDocument
 from cmor._time import find_time_axis
 from cmor._assembly import validate_metadata
 
@@ -78,7 +78,7 @@ def test_grid_document_normalization_preserves_input_and_key_precedence():
     assert document.mapping_entry["rotated"].name == "rotated"
     assert document.variable_entry["latitude"].is_grid_coord
     assert document.variable_entry["latitude"].units is None
-    typed = CoordinateTableEntry(name="latitude")
+    typed = AxisEntry(name="latitude")
     typed_document = GridTableDocument.model_validate({
         "variable_entry": {"latitude": typed}
     })

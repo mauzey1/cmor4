@@ -1698,7 +1698,7 @@ class VariableMethodTest(unittest.TestCase):
     def test_runtime_dimensions_applied(self):
         """Variable dimensions come from the table entry.
 
-        Note: VariableTableEntry.runtime_dimensions reverses the declared order,
+        Note: VariableEntry.runtime_dimensions reverses the declared order,
         so we check
         that the expected names are all present rather than asserting a
         specific sequence.
