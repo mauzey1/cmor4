@@ -203,7 +203,7 @@ class _IntervalSpec(BaseModel):
             )
 
 
-def _validate_and_normalize_axes(
+def validate_and_normalize_axes(
     dataset: DatasetMetadata,
     variable: Variable,
     axes: Sequence[Axis],
@@ -212,7 +212,7 @@ def _validate_and_normalize_axes(
     return tuple(_validate_and_normalize_axis(dataset, variable, axis) for axis in axes)
 
 
-def _validate_axes(
+def validate_axes(
     dataset: DatasetMetadata | None,
     variable: Variable,
     axes: Sequence[Axis],
@@ -228,7 +228,7 @@ def _validate_axes(
         )
 
 
-def _validate_axis_values_early(axis: Axis) -> None:
+def validate_axis_values_early(axis: Axis) -> None:
     """Validate generic axis values before dataset-level context is available."""
     _validate_and_normalize_axis(
         None,
@@ -253,7 +253,7 @@ def _validate_and_normalize_axis(
     bounds = axis.bounds_array() if axis.bounds is not None else None
     name = str(axis.table_entry or axis.name)
     climatology = bool(axis.climatology)
-    defer_time_value_checks = defer_time_value_checks and _is_time_axis(axis)
+    defer_time_value_checks = defer_time_value_checks and is_time_axis(axis)
 
     values, bounds = _normalize_bounds_shape(axis, values, bounds)
     if enforce_required_bounds and bool(axis.must_have_bounds) and bounds is None:
@@ -281,14 +281,14 @@ def _validate_and_normalize_axis(
                 _validate_values_inside_bounds(values, bounds, name)
         if (
             not defer_time_value_checks
-            and _is_time_axis(axis)
+            and is_time_axis(axis)
             and not climatology
             and bounds.shape[-1] == 2
         ):
             values = _time_values_from_bounds(values, bounds, name)
 
-    if not defer_time_value_checks and _is_time_axis(axis) and not climatology:
-        _validate_time_interval(dataset, variable, axis, values)
+    if not defer_time_value_checks and is_time_axis(axis) and not climatology:
+        validate_time_interval(dataset, variable, axis, values)
 
     if not normalize:
         return axis
@@ -485,7 +485,7 @@ def _time_values_from_bounds(
     return reshaped_midpoints
 
 
-def _validate_time_interval(
+def validate_time_interval(
     dataset: DatasetMetadata | None,
     variable: Variable | None,
     axis: Axis,
@@ -517,7 +517,7 @@ def _validate_time_interval(
         or (dataset.calendar if dataset is not None else None)
         or "standard"
     )
-    interval_days = _time_interval_days(flat, units, calendar)
+    interval_days = time_interval_days(flat, units, calendar)
     if interval_days.size == 0:
         return
     differences = np.abs(interval_days - spec.days) / spec.days
@@ -538,7 +538,7 @@ def _validate_time_interval(
     warnings.warn(message, RuntimeWarning, stacklevel=3)
 
 
-def _time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.ndarray:
+def time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.ndarray:
     intervals = _cftime_interval_days(values, units, calendar)
     return (
         intervals
@@ -642,7 +642,7 @@ def _validate_stored_direction(axis: Axis, values: np.ndarray, name: str) -> Non
         )
 
 
-def _validate_calendar(dataset: DatasetMetadata) -> None:
+def validate_calendar(dataset: DatasetMetadata) -> None:
     """Validate the calendar declared in the dataset metadata."""
     calendar = str(dataset.calendar or "").strip()
     if not calendar:
@@ -669,7 +669,7 @@ def _validate_calendar(dataset: DatasetMetadata) -> None:
         )
 
 
-def _is_time_axis(axis: Axis) -> bool:
+def is_time_axis(axis: Axis) -> bool:
     return str(axis.axis or "").upper() == "T" or (
         str(axis.standard_name or "").lower() == "time"
     )

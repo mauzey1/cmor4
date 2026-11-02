@@ -18,7 +18,7 @@ from .axis import Axis
 from .dataset import build_output_path
 from .datasetinfo import DatasetInfo
 from .grid import Grid
-from .variable import Variable, _validate_variable_values
+from .variable import Variable, validate_variable_values
 from .zfactor import ZFactor
 
 
@@ -832,7 +832,7 @@ class DatasetWriter:
                 dims,
                 chunk_time_len,
             )
-            _validate_variable_values(
+            validate_variable_values(
                 zfactor,
                 chunk_ctx.axes,
                 data,

@@ -592,7 +592,7 @@ def _allowed_grid_mapping_attributes(mapping_name: str) -> frozenset[str] | None
     return frozenset(allowed)
 
 
-def _validate_grid_mapping(
+def validate_grid_mapping(
     entry: GridMappingEntry | None,
     data: Grid | Mapping[str, Any],
     *,
@@ -796,7 +796,7 @@ def _validate_grid_mapping(
             )
 
 
-def _validate_grid_coords(ds: xr.Dataset, grid: Grid) -> None:
+def validate_grid_coords(ds: xr.Dataset, grid: Grid) -> None:
     """Verify that lat/lon/vertex coords declared by the grid were written."""
 
     for name in ("latitude", "longitude"):
@@ -819,7 +819,7 @@ def _validate_grid_coords(ds: xr.Dataset, grid: Grid) -> None:
             )
 
 
-def _validate_grid_dimensions(
+def validate_grid_dimensions(
     grid: Grid,
     axes: Sequence[Axis],
 ) -> None:

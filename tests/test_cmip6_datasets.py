@@ -58,7 +58,7 @@ import numpy as np
 
 import cmor
 from dataset_helpers import open_created_dataset
-from cmor._assembly import _collect_external_variables
+from cmor._assembly import collect_external_variables
 
 # ---------------------------------------------------------------------------
 # Location of the CMIP6 tables submodule
@@ -863,27 +863,27 @@ class TestExternalVariables(unittest.TestCase):
         ``external_variables == "areacello volcello"``.
         """
         variable = self.project.variable("masscello")
-        external = _collect_external_variables(variable, set())
+        external = collect_external_variables(variable, set())
         self.assertIn("areacello", external)
         self.assertIn("volcello", external)
 
     def test_masso_has_no_cell_measures(self) -> None:
         """masso has no cell_measures, so external_variables should be empty."""
         variable = self.project.variable("masso")
-        external = _collect_external_variables(variable, set())
+        external = collect_external_variables(variable, set())
         self.assertEqual(external, set())
 
     def test_tas_requires_external_areacella(self) -> None:
         """The Amon tas variable references area: areacella as a cell measure."""
         variable = self.project.variable("tas")
-        external = _collect_external_variables(variable, set())
+        external = collect_external_variables(variable, set())
         self.assertIn("areacella", external)
 
     def test_provided_cell_measure_is_excluded_from_external_variables(self) -> None:
         """A cell measure that IS provided in-file is not listed as external."""
         variable = self.project.variable("masscello")
         # Simulate providing areacello in the output
-        external = _collect_external_variables(variable, {"areacello"})
+        external = collect_external_variables(variable, {"areacello"})
         self.assertNotIn("areacello", external)
         # volcello is still external
         self.assertIn("volcello", external)

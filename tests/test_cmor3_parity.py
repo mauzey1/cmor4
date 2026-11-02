@@ -59,7 +59,7 @@ import xarray as xr
 
 from cmor import Axis, ControlledVocabulary, DatasetInfo, ProjectTables, Variable
 from dataset_helpers import open_created_dataset
-from cmor._assembly import _collect_external_variables
+from cmor._assembly import collect_external_variables
 from cmor.dataset import (
     build_output_path,
     create_dataset,
@@ -68,9 +68,9 @@ from cmor.dataset import (
 from cmor.exceptions import AxisValidationError, ControlledVocabularyError
 from cmor._metadata import DatasetMetadata
 from cmor.axis import (
-    _is_time_axis,
-    _validate_time_interval,
-    _validate_axes as validate_axes,
+    is_time_axis,
+    validate_time_interval,
+    validate_axes,
 )
 from table_helpers import cmip7_project, drcdp_project, obs4mips_project
 import test_cmor as _tc4
@@ -212,7 +212,7 @@ class TestFrequencyRequired(unittest.TestCase):
         """
         axis = self._time_axis(n_steps=3)
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(
+            validate_time_interval(
                 DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array()
             )
         self.assertIn("frequency", str(ctx.exception).lower())
@@ -232,7 +232,7 @@ class TestFrequencyRequired(unittest.TestCase):
             values=[15],
         )
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(
+            validate_time_interval(
                 DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array()
             )
         self.assertIn("frequency", str(ctx.exception).lower())
@@ -241,7 +241,7 @@ class TestFrequencyRequired(unittest.TestCase):
         """Explicit empty string treated same as absent."""
         axis = self._time_axis()
         with self.assertRaises(AxisValidationError):
-            _validate_time_interval(
+            validate_time_interval(
                 DatasetInfo(frequency=""), None, axis, axis.values_array()
             )
 
@@ -253,7 +253,7 @@ class TestFrequencyRequired(unittest.TestCase):
         """
         axis = self._time_axis()
         with self.assertRaises(AxisValidationError) as ctx:
-            _validate_time_interval(
+            validate_time_interval(
                 DatasetInfo(institution_id="NCAR"), None, axis, axis.values_array()
             )
         msg = str(ctx.exception)
@@ -267,7 +267,7 @@ class TestFrequencyRequired(unittest.TestCase):
     def test_frequency_in_dataset_passes(self):
         """frequency in dataset metadata → no error."""
         axis = self._time_axis()
-        _validate_time_interval(
+        validate_time_interval(
             DatasetInfo(frequency="mon", calendar="360_day"),
             None,
             axis,
@@ -277,7 +277,7 @@ class TestFrequencyRequired(unittest.TestCase):
     def test_frequency_in_variable_passes(self):
         """frequency carried on the variable → no error."""
         axis = self._time_axis()
-        _validate_time_interval(
+        validate_time_interval(
             None,
             Variable(name="time", frequency="mon"),
             axis,
@@ -285,14 +285,14 @@ class TestFrequencyRequired(unittest.TestCase):
         )
 
     def test_non_time_axis_is_never_passed_to_validator(self):
-        """_is_time_axis correctly returns False for latitude, preventing the call."""
+        """is_time_axis correctly returns False for latitude, preventing the call."""
         lat_axis = Axis(
             name="lat",
             axis="Y",
             units="degrees_north",
             values=[-45.0, 0.0, 45.0],
         )
-        self.assertFalse(_is_time_axis(lat_axis))
+        self.assertFalse(is_time_axis(lat_axis))
 
     def test_validate_axes_raises_for_time_without_frequency(self):
         """Full validate_axes path raises when frequency is absent from a real dataset.
@@ -371,41 +371,41 @@ class TestExternalVariables(unittest.TestCase):
         return Variable(name="tos", units="degC", cell_measures=cell_measures)
 
     # -----------------------------------------------------------------------
-    # _collect_external_variables unit tests
+    # collect_external_variables unit tests
     # -----------------------------------------------------------------------
 
     def test_single_external_variable(self):
         var = self._variable_with_cell_measures("area: areacello")
-        result = _collect_external_variables(var, set())
+        result = collect_external_variables(var, set())
         self.assertEqual(result, {"areacello"})
 
     def test_multiple_external_variables(self):
         var = self._variable_with_cell_measures("area: areacello volume: volcello")
-        result = _collect_external_variables(var, set())
+        result = collect_external_variables(var, set())
         self.assertEqual(result, {"areacello", "volcello"})
 
     def test_provided_variable_not_in_result(self):
         """If a cell_measures variable is provided as a coordinate, skip it."""
         var = self._variable_with_cell_measures("area: areacello volume: volcello")
-        result = _collect_external_variables(var, {"areacello"})
+        result = collect_external_variables(var, {"areacello"})
         self.assertEqual(result, {"volcello"})
 
     def test_all_provided_returns_empty_set(self):
         var = self._variable_with_cell_measures("area: areacello volume: volcello")
-        result = _collect_external_variables(var, {"areacello", "volcello"})
+        result = collect_external_variables(var, {"areacello", "volcello"})
         self.assertEqual(result, set())
 
     def test_empty_cell_measures_returns_empty_set(self):
         var = self._variable_with_cell_measures("")
-        self.assertEqual(_collect_external_variables(var, set()), set())
+        self.assertEqual(collect_external_variables(var, set()), set())
 
     def test_none_cell_measures_returns_empty_set(self):
         var = Variable(name="tos", units="degC")
-        self.assertEqual(_collect_external_variables(var, set()), set())
+        self.assertEqual(collect_external_variables(var, set()), set())
 
     def test_space_only_cell_measures_returns_empty_set(self):
         var = self._variable_with_cell_measures("   ")
-        self.assertEqual(_collect_external_variables(var, set()), set())
+        self.assertEqual(collect_external_variables(var, set()), set())
 
     # -----------------------------------------------------------------------
     # create_dataset integration tests

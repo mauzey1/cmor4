@@ -107,7 +107,7 @@ def create_dataset(
         requested metadata, or if CMIP7 chunking requirements are not met.
     """
 
-    dataset, variable = _assembly._dataset_for_variable(dataset, variable)
+    dataset, variable = _assembly.dataset_for_variable(dataset, variable)
     ctx = _assembly.validate_metadata(dataset, variable, axes, zfactors, grid)
     data_array = _assembly.validate_data_chunk(ctx, data)
     ds = create_dataset_from_validated_data(
@@ -298,7 +298,7 @@ def build_output_path(
         Rendered output path, including the ``.nc`` filename.
     """
 
-    dataset, variable = _assembly._dataset_for_variable(dataset, variable)
+    dataset, variable = _assembly.dataset_for_variable(dataset, variable)
     root = Path(str(dataset.outpath or ".")).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
 
@@ -358,7 +358,7 @@ def string_from_template(
         Rendered template string.
     """
 
-    dataset, variable = _assembly._dataset_for_variable(dataset, variable)
+    dataset, variable = _assembly.dataset_for_variable(dataset, variable)
     return render_template(template, _template_tokens(dataset, variable, ds), separator)
 
 

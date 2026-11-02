@@ -12,7 +12,7 @@ Covers:
 * Grid.to_dataset_coords() produces correct coords/data_vars/aux names
 * must_call_cmor_grid: isgridaxis axis in user axes without Grid → error
 * ProjectTables.grid(axes=...) validates axes against grid table
-* _validate_grid_dimensions() both paths
+* validate_grid_dimensions() both paths
 * Full round-trip: create_dataset with axis-based Grid
 """
 
@@ -30,7 +30,7 @@ from cmor import Axis, DatasetInfo, Grid, ProjectTables, Variable
 from dataset_helpers import open_created_dataset
 from cmor.exceptions import TableValidationError
 from cmor._assembly import add_grid_coords
-from cmor.grid import _validate_grid_dimensions
+from cmor.grid import validate_grid_dimensions
 
 # ---------------------------------------------------------------------------
 # Minimal helpers
@@ -485,7 +485,7 @@ class TestProjectTablesGridFactory(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 7. _validate_grid_dimensions — both paths
+# 7. validate_grid_dimensions — both paths
 # ---------------------------------------------------------------------------
 
 
@@ -495,7 +495,7 @@ class TestValidateGridDimensions(unittest.TestCase):
         i = Axis(name="i", out_name="i", values=np.arange(8, dtype="f4"))
         lat2d, lon2d = _latlon(4, 8)
         grid = Grid(axes=[j, i], latitude=lat2d, longitude=lon2d)
-        _validate_grid_dimensions(grid, [])  # should not raise
+        validate_grid_dimensions(grid, [])  # should not raise
 
     def test_axis_path_raises_on_shape_mismatch(self) -> None:
         j = Axis(name="j", out_name="j", values=np.arange(4, dtype="f4"))
@@ -503,20 +503,20 @@ class TestValidateGridDimensions(unittest.TestCase):
         wrong_lat = np.zeros((5, 8))  # j should be 4
         grid = Grid(axes=[j, i], latitude=wrong_lat, longitude=np.zeros((5, 8)))
         with self.assertRaises(TableValidationError):
-            _validate_grid_dimensions(grid, [])
+            validate_grid_dimensions(grid, [])
 
     def test_name_path_passes_with_matching_axes(self) -> None:
         j = Axis(name="j", values=np.arange(4, dtype="f4"))
         i = Axis(name="i", values=np.arange(8, dtype="f4"))
         lat2d, lon2d = _latlon(4, 8)
         grid = Grid(dimensions=("j", "i"), latitude=lat2d, longitude=lon2d)
-        _validate_grid_dimensions(grid, [j, i])  # should not raise
+        validate_grid_dimensions(grid, [j, i])  # should not raise
 
     def test_name_path_raises_on_missing_axis(self) -> None:
         i = Axis(name="i", values=np.arange(8, dtype="f4"))
         grid = Grid(dimensions=("j", "i"))
         with self.assertRaises(TableValidationError) as ctx:
-            _validate_grid_dimensions(grid, [i])
+            validate_grid_dimensions(grid, [i])
         self.assertIn("j", str(ctx.exception))
 
     def test_name_path_raises_on_shape_mismatch(self) -> None:
@@ -527,7 +527,7 @@ class TestValidateGridDimensions(unittest.TestCase):
             dimensions=("j", "i"), latitude=wrong_lat, longitude=np.zeros((3, 8))
         )
         with self.assertRaises(TableValidationError):
-            _validate_grid_dimensions(grid, [j, i])
+            validate_grid_dimensions(grid, [j, i])
 
 
 # ---------------------------------------------------------------------------

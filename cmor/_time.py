@@ -67,14 +67,14 @@ def cftime_interval_days(
 
     elapsed_days: list[float] = []
     for start, end in zip(dates[:-1], dates[1:]):
-        seconds = _elapsed_seconds(start, end)
+        seconds = elapsed_seconds(start, end)
         if seconds is None:
             return None
         elapsed_days.append(abs(seconds) / 86400.0)
     return np.asarray(elapsed_days, dtype="f8")
 
 
-def _elapsed_seconds(start: Any, end: Any) -> float | None:
+def elapsed_seconds(start: Any, end: Any) -> float | None:
     try:
         delta = end - start
     except TypeError:

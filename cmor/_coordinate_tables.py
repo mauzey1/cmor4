@@ -18,12 +18,12 @@ from ._table_common import (
     DimensionedTableEntry,
     NamedTableEntry,
     TableHeader,
-    _NamedDocument,
+    NamedDocument,
 )
 from ._table_common import units_are_convertible as _units_convertible
 from .axis import Axis
 from .exceptions import TableValidationError
-from .grid import Grid, _validate_grid_dimensions
+from .grid import Grid, validate_grid_dimensions
 from .zfactor import ZFactor
 
 
@@ -193,19 +193,19 @@ class GridMappingEntry(NamedTableEntry):
         )
 
 
-class CoordinateTableDocument(_NamedDocument):
+class CoordinateTableDocument(NamedDocument):
     sections: ClassVar[tuple[str, ...]] = ("axis_entry",)
     header: TableHeader | None = Field(default=None, alias="Header")
     axis_entry: dict[str, AxisEntry] = Field(default_factory=dict)
 
 
-class FormulaTableDocument(_NamedDocument):
+class FormulaTableDocument(NamedDocument):
     sections: ClassVar[tuple[str, ...]] = ("formula_entry",)
     header: TableHeader | None = Field(default=None, alias="Header")
     formula_entry: dict[str, ZFactorEntry] = Field(default_factory=dict)
 
 
-class GridTableDocument(_NamedDocument):
+class GridTableDocument(NamedDocument):
     sections: ClassVar[tuple[str, ...]] = (
         "axis_entry",
         "variable_entry",
@@ -850,9 +850,9 @@ class GridTable:
         # Validate dimensional axes and lat/lon shape consistency.
         grid_axes = getattr(grid, "axes", [])
         if grid_axes:
-            _validate_grid_dimensions(grid, axes)
+            validate_grid_dimensions(grid, axes)
         elif grid.dimensions:
-            _validate_grid_dimensions(grid, axes)
+            validate_grid_dimensions(grid, axes)
 
     def _build_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """Merge grid-table defaults into serialized request data."""

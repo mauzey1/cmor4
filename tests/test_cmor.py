@@ -342,7 +342,7 @@ class Cmor4Test(unittest.TestCase):
             "num2date",
             wraps=time_utils.cftime.num2date,
         ) as num2date:
-            intervals = axis_validation._time_interval_days(
+            intervals = axis_validation.time_interval_days(
                 np.asarray([0.0, 1.0, 2.0]),
                 "months since 2001-01-01",
                 "360_day",
@@ -356,7 +356,7 @@ class Cmor4Test(unittest.TestCase):
             "num2date",
             side_effect=ValueError("unsupported units"),
         ):
-            fallback_intervals = axis_validation._time_interval_days(
+            fallback_intervals = axis_validation.time_interval_days(
                 np.asarray([0.0, 1.0]),
                 "years since 2001-01-01",
                 "standard",
@@ -1290,7 +1290,7 @@ class TableInfoTest(unittest.TestCase):
         self.assertRegex(ds.attrs["table_info"], r"MD5:[0-9a-f]{32}")
 
     def test_table_info_set_during_dataset_creation_not_dataset_info(self):
-        """table_info should be computed in _dataset_for_variable (create_dataset),
+        """table_info should be computed in dataset_for_variable (create_dataset),
         not during dataset_info() when no variable is known yet."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             info = self.project.dataset_info(dataset_info(Path(tmp_dir)))

@@ -33,8 +33,8 @@ from cmor._assembly import validate_metadata
 )
 def test_distinct_time_axis_recognition(metadata, validation, forecast, writer):
     axis = cmor.Axis(**metadata, values=[0.0])
-    assert axis_module._is_time_axis(axis) is validation
-    assert _assembly._is_time_axis(axis) is forecast
+    assert axis_module.is_time_axis(axis) is validation
+    assert _assembly.is_time_axis(axis) is forecast
     if writer:
         assert find_time_axis([axis]) == (0, axis)
     else:

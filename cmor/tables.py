@@ -15,14 +15,14 @@ from ._templates import is_unresolved_template as _is_unresolved_template
 from ._variable_tables import VariableEntry, VariableTable
 from .axis import (
     Axis,
-    _validate_axes,
-    _validate_axis_values_early,
-    _validate_calendar,
+    validate_axes,
+    validate_axis_values_early,
+    validate_calendar,
 )
 from .cv import ControlledVocabulary
 from .datasetinfo import DatasetInfo
 from .exceptions import ControlledVocabularyError, TableValidationError
-from .grid import Grid, _validate_grid_mapping
+from .grid import Grid, validate_grid_mapping
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -202,7 +202,7 @@ class ProjectTables:
             user_info=user_info,
         )
 
-    def _dataset_for_variable(
+    def dataset_for_variable(
         self,
         dataset_info: DatasetMetadata,
         variable: Variable,
@@ -386,7 +386,7 @@ class ProjectTables:
 
         request = Axis.model_validate({"name": name, **values})
         axis = self.coordinate_table.build(request)
-        _validate_axis_values_early(axis)
+        validate_axis_values_early(axis)
         return self._mark_prepared_axis(axis)
 
     def _axes(
@@ -494,7 +494,7 @@ class ProjectTables:
                 scalar=True,
             )
             axis = self.coordinate_table.build(request)
-            _validate_axis_values_early(axis)
+            validate_axis_values_early(axis)
             missing_axes.append(axis)
             present.update(
                 str(value)
@@ -659,7 +659,7 @@ class ProjectTables:
             or values.get("mapping_name") is not None
             or values.get("grid_mapping_name") is not None
         ):
-            _validate_grid_mapping(
+            validate_grid_mapping(
                 gm_entry,
                 values,
                 axes=axes,
@@ -835,9 +835,9 @@ class ProjectTables:
                 )
 
         # Variable validation: ensure stored attributes match table entry
-        # Note: This may be redundant with validation in _dataset_for_variable,
+        # Note: This may be redundant with validation in dataset_for_variable,
         # but we validate again here to ensure consistency when called directly
-        # by users or if variable was modified after _dataset_for_variable
+        # by users or if variable was modified after dataset_for_variable
         variable_entry = self.variable_table.resolve(variable)
 
         if dataset_info is not None:
@@ -864,12 +864,12 @@ class ProjectTables:
         # Run unconditionally so that must_have_bounds and the variable's
         # table-declared frequency are enforced even when no dataset is
         # provided.
-        _validate_axes(dataset_info, variable, axes)
+        validate_axes(dataset_info, variable, axes)
 
         # Calendar validation: warn if the dataset specifies a calendar that
         # is technically valid per CF but inappropriate for MIP data.
         if dataset_info is not None:
-            _validate_calendar(dataset_info)
+            validate_calendar(dataset_info)
 
         # Check that required scalar axes are present (if not auto-added)
         present = {

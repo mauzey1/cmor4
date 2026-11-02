@@ -13,7 +13,7 @@ from typing import Any, ClassVar, Mapping, Sequence
 from pydantic import Field
 
 from ._metadata import DatasetMetadata
-from ._table_common import DimensionedTableEntry, TableHeader, _NamedDocument
+from ._table_common import DimensionedTableEntry, TableHeader, NamedDocument
 from ._table_common import units_are_convertible as _units_convertible
 from .exceptions import TableValidationError
 from .variable import Variable
@@ -46,7 +46,7 @@ class VariableEntry(VariableTableRow):
     contextual_attrs: tuple[str, ...] = ()
 
 
-class VariableTableDocument(_NamedDocument):
+class VariableTableDocument(NamedDocument):
     """Typed variable-table file; provenance is attached after validation."""
 
     sections: ClassVar[tuple[str, ...]] = ("variable_entry",)

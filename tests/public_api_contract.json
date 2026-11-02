@@ -302,6 +302,114 @@
           ]
         },
         "properties": []
+      },
+      "validate_and_normalize_axes": {
+        "signature": [
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axes",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "validate_axes": {
+        "signature": [
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axes",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "validate_axis_values_early": {
+        "signature": [
+          [
+            "axis",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "validate_time_interval": {
+        "signature": [
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axis",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "values",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "time_interval_days": {
+        "signature": [
+          [
+            "values",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "units",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "calendar",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "validate_calendar": {
+        "signature": [
+          [
+            "dataset",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "is_time_axis": {
+        "signature": [
+          [
+            "axis",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
       }
     },
     "cmor.cv": {
@@ -1145,6 +1253,58 @@
           "has_mapping",
           "variable_name"
         ]
+      },
+      "validate_grid_mapping": {
+        "signature": [
+          [
+            "entry",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "data",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axes",
+            "KEYWORD_ONLY",
+            "()"
+          ],
+          [
+            "dimensions",
+            "KEYWORD_ONLY",
+            "None"
+          ]
+        ]
+      },
+      "validate_grid_coords": {
+        "signature": [
+          [
+            "ds",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "grid",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
+      },
+      "validate_grid_dimensions": {
+        "signature": [
+          [
+            "grid",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axes",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ]
+        ]
       }
     },
     "cmor.tables": {
@@ -1237,6 +1397,23 @@
             ],
             [
               "dataset",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ]
+          ],
+          "dataset_for_variable": [
+            [
+              "self",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "dataset_info",
+              "POSITIONAL_OR_KEYWORD",
+              "<class 'inspect._empty'>"
+            ],
+            [
+              "variable",
               "POSITIONAL_OR_KEYWORD",
               "<class 'inspect._empty'>"
             ]
@@ -1607,6 +1784,45 @@
           ]
         },
         "properties": []
+      },
+      "validate_variable_values": {
+        "signature": [
+          [
+            "variable",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axes",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "data",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "dims",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "axis_dims",
+            "POSITIONAL_OR_KEYWORD",
+            "<class 'inspect._empty'>"
+          ],
+          [
+            "name",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
+            "table_id",
+            "KEYWORD_ONLY",
+            "None"
+          ]
+        ]
       }
     },
     "cmor.writer": {

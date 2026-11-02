@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Any, ClassVar
 
 import cf_units
@@ -113,7 +112,7 @@ class DimensionedTableEntry(NamedTableEntry):
         return tuple(reversed(self.dimensions))
 
 
-class _NamedDocument(TableModel):
+class NamedDocument(TableModel):
     """Base that injects mapping keys as immutable entry names."""
 
     sections: ClassVar[tuple[str, ...]] = ()

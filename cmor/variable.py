@@ -157,7 +157,7 @@ class Variable(MetadataModel):
         return attrs
 
 
-def _validate_variable_values(
+def validate_variable_values(
     variable: Union[Variable, ZFactor],
     axes: Sequence[Axis],
     data: Any,

@@ -17,11 +17,11 @@ from cf_units import Unit
 
 from . import _netcdf
 from ._metadata import DatasetMetadata
-from ._time import _elapsed_seconds, decode_time_value
-from .axis import Axis, _validate_and_normalize_axes
+from ._time import elapsed_seconds, decode_time_value
+from .axis import Axis, validate_and_normalize_axes
 from .datasetinfo import DatasetInfo
-from .grid import Grid, _validate_grid_coords, _validate_grid_mapping
-from .variable import Variable, _validate_variable_values
+from .grid import Grid, validate_grid_coords, validate_grid_mapping
+from .variable import Variable, validate_variable_values
 from .zfactor import ZFactor
 
 
@@ -48,9 +48,9 @@ def validate_metadata(
 ) -> ValidationContext:
     """Validate project metadata and resolve dimensions without data values."""
 
-    dataset, variable = _dataset_for_variable(dataset, variable)
+    dataset, variable = dataset_for_variable(dataset, variable)
     axes = _dataset_axes(dataset, axes, variable)
-    axes = _validate_and_normalize_axes(dataset, variable, axes)
+    axes = validate_and_normalize_axes(dataset, variable, axes)
     axes = _merge_grid_axes(axes, grid)
     axis_dims = build_axis_dimension_map(axes)
     if grid is not None and (
@@ -58,7 +58,7 @@ def validate_metadata(
         or grid.grid_mapping_name
         or "grid_mapping_name" in grid.params
     ):
-        _validate_grid_mapping(None, grid)
+        validate_grid_mapping(None, grid)
 
     if grid is not None:
         dim_names = grid.variable_dimensions(variable)
@@ -98,7 +98,7 @@ def validate_data_chunk(ctx: ValidationContext, data: Any) -> np.ndarray:
             f"Data for {var_name!r} has {data_array.ndim} dimensions, "
             f"but variable dimensions resolve to {expected!r}."
         )
-    _validate_variable_values(ctx.variable, ctx.axes, data, ctx.dims, ctx.axis_dims)
+    validate_variable_values(ctx.variable, ctx.axes, data, ctx.dims, ctx.axis_dims)
     return data_array
 
 
@@ -111,7 +111,7 @@ def validate_zfactor_values(ctx: ValidationContext) -> None:
         dims = named_dimensions(zfactor.dimensions or (), ctx.axis_dims)
         if not dims and values.size == 1:
             values = values.reshape(())
-        _validate_variable_values(
+        validate_variable_values(
             zfactor,
             ctx.axes,
             values,
@@ -123,7 +123,7 @@ def validate_zfactor_values(ctx: ValidationContext) -> None:
         if zfactor.bounds is not None:
             bounds_name = str(zfactor.bounds_name or f"{out_name}_bnds")
             bounds_dims = dims + (str(zfactor.bounds_dim or "bnds"),)
-            _validate_variable_values(
+            validate_variable_values(
                 zfactor,
                 ctx.axes,
                 zfactor.bounds_array(),
@@ -176,27 +176,27 @@ def validate_final_dataset(
             )
 
     if ctx.grid is not None:
-        _validate_grid_coords(ds, ctx.grid)
+        validate_grid_coords(ds, ctx.grid)
 
     for zfactor, out_name in zip(ctx.zfactors, zfactor_names):
         _validate_final_zfactor(ds, zfactor, out_name)
 
 
 @overload
-def _dataset_for_variable(
+def dataset_for_variable(
     dataset: DatasetInfo,
     variable: Variable,
 ) -> tuple[DatasetInfo, Variable]: ...
 
 
 @overload
-def _dataset_for_variable(
+def dataset_for_variable(
     dataset: DatasetMetadata,
     variable: Variable,
 ) -> tuple[DatasetMetadata, Variable]: ...
 
 
-def _dataset_for_variable(
+def dataset_for_variable(
     dataset: DatasetMetadata,
     variable: Variable,
 ) -> tuple[DatasetMetadata, Variable]:
@@ -205,7 +205,7 @@ def _dataset_for_variable(
     project = getattr(dataset, "project", None)
     if project is None:
         return dataset, variable
-    return project._dataset_for_variable(dataset, variable)
+    return project.dataset_for_variable(dataset, variable)
 
 
 def _dataset_axes(
@@ -384,7 +384,7 @@ def derive_forecast_coords(
             not is_reference
             and not is_leadtime
             and time_axis is None
-            and _is_time_axis(axis)
+            and is_time_axis(axis)
         ):
             time_axis = axis
     if time_axis is None or reference_axis is None:
@@ -422,7 +422,7 @@ def derive_forecast_coords(
     for value in time_values.reshape(-1):
         valid_date = decode_time_value(value, time_units, axis_calendar)
         seconds = (
-            _elapsed_seconds(reference_date, valid_date)
+            elapsed_seconds(reference_date, valid_date)
             if valid_date is not None
             else None
         )
@@ -510,7 +510,7 @@ def _is_leadtime_axis(axis: Axis) -> bool:
     )
 
 
-def _is_time_axis(axis: Axis) -> bool:
+def is_time_axis(axis: Axis) -> bool:
     return (
         str(axis.axis or "").upper() == "T"
         or str(axis.standard_name or "").lower() == "time"
@@ -795,7 +795,7 @@ def build_dataset(
     # written to this file and expose them as a global attribute so that
     # downstream tools and ESGF QC checkers can locate them.
     all_provided_names = set(coords.keys()) | set(data_vars.keys())
-    external_vars = _collect_external_variables(variable, all_provided_names)
+    external_vars = collect_external_variables(variable, all_provided_names)
     if external_vars:
         # Merge computed external_variables with user-supplied attrs;
         # user-supplied attrs take precedence (they come later in the update).
@@ -823,7 +823,7 @@ def build_dataset(
     return ds
 
 
-def _collect_external_variables(
+def collect_external_variables(
     variable: Variable,
     provided_names: set[str],
 ) -> set[str]:

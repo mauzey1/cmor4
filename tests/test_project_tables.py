@@ -27,7 +27,7 @@ from cmor.exceptions import (
     AxisValidationError,
 )
 from cmor._metadata import DatasetMetadata
-from cmor.axis import _validate_axis_values_early as validate_axis_values_early
+from cmor.axis import validate_axis_values_early
 from table_helpers import (
     CMIP7_TABLE_ROOT,
     DRCDP_TABLE_ROOT,
@@ -1862,7 +1862,7 @@ class VariableRemappingTest(unittest.TestCase):
     def test_dataset_preparation_applies_contextual_metadata(self):
         variable = self.project.variable("foo_tavg-u-hxy-u")
 
-        _, prepared = self.project._dataset_for_variable(self.dataset, variable)
+        _, prepared = self.project.dataset_for_variable(self.dataset, variable)
 
         self.assertEqual(prepared.long_name, "Regional Foo")
         self.assertEqual(prepared.cell_measures, "area: areacella")
@@ -1902,7 +1902,7 @@ class VariableRemappingTest(unittest.TestCase):
     def test_empty_cell_measures_remap_clears_existing_value(self):
         variable = self.project.variable("bar_tavg-u-hxy-u")
 
-        _, prepared = self.project._dataset_for_variable(self.dataset, variable)
+        _, prepared = self.project.dataset_for_variable(self.dataset, variable)
 
         self.assertIsNone(prepared.cell_measures)
 
@@ -4773,7 +4773,7 @@ class ValidateComponentsTest(unittest.TestCase):
 class ValidateGridDimensionsTest(unittest.TestCase):
     """Tests for grid-dimension ↔ axis correspondence validation.
 
-    Covers the _validate_grid_dimensions helper called by validate_components:
+    Covers the validate_grid_dimensions helper called by validate_components:
 
     * Every name in grid.dimensions must resolve to a supplied axis.
     * When grid.latitude / grid.longitude is provided, shape[i] must equal
