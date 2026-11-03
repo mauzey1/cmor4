@@ -1401,23 +1401,6 @@
               "<class 'inspect._empty'>"
             ]
           ],
-          "dataset_for_variable": [
-            [
-              "self",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "dataset_info",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "variable",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ]
-          ],
           "variable": [
             [
               "self",
@@ -1449,40 +1432,6 @@
             [
               "values",
               "VAR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ]
-          ],
-          "scalar_axes_for": [
-            [
-              "self",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "variable",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "axes",
-              "POSITIONAL_OR_KEYWORD",
-              "()"
-            ]
-          ],
-          "complete_axes": [
-            [
-              "self",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "variable",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "axes",
-              "POSITIONAL_OR_KEYWORD",
               "<class 'inspect._empty'>"
             ]
           ],
@@ -1522,50 +1471,6 @@
             [
               "values",
               "VAR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ]
-          ],
-          "validate_dataset": [
-            [
-              "self",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "dataset_info",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "variable",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "axes",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "grid",
-              "KEYWORD_ONLY",
-              "None"
-            ],
-            [
-              "zfactors",
-              "KEYWORD_ONLY",
-              "()"
-            ]
-          ],
-          "validate_global_attributes": [
-            [
-              "self",
-              "POSITIONAL_OR_KEYWORD",
-              "<class 'inspect._empty'>"
-            ],
-            [
-              "attrs",
-              "POSITIONAL_OR_KEYWORD",
               "<class 'inspect._empty'>"
             ]
           ]

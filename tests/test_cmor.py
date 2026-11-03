@@ -586,7 +586,7 @@ class Cmor4Test(unittest.TestCase):
                 "tas_tavg-h2m-hxy-u",
                 table_id="atmos",
             )
-            scalar_axes = self.project.scalar_axes_for(scalar_variable)
+            scalar_axes = self.project._scalar_axes_for(scalar_variable)
             self.assertEqual(scalar_variable.id, "tas")
             self.assertEqual([axis.name for axis in scalar_axes], ["height2m"])
             self.assertEqual(scalar_axes[0].values, [2.0])

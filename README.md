@@ -107,6 +107,8 @@ path = cmor.cmorize(dataset, variable, axes, data)
 print(f"Created: {path}")
 ```
 
+Dataset creation adds fixed scalar axes required by the variable table automatically.
+
 ## Incremental Writes
 
 For large datasets or data produced incrementally (e.g., as a model runs), use `DatasetWriter` to write time slices one at a time without loading the complete time series into memory:

@@ -73,3 +73,19 @@ def test_public_api_contract():
         assert getattr(cmor, name) is getattr(
             importlib.import_module(getattr(cmor, name).__module__), name
         )
+
+
+def test_project_tables_public_methods_are_dataset_creation_factories():
+    public_methods = {
+        name
+        for name in dir(cmor.ProjectTables)
+        if not name.startswith("_") and callable(getattr(cmor.ProjectTables, name))
+    }
+    assert public_methods == {
+        "from_directory",
+        "dataset_info",
+        "variable",
+        "axis",
+        "grid",
+        "zfactor",
+    }

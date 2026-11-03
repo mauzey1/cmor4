@@ -41,6 +41,7 @@ def write_example(output_dir: Path) -> str:
         "region": "glb",
         "source_id": "ACCESS-ESM1-6",
     })
+    # Dataset creation adds the table-defined 2 m height scalar coordinate.
     axes = [
         project.axis(
             "time",

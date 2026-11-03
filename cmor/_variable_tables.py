@@ -428,7 +428,7 @@ class VariableTable:
 
         Notes
         -----
-        Called by :meth:`~cmor.tables.ProjectTables.validate_dataset`. For
+        Called during dataset creation. For
         contextual empty-string remaps, the accepted variable value is ``None``
         or ``""``; non-empty values are rejected.
         """

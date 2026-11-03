@@ -114,12 +114,12 @@ def test_project_reads_grid_file_once_and_orders_metadata_errors(tmp_path, monke
     axis = cmor.Axis(name="x", values=[0.0], units="s")
     bad_variable = cmor.Variable(name="tas", units="s", dimensions=("x",))
     with pytest.raises(cmor.TableValidationError, match="grid axis"):
-        project.validate_dataset(None, bad_variable, [axis.updated(isgridaxis=True)])
+        project._validate_dataset(None, bad_variable, [axis.updated(isgridaxis=True)])
     with pytest.raises(cmor.TableValidationError, match="units") as error:
-        project.validate_dataset(None, bad_variable, [axis])
+        project._validate_dataset(None, bad_variable, [axis])
     assert "tas" in str(error.value)
     with pytest.raises(cmor.TableValidationError, match="axis 'x'"):
-        project.validate_dataset(None, project.variable("tas"), [axis])
+        project._validate_dataset(None, project.variable("tas"), [axis])
 
 
 def test_cv_serializes_once_and_preserves_required_error_order(monkeypatch):

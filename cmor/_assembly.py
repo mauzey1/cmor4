@@ -143,8 +143,8 @@ def validate_final_dataset(
 
     project = getattr(ctx.dataset, "project", None)
     if project is not None:
-        project.validate_global_attributes(ds.attrs)
-        project.validate_dataset(
+        project._validate_global_attributes(ds.attrs)
+        project._validate_dataset(
             ctx.dataset,
             ctx.variable,
             ctx.axes,
@@ -205,7 +205,7 @@ def dataset_for_variable(
     project = getattr(dataset, "project", None)
     if project is None:
         return dataset, variable
-    return project.dataset_for_variable(dataset, variable)
+    return project._dataset_for_variable(dataset, variable)
 
 
 def _dataset_axes(

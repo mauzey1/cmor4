@@ -41,6 +41,10 @@ class ProjectTables:
     remappings are treated as effective variable-table values during
     preparation and validation.
 
+    Use the factory methods below to prepare dataset metadata and components.
+    Dataset creation performs the remaining table checks and adds any required
+    fixed scalar axes automatically.
+
     Parameters
     ----------
     cv_file
@@ -202,7 +206,7 @@ class ProjectTables:
             user_info=user_info,
         )
 
-    def dataset_for_variable(
+    def _dataset_for_variable(
         self,
         dataset_info: DatasetMetadata,
         variable: Variable,
@@ -211,10 +215,10 @@ class ProjectTables:
 
         This is called by create_dataset to merge variable metadata into
         dataset and perform initial validation. Full component validation
-        happens later via validate_dataset. If contextual remapping tables are
-        loaded, matching ``long_name`` and ``cell_measures`` values are applied
-        to the returned ``Variable`` and used as the expected table values for
-        validation.
+        happens later during dataset validation. If contextual remapping
+        tables are loaded, matching ``long_name`` and ``cell_measures`` values
+        are applied to the returned ``Variable`` and used as the expected table
+        values for validation.
 
         Returns
         -------
@@ -411,10 +415,10 @@ class ProjectTables:
             for axis in axes
         ]
         if variable is not None:
-            merged_axes.extend(self.scalar_axes_for(variable, merged_axes))
+            merged_axes.extend(self._scalar_axes_for(variable, merged_axes))
         return tuple(self._mark_prepared_axis(axis) for axis in merged_axes)
 
-    def scalar_axes_for(
+    def _scalar_axes_for(
         self,
         variable: Variable,
         axes: Sequence[Axis] = (),
@@ -442,30 +446,7 @@ class ProjectTables:
             by the variable's dimensions but not present in the provided axes.
             Each axis is marked as scalar and includes the table-defined value.
 
-        Notes
-        -----
-        This method is called automatically by ``create_dataset`` when using
-        project-backed metadata. It can also be called directly to preview
-        which scalar axes will be auto-added.
-
-        Examples
-        --------
-        Check which scalar axes a variable needs::
-
-            project = ProjectTables.from_directory(...)
-            variable = project.variable("tas")  # dimensions include "height2m"
-            lat = project.axis("lat", values=[...])
-            lon = project.axis("lon", values=[...])
-            time = project.axis("time", values=[...])
-
-            missing = project.scalar_axes_for(variable, [lat, lon, time])
-            # Returns tuple with height2m axis
-
-        Preview scalar axes before dataset creation::
-
-            variable = project.variable("tas")
-            scalar_axes = project.scalar_axes_for(variable)
-            # Returns all required scalar axes if no axes provided
+        This is used internally while preparing axes for dataset creation.
         """
 
         present = {
@@ -507,50 +488,6 @@ class ProjectTables:
                 if value
             )
         return tuple(self._mark_prepared_axis(axis) for axis in missing_axes)
-
-    def complete_axes(
-        self,
-        variable: Variable,
-        axes: Sequence[Axis],
-    ) -> tuple[Axis, ...]:
-        """Return supplied axes plus fixed scalar axes required by variable.
-
-        This convenience method combines user-provided axes with any required
-        scalar axes, returning a complete set ready for dataset creation. It
-        ensures all axes are merged with project table metadata.
-
-        Parameters
-        ----------
-        variable
-            Variable whose dimensions determine which scalar axes are required.
-        axes
-            User-provided axes for the variable.
-
-        Returns
-        -------
-        tuple[Axis, ...]
-            Complete tuple of axes including both the provided axes (merged
-            with table metadata if needed) and any required scalar axes.
-
-        See Also
-        --------
-        scalar_axes_for : Get only the missing scalar axes without merging.
-
-        Examples
-        --------
-        Get complete axis set for a variable::
-
-            project = ProjectTables.from_directory(...)
-            variable = project.variable("tas")
-            time = project.axis("time", values=[...])
-            lat = project.axis("lat", values=[...])
-            lon = project.axis("lon", values=[...])
-
-            complete = project.complete_axes(variable, [time, lat, lon])
-            # Returns (time, lat, lon, height2m) with height2m auto-added
-        """
-
-        return self._axes(axes, variable)
 
     def grid(
         self,
@@ -751,7 +688,7 @@ class ProjectTables:
         request = ZFactor.model_validate({"name": name, **values})
         return self.formula_table.build(request)
 
-    def validate_dataset(
+    def _validate_dataset(
         self,
         dataset_info: DatasetMetadata | None,
         variable: Variable,
@@ -763,10 +700,8 @@ class ProjectTables:
         """Validate metadata records and dataset configuration comprehensively.
 
         This is the complete validation check that ensures all components are
-        consistent with each other and with the loaded project tables. It can
-        be used both as the final check before dataset creation and as a
-        user-facing validation function to verify metadata setup before
-        writing data.
+        consistent with each other and with the loaded project tables. Dataset
+        creation calls this before writing data.
 
         Components created via this ProjectTables instance (using factory
         methods or with project=self) already have validated attributes
@@ -804,20 +739,6 @@ class ProjectTables:
             the loaded project tables or if components are inconsistent with
             each other.
 
-        Examples
-        --------
-        Validate components before creating a dataset::
-
-            project = ProjectTables(...)
-            dataset = project.dataset_info({...})
-            variable = project.variable("tas")
-            axes = [project.axis("time", ...), project.axis("lat", ...)]
-
-            # Validate everything before attempting to create dataset
-            project.validate_dataset(dataset, variable, axes)
-
-            # If validation passes, safe to create the NetCDF file
-            path = create_dataset(dataset, variable, axes, data)
         """
 
         # must_call_cmor_grid fast-fail: if any axis in the user-provided axes
@@ -835,9 +756,9 @@ class ProjectTables:
                 )
 
         # Variable validation: ensure stored attributes match table entry
-        # Note: This may be redundant with validation in dataset_for_variable,
-        # but we validate again here to ensure consistency when called directly
-        # by users or if variable was modified after dataset_for_variable
+        # Note: This may be redundant with validation in _dataset_for_variable,
+        # but we validate again here to ensure consistency if the variable was
+        # modified after preparation.
         variable_entry = self.variable_table.resolve(variable)
 
         if dataset_info is not None:
@@ -901,10 +822,8 @@ class ProjectTables:
                 if dimension_name in self.coordinate_table.scalar_entries:
                     raise TableValidationError(
                         f"Variable requires scalar axis {dimension_name!r} "
-                        "but it was not provided. Use "
-                        "ProjectTables.scalar_axes_for() or "
-                        "ProjectTables.complete_axes() to get required "
-                        "scalar axes."
+                        "but it was not provided. Supply the required scalar "
+                        "axis when creating the dataset."
                     )
                 # Non-scalar dimension not found - will be caught elsewhere
                 # (e.g., when building dataset if dimension truly missing)
@@ -937,7 +856,7 @@ class ProjectTables:
                 f"frequency={variable.frequency!r}."
             )
 
-    def validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
+    def _validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
         """Validate final NetCDF global attributes against project tables.
 
         Parameters
