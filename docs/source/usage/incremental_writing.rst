@@ -32,6 +32,16 @@ DatasetWriter is designed for bounded memory usage:
 .. note::
    DatasetWriter uses Zarr for staging and Dask for lazy loading during finalization. This means the complete dataset is never loaded into memory - data is streamed directly from the Zarr store to NetCDF. You don't need to use Dask directly; it's handled automatically.
 
+DatasetWriter validates metadata against the project tables when initialized and
+validates each data chunk before staging it. Each ``write()`` appends a chunk to
+the temporary Zarr store; ``close()`` streams the staged data into the final
+NetCDF file. The staging directory is removed after a successful close and
+preserved if an error occurs, so you can inspect ``writer.staging_path``.
+
+Only the time dimension supports incremental writes. Provide complete values
+for spatial and other non-time axes when creating the writer. Time values can
+be supplied with each write or specified on the time axis in advance.
+
 Basic Usage
 -----------
 
@@ -173,7 +183,6 @@ Create separate file segments with gaps between them:
 
    # Close with preserve_definition=True to reuse definition
    path1 = writer.close(preserve_definition=True)
-   ds1.close()
 
    # Second segment: 1950-2000 (gap from 1900-1950)
    writer.path = Path("segment_1950-2000.nc")
@@ -183,7 +192,6 @@ Create separate file segments with gaps between them:
        writer.write(data, time_values=time_vals, time_bounds=time_bnds)
 
    path2 = writer.close()
-   ds2.close()
 
 Custom Output Path
 ~~~~~~~~~~~~~~~~~~
@@ -273,6 +281,10 @@ Specify NetCDF encoding:
        axes,
        encoding=encoding,
    )
+
+If ``encoding`` is omitted, CMIP7 auto-chunking rules apply. Additional keyword
+arguments to ``DatasetWriter`` are passed to
+:meth:`xarray.Dataset.to_netcdf` when the file is finalized.
 
 Custom Staging Directory
 ~~~~~~~~~~~~~~~~~~~~~~~~~
