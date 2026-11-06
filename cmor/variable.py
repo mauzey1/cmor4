@@ -167,7 +167,7 @@ def validate_variable_values(
     name: str | None = None,
     table_id: str | None = None,
 ) -> None:
-    """Apply CMOR-style checks to data variable and formula-term values."""
+    """Apply validation to data variable and formula-term values."""
 
     values: np.ndarray
     try:

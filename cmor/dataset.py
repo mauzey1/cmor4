@@ -45,7 +45,7 @@ def create_dataset(
     encoding: Mapping[str, Any] | None = None,
     **to_netcdf_kwargs: Any,
 ) -> Path:
-    """Create and write a CMOR-like NetCDF file from metadata objects.
+    """Create and write a CF-compliant NetCDF file from metadata objects.
 
     When ``dataset`` was created by :meth:`ProjectTables.dataset_info`, this
     function uses the associated project tables to fill dataset-level defaults,
@@ -75,7 +75,7 @@ def create_dataset(
     grid:
         Optional runtime grid dimensions and grid-mapping metadata.
     path:
-        Explicit output path. If omitted, the CMOR-like path is rendered from
+        Explicit output path. If omitted, the path is rendered from
         metadata.
     attrs:
         Extra global attributes.
@@ -194,7 +194,7 @@ def cmorize(
     encoding: Mapping[str, Any] | None = None,
     **to_netcdf_kwargs: Any,
 ) -> Path:
-    """Create and write a CMOR-like NetCDF file from metadata objects.
+    """Create and write a CF-compliant NetCDF file from metadata objects.
 
     For CMIP7 datasets, CMIP7-compliant chunking is automatically applied unless
     user-provided chunking is specified via the encoding parameter.
@@ -214,7 +214,7 @@ def cmorize(
     grid:
         Optional runtime grid dimensions and grid-mapping metadata.
     path:
-        Explicit output path. If omitted, the CMOR-like path is rendered from
+        Explicit output path. If omitted, the path is rendered from
         metadata.
     attrs:
         Extra global attributes to include in the output dataset.
@@ -269,7 +269,7 @@ def build_output_path(
     variable: Variable,
     ds: xr.Dataset | None = None,
 ) -> Path:
-    """Build a CMOR-like output path from dataset and variable metadata.
+    """Build an output path from dataset and variable metadata.
 
     Template resolution follows a three-level priority chain that mirrors
     CMOR3's behaviour (added in CMOR 3.12):

@@ -208,7 +208,7 @@ def validate_and_normalize_axes(
     variable: Variable,
     axes: Sequence[Axis],
 ) -> tuple[Axis, ...]:
-    """Return axes after CMOR-style coordinate validation."""
+    """Return axes after coordinate validation."""
     return tuple(_validate_and_normalize_axis(dataset, variable, axis) for axis in axes)
 
 
