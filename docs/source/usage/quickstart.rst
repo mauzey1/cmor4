@@ -6,13 +6,7 @@ This guide will get you started with CMOR in minutes.
 Installation
 ------------
 
-Install CMOR from PyPI:
-
-.. code-block:: bash
-
-   pip install cmor
-
-Or install from source:
+Install from source:
 
 .. code-block:: bash
 

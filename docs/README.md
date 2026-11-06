@@ -2,8 +2,6 @@
 
 This directory contains the Sphinx documentation for CMOR.
 
-This directory contains the Sphinx documentation for CMOR4.
-
 ## Prerequisites
 
 Install the development dependencies including Sphinx, sphinx-autobuild, and the Furo theme:
