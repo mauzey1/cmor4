@@ -172,6 +172,10 @@ See the [Incremental Writing documentation](docs/source/usage/incremental_writin
 
 Jupyter notebook examples with visualizations are available in [notebooks](./notebooks/)
 
+## Documentation
+
+CMOR usage examples and API reference can be found on the [documentation site](https://mauzey1.github.io/cmor4/).
+
 ## Support
 
 - **Issues**: Report bugs and request features via [GitHub Issues](https://github.com/mauzey1/cmor4/issues)
