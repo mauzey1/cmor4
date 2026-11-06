@@ -17,7 +17,7 @@ Install from source:
 Basic Example
 -------------
 
-Here's a minimal example of creating a CMOR-compliant NetCDF file:
+Here's a minimal example of creating a CF-compliant NetCDF file:
 
 .. code-block:: python
 
@@ -81,7 +81,7 @@ What Just Happened?
 3. **Selected a variable** from the project tables (sea surface temperature)
 4. **Defined coordinate axes** with values and bounds
 5. **Created sample data** matching the axis dimensions
-6. **Wrote a CMOR-compliant NetCDF file** with automatic validation
+6. **Wrote a CF-compliant NetCDF file** with automatic validation
 
 The output file includes:
 

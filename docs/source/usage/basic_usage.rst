@@ -6,7 +6,7 @@ This guide covers common CMOR usage patterns for creating climate model output.
 One-Shot Writing with cmorize()
 --------------------------------
 
-The :func:`cmor.cmorize` function is the simplest way to write CMOR-compliant NetCDF files when your complete dataset fits in memory.
+The :func:`cmor.cmorize` function is the simplest way to write CF-compliant NetCDF files when your complete dataset fits in memory.
 
 Simple 3D Dataset (time, lat, lon)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

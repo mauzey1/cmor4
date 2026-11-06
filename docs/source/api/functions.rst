@@ -3,7 +3,7 @@ Functions
 
 .. currentmodule:: cmor
 
-Main API functions for creating and writing CMOR-compliant datasets.
+Main API functions for creating and writing CF-compliant datasets.
 
 Dataset Creation
 ----------------

@@ -641,7 +641,7 @@ Starting from Xarray Datasets
    lat_values = ds_in["lat"].values
    lon_values = ds_in["lon"].values
 
-   # Convert to CMOR-compliant
+   # Convert to CF-compliant
    axes = [
        project.axis("time", values=time_values.tolist(),
                     units="days since 1850-01-01"),

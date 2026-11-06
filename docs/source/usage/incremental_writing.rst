@@ -1,7 +1,7 @@
 Incremental Writing with DatasetWriter
 =======================================
 
-:class:`cmor.DatasetWriter` enables memory-bounded incremental writing of CMOR-compliant NetCDF files. Write data one time slice at a time as it becomes available, perfect for streaming model output or datasets larger than RAM.
+:class:`cmor.DatasetWriter` enables memory-bounded incremental writing of CF-compliant NetCDF files. Write data one time slice at a time as it becomes available, perfect for streaming model output or datasets larger than RAM.
 
 When to Use DatasetWriter
 --------------------------
