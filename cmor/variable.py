@@ -169,7 +169,7 @@ def validate_variable_values(
 ) -> None:
     """Apply validation to data variable and formula-term values."""
 
-    values: np.ndarray
+    values: np.ma.MaskedArray
     try:
         values = np.ma.asarray(data, dtype=float)
     except (TypeError, ValueError):

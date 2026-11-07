@@ -12,21 +12,25 @@ from table_helpers import cmip7_project, drcdp_project, obs4mips_project
 from dataset_helpers import cmorize_and_open, open_created_dataset
 
 
-def guide_time_axis(values, bounds, units, calendar="standard", project=None):
+def guide_time_axis(
+    values, bounds, units, calendar="standard", project=None, frequency=None
+):
     if project is not None:
         return project.axis(
             "time",
             values=values,
             bounds=bounds,
             units=units,
-            extra={"calendar": calendar},
+            calendar=calendar,
+            frequency=frequency,
         )
     return cmor.Axis(
         name="time",
         values=values,
         bounds=bounds,
         units=units,
-        extra={"calendar": calendar},
+        calendar=calendar,
+        frequency=frequency,
     )
 
 
@@ -111,7 +115,6 @@ def obs4mips_info(
     return {
         "Conventions": "CF-1.11; ODS-2.5",
         "activity_id": "obs4MIPs",
-        "calendar": "standard",
         "contact": "submissions-obs4mips@wcrp-cmip.org",
         "grid_label": grid_label,
         "has_aux_unc": "FALSE",
@@ -226,10 +229,8 @@ class DatasetGuideProjectTest(unittest.TestCase):
             project = self.cmip7_atmos_project
             raw_info = {
                 "activity_id": "CMIP",
-                "calendar": "360_day",
                 "experiment_id": "amip",
                 "forcing_index": "f3",
-                "frequency": "mon",
                 "grid_label": "g101",
                 "initialization_index": "i1",
                 "institution_id": "CNRM-CERFACS",
@@ -247,6 +248,7 @@ class DatasetGuideProjectTest(unittest.TestCase):
                     [[0.0, 30.0], [30.0, 60.0]],
                     "days since 1979-01-01",
                     calendar="360_day",
+                    frequency="mon",
                     project=project,
                 ),
                 guide_lat_axis((10.0, 20.0, 30.0)),

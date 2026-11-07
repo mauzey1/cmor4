@@ -154,11 +154,13 @@ def test_cv_serializes_once_and_preserves_required_error_order(monkeypatch):
 
 def _simple_metadata():
     return (
-        cmor.DatasetInfo(calendar="360_day", frequency="day"),
+        cmor.DatasetInfo(),
         cmor.Variable(name="tas", units="K", dimensions=("time",), chunksizes=(1,)),
         [
             cmor.Axis(
                 name="time",
+                calendar="360_day",
+                frequency="day",
                 axis="T",
                 values=[0.5, 1.5, 2.5, 3.5],
                 bounds=[0.0, 1.0, 2.0, 3.0, 4.0],

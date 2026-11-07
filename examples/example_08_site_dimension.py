@@ -27,10 +27,8 @@ def write_example(output_dir: Path) -> str:
     )
     dataset = project.dataset_info({
         "activity_id": "CMIP",
-        "calendar": "360_day",
         "experiment_id": "amip",
         "forcing_index": "f1",
-        "frequency": "mon",
         "grid_label": "g010",
         "initialization_index": "i1",
         "institution_id": "MOHC",
@@ -46,6 +44,8 @@ def write_example(output_dir: Path) -> str:
     site = project.axis("site", units="1", values=site_values)
     time = project.axis(
         "time1",
+        calendar="360_day",
+        frequency="mon",
         values=np.array([0.0, 30.0], dtype="d"),
         units="days since 1979-01-01",
     )
@@ -55,12 +55,14 @@ def write_example(output_dir: Path) -> str:
         dimensions=["site"],
         latitude=site_latitudes,
         longitude=site_longitudes,
-        latitude_vertices=np.column_stack(
-            (site_latitudes - 0.25, site_latitudes + 0.25)
-        ),
-        longitude_vertices=np.column_stack(
-            (site_longitudes - 0.25, site_longitudes + 0.25)
-        ),
+        latitude_vertices=np.column_stack((
+            site_latitudes - 0.25,
+            site_latitudes + 0.25,
+        )),
+        longitude_vertices=np.column_stack((
+            site_longitudes - 0.25,
+            site_longitudes + 0.25,
+        )),
     )
     variable = project.variable(
         "tas_tpt-h2m-hs-u", table_id="atmos", missing_value=np.float64(1.0e20)

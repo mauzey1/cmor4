@@ -17,7 +17,6 @@ from .axis import (
     Axis,
     validate_axes,
     validate_axis_values_early,
-    validate_calendar,
 )
 from .cv import ControlledVocabulary
 from .datasetinfo import DatasetInfo
@@ -250,13 +249,7 @@ class ProjectTables:
             user_info=dict(user_info),
         )
 
-        # Quick validation check for dataset-variable consistency
-        # This is duplicated in validate_components but done early for fast
-        # failure.
         self.variable_table.validate_against(variable, variable_entry)
-        self._validate_dataset_variable_consistency(
-            prepared_dataset, variable, variable_entry
-        )
 
         return prepared_dataset, variable
 
@@ -365,7 +358,9 @@ class ProjectTables:
             time_axis = project.axis(
                 "time",
                 values=[0, 31, 59, 90],
-                bounds=[[0, 31], [31, 59], [59, 90], [90, 120]]
+                bounds=[[0, 31], [31, 59], [59, 90], [90, 120]],
+                calendar="standard",
+                frequency="mon",
             )
 
         Create a latitude axis from table::
@@ -769,12 +764,6 @@ class ProjectTables:
 
         self.variable_table.validate_against(variable, variable_entry)
 
-        # Dataset-variable consistency checks
-        if dataset_info is not None:
-            self._validate_dataset_variable_consistency(
-                dataset_info, variable, variable_entry
-            )
-
         # Axis validation: only validate axes not prepared by this instance
         for axis in axes:
             if not self._is_prepared_axis(axis):
@@ -786,11 +775,6 @@ class ProjectTables:
         # table-declared frequency are enforced even when no dataset is
         # provided.
         validate_axes(dataset_info, variable, axes)
-
-        # Calendar validation: warn if the dataset specifies a calendar that
-        # is technically valid per CF but inappropriate for MIP data.
-        if dataset_info is not None:
-            validate_calendar(dataset_info)
 
         # Check that required scalar axes are present (if not auto-added)
         present = {
@@ -835,26 +819,6 @@ class ProjectTables:
         # ZFactor validation: ensure stored attributes match tables
         for zfactor in zfactors:
             self.formula_table.validate_metadata(zfactor)
-
-    def _validate_dataset_variable_consistency(
-        self,
-        dataset_info: DatasetMetadata,
-        variable: Variable,
-        variable_entry: VariableEntry,
-    ) -> None:
-        """Validate consistency between dataset and variable metadata."""
-        # Check frequency consistency
-        dataset_frequency = dataset_info.frequency
-        if (
-            dataset_frequency is not None
-            and variable.frequency is not None
-            and str(dataset_frequency) != str(variable.frequency)
-        ):
-            raise TableValidationError(
-                f"dataset frequency={dataset_frequency!r} does not match "
-                f"variable {variable_entry.table_id}:{variable_entry.name} "
-                f"frequency={variable.frequency!r}."
-            )
 
     def _validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
         """Validate final NetCDF global attributes against project tables.

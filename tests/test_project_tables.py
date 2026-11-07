@@ -343,6 +343,8 @@ def lat_lon_axes(project=None):
         return [
             project.axis(
                 "time",
+                frequency="mon",
+                calendar="360_day",
                 values=[15.0, 45.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0]],
                 units="days since 2000-01-01",
@@ -383,7 +385,6 @@ def cmip7_dataset(**overrides):
         "activity_id": "CMIP",
         "experiment_id": "amip",
         "forcing_index": "f3",
-        "frequency": "mon",
         "grid_label": "g101",
         "initialization_index": "i1",
         "institution_id": "CNRM-CERFACS",
@@ -403,6 +404,8 @@ class ProjectTablesTest(unittest.TestCase):
         axes = [
             project.axis(
                 "time",
+                frequency="mon",
+                calendar="360_day",
                 values=[15.0],
                 bounds=[[0.0, 30.0]],
                 units="days since 2020-02-01",
@@ -520,6 +523,8 @@ class ProjectTablesTest(unittest.TestCase):
             [
                 project.axis(
                     "time",
+                    frequency="mon",
+                    calendar="360_day",
                     values=[15.0, 45.0],
                     bounds=[[0.0, 30.0], [30.0, 60.0]],
                     units="days since 2000-01-01",
@@ -633,6 +638,8 @@ class ProjectTablesTest(unittest.TestCase):
         axes = [
             project.axis(
                 "time",
+                frequency="mon",
+                calendar="360_day",
                 values=[15.0],
                 bounds=[[0.0, 30.0]],
                 units="days since 2020-02-01",
@@ -808,10 +815,8 @@ class ProjectTablesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             dataset = {
                 "activity_id": "CMIP",
-                "calendar": "standard",
                 "experiment_id": "amip",
                 "forcing_index": "f3",
-                "frequency": "mon",
                 "grid_label": "g101",
                 "initialization_index": "i1",
                 "institution_id": "CNRM-CERFACS",
@@ -854,10 +859,8 @@ class ProjectTablesTest(unittest.TestCase):
         project = cmip7_project("tables/CMIP7_ocean.json")
         dataset = {
             "activity_id": "CMIP",
-            "calendar": "360_day",
             "experiment_id": "amip",
             "forcing_index": "f3",
-            "frequency": "mon",
             "grid_label": "g101",
             "initialization_index": "i1",
             "institution_id": "CNRM-CERFACS",
@@ -1114,7 +1117,6 @@ class ProjectTablesTest(unittest.TestCase):
             "activity_id": "CMIP",
             "experiment_id": "amip",
             "forcing_index": "f3",
-            "frequency": "mon",
             "grid_label": "g101",
             "initialization_index": "i1",
             "institution_id": "CNRM-CERFACS",
@@ -1189,6 +1191,8 @@ class ProjectTablesTest(unittest.TestCase):
             axes = [
                 project.axis(
                     "time",
+                    frequency="mon",
+                    calendar="360_day",
                     values=[15.0, 45.0],
                     bounds=[[0.0, 30.0], [30.0, 60.0]],
                     units="days since 2000-01-01",
@@ -1232,7 +1236,6 @@ class ProjectTablesTest(unittest.TestCase):
         self.assertIsNotNone(project.cv._license)
         dataset = {
             "activity_id": "obs4MIPs",
-            "frequency": "day",
             "grid_label": "gn",
             "institution_id": "NOAA-NCEI",
             "license": project.cv._license.default_text,
@@ -1246,6 +1249,8 @@ class ProjectTablesTest(unittest.TestCase):
         axes = [
             project.axis(
                 "time",
+                frequency="day",
+                calendar="360_day",
                 values=[15.0, 45.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0]],
                 units="days since 2000-01-01",
@@ -1254,7 +1259,7 @@ class ProjectTablesTest(unittest.TestCase):
             project.axis("longitude", values=[90.0, 270.0]),
         ]
 
-        with self.assertRaises(cmor.ControlledVocabularyError):
+        with self.assertRaises(cmor.TableValidationError):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 cmor.create_dataset(
                     info,
@@ -1854,7 +1859,7 @@ class VariableRemappingTest(unittest.TestCase):
                 "realmA.bar.tavg-u-hxy-u.mon.glb": "",
             },
         )
-        self.dataset = self.project.dataset_info({"frequency": "mon", "region": "glb"})
+        self.dataset = self.project.dataset_info({"region": "glb"})
 
     def tearDown(self):
         self._ctx.cleanup()
@@ -3888,16 +3893,18 @@ class ValidateComponentsIntegrationTest(unittest.TestCase):
         # Should not raise for the scalar axis requirement
         self.project._validate_dataset(None, tas, full_axes)
 
-    def test_dataset_from_dataset_info_passes_frequency_check(self):
+    def test_axis_frequency_matches_variable(self):
         pr = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
-        self.project._validate_dataset(dataset, pr, self._base_axes())
+        axes = self._base_axes()
+        axes[0] = axes[0].updated(frequency="mon")
+        self.project._validate_dataset(DatasetInfo(), pr, axes)
 
-    def test_mismatched_frequency_between_dataset_and_variable(self):
+    def test_mismatched_frequency_between_axis_and_variable(self):
         pr = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "day"})
+        axes = self._base_axes()
+        axes[0] = axes[0].updated(frequency="day")
         with self.assertRaises(TableValidationError):
-            self.project._validate_dataset(dataset, pr, self._base_axes())
+            self.project._validate_dataset(DatasetInfo(), pr, axes)
 
     def test_grid_from_factory_passes_mapping_name_check(self):
         pr = self.project.variable("pr")
@@ -4081,6 +4088,7 @@ class MustHaveBoundsTest(unittest.TestCase):
     def _base_axes(self, lat_bounds=True):
         time = self.project.axis(
             "time",
+            frequency="mon",
             values=[15.0],
             bounds=[[0.0, 30.0]],
             units="days since 2000-01-01",
@@ -4104,7 +4112,7 @@ class MustHaveBoundsTest(unittest.TestCase):
 
     def test_lat_with_bounds_passes_with_dataset(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
+        dataset = DatasetInfo()
         self.project._validate_dataset(dataset, var, self._base_axes(lat_bounds=True))
 
     # --- fails without bounds regardless of whether dataset is provided ---
@@ -4119,7 +4127,7 @@ class MustHaveBoundsTest(unittest.TestCase):
 
     def test_lat_without_bounds_raises_with_dataset(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
+        dataset = DatasetInfo()
         with self.assertRaises(AxisValidationError) as ctx:
             self.project._validate_dataset(
                 dataset, var, self._base_axes(lat_bounds=False)
@@ -4224,7 +4232,7 @@ class TimeIntervalWithoutDatasetTest(unittest.TestCase):
 
     def test_monthly_time_with_monthly_variable_passes_with_dataset(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
+        dataset = DatasetInfo()
         self.project._validate_dataset(
             dataset, var, [self._monthly_time()] + self._spatial_axes()
         )
@@ -4244,7 +4252,7 @@ class TimeIntervalWithoutDatasetTest(unittest.TestCase):
 
     def test_daily_time_with_monthly_variable_also_raises_with_dataset(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
+        dataset = DatasetInfo()
         with self.assertRaises(AxisValidationError):
             self.project._validate_dataset(
                 dataset, var, [self._daily_time()] + self._spatial_axes()
@@ -4264,7 +4272,7 @@ class TimeIntervalWithoutDatasetTest(unittest.TestCase):
 
 
 class MIPCalendarTest(unittest.TestCase):
-    """Tests for the warning issued when a dataset specifies a calendar that
+    """Tests for the warning issued when a time axis specifies a calendar that
     is valid per the CF convention but inappropriate for MIP data.
 
     CMOR3 rejects 'utc', 'tai', 'all_leap', and '366_day' with a warning.
@@ -4305,10 +4313,12 @@ class MIPCalendarTest(unittest.TestCase):
     def tearDown(self):
         self._ctx.cleanup()
 
-    def _base_axes(self):
+    def _base_axes(self, calendar=None):
         return [
             self.project.axis(
                 "time",
+                calendar=calendar,
+                frequency="mon",
                 values=[15.0, 45.0],
                 bounds=[[0.0, 30.0], [30.0, 60.0]],
                 units="days since 2000-01-01",
@@ -4326,13 +4336,10 @@ class MIPCalendarTest(unittest.TestCase):
         Run validate_components with the given calendar and return any MIP warnings.
         """
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({
-            "frequency": "mon",
-            "calendar": calendar,
-        })
+        dataset = DatasetInfo()
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            self.project._validate_dataset(dataset, var, self._base_axes())
+            self.project._validate_dataset(dataset, var, self._base_axes(calendar))
         return [w for w in caught if "appropriate for MIP" in str(w.message)]
 
     # --- invalid calendars (not recognised by cftime at all) raise ---
@@ -4340,25 +4347,22 @@ class MIPCalendarTest(unittest.TestCase):
     def test_utc_calendar_raises(self):
         """'utc' is not a CF calendar — raises AxisValidationError."""
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon", "calendar": "utc"})
+        dataset = DatasetInfo()
         with self.assertRaises(AxisValidationError) as ctx:
-            self.project._validate_dataset(dataset, var, self._base_axes())
+            self.project._validate_dataset(dataset, var, self._base_axes("utc"))
         self.assertIn("utc", str(ctx.exception))
 
     def test_completely_unknown_calendar_raises(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({
-            "frequency": "mon",
-            "calendar": "martian",
-        })
+        dataset = DatasetInfo()
         with self.assertRaises(AxisValidationError):
-            self.project._validate_dataset(dataset, var, self._base_axes())
+            self.project._validate_dataset(dataset, var, self._base_axes("martian"))
 
     def test_invalid_calendar_error_lists_valid_options(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon", "calendar": "utc"})
+        dataset = DatasetInfo()
         with self.assertRaises(AxisValidationError) as ctx:
-            self.project._validate_dataset(dataset, var, self._base_axes())
+            self.project._validate_dataset(dataset, var, self._base_axes("utc"))
         self.assertIn("standard", str(ctx.exception))
 
     # --- MIP-inappropriate but cftime-valid calendars warn ---
@@ -4404,11 +4408,11 @@ class MIPCalendarTest(unittest.TestCase):
     def test_julian_calendar_no_warning(self):
         self.assertFalse(self._validate_with_calendar("julian"))
 
-    # --- no calendar in dataset means no check ---
+    # --- unspecified axis calendar defaults to standard ---
 
-    def test_no_calendar_in_dataset_no_warning(self):
+    def test_default_axis_calendar_no_warning(self):
         var = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
+        dataset = DatasetInfo()
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             self.project._validate_dataset(dataset, var, self._base_axes())
@@ -4475,9 +4479,9 @@ class ValidateComponentsTest(unittest.TestCase):
         self.project._validate_dataset(None, variable, self._standard_axes())
 
     def test_valid_with_matching_frequency_passes(self):
-        """Dataset frequency matching variable frequency passes."""
+        """Axis frequency matching variable frequency passes."""
         variable = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "mon"})
+        dataset = DatasetInfo()
         self.project._validate_dataset(dataset, variable, self._standard_axes())
 
     def test_valid_with_no_grid_and_no_zfactors_passes(self):
@@ -4527,15 +4531,17 @@ class ValidateComponentsTest(unittest.TestCase):
             self.project._validate_dataset(None, unknown_var, self._standard_axes())
 
     # ==================================================================
-    # 3. Dataset-variable consistency (frequency)
+    # 3. Axis-variable consistency (frequency)
     # ==================================================================
 
     def test_frequency_mismatch_raises(self):
-        """Dataset frequency differing from variable table frequency raises."""
+        """Axis frequency differing from variable table frequency raises."""
         variable = self.project.variable("pr")  # table says 'mon'
-        dataset = DatasetInfo.from_prepared({"frequency": "day"})
+        dataset = DatasetInfo()
+        axes = self._standard_axes()
+        axes[0] = axes[0].updated(frequency="day")
         with self.assertRaises(TableValidationError) as ctx:
-            self.project._validate_dataset(dataset, variable, self._standard_axes())
+            self.project._validate_dataset(dataset, variable, axes)
         msg = str(ctx.exception)
         self.assertIn("frequency", msg)
         self.assertIn("day", msg)
@@ -4544,15 +4550,17 @@ class ValidateComponentsTest(unittest.TestCase):
     def test_frequency_mismatch_names_variable_table(self):
         """Error message identifies the variable and table where mismatch occurs."""
         variable = self.project.variable("pr")
-        dataset = DatasetInfo.from_prepared({"frequency": "fx"})
+        dataset = DatasetInfo()
+        axes = self._standard_axes()
+        axes[0] = axes[0].updated(frequency="fx")
         with self.assertRaises(TableValidationError) as ctx:
-            self.project._validate_dataset(dataset, variable, self._standard_axes())
+            self.project._validate_dataset(dataset, variable, axes)
         self.assertIn("Amon", str(ctx.exception))
         self.assertIn("pr", str(ctx.exception))
 
-    def test_dataset_none_skips_frequency_check(self):
-        """With dataset=None the frequency check is skipped entirely."""
-        # Variable has frequency='mon' in table; no dataset → no check → no error
+    def test_table_frequency_default_without_dataset(self):
+        """With dataset=None the variable table still supplies frequency."""
+        # Monthly axes match the variable's table frequency.
         variable = self.project.variable("pr")
         self.project._validate_dataset(None, variable, self._standard_axes())
 

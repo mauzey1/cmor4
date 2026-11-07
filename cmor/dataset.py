@@ -107,7 +107,6 @@ def create_dataset(
         requested metadata, or if CMIP7 chunking requirements are not met.
     """
 
-    dataset, variable = _assembly.dataset_for_variable(dataset, variable)
     ctx = _assembly.validate_metadata(dataset, variable, axes, zfactors, grid)
     data_array = _assembly.validate_data_chunk(ctx, data)
     ds = create_dataset_from_validated_data(
@@ -116,7 +115,7 @@ def create_dataset(
         attrs=attrs,
         encoding=encoding,
     )
-    return write_netcdf(ds, dataset, variable, path=path, **to_netcdf_kwargs)
+    return write_netcdf(ds, ctx.dataset, ctx.variable, path=path, **to_netcdf_kwargs)
 
 
 def create_dataset_from_validated_data(
@@ -298,6 +297,8 @@ def build_output_path(
         Rendered output path, including the ``.nc`` filename.
     """
 
+    if ds is not None and ds.attrs.get("frequency"):
+        dataset = dataset.model_copy(update={"frequency": ds.attrs["frequency"]})
     dataset, variable = _assembly.dataset_for_variable(dataset, variable)
     root = Path(str(dataset.outpath or ".")).expanduser()
     tokens = _template_tokens(dataset, variable, ds)
@@ -358,6 +359,8 @@ def string_from_template(
         Rendered template string.
     """
 
+    if ds is not None and ds.attrs.get("frequency"):
+        dataset = dataset.model_copy(update={"frequency": ds.attrs["frequency"]})
     dataset, variable = _assembly.dataset_for_variable(dataset, variable)
     return render_template(template, _template_tokens(dataset, variable, ds), separator)
 
@@ -369,7 +372,12 @@ def _template_tokens(
 ) -> dict[str, Any]:
     var_name, labels = variable.names()
     dataset_values = dataset.to_dict()
-    frequency = str(dataset.frequency or variable.frequency or "fx")
+    frequency = str(
+        (ds.attrs.get("frequency") if ds is not None else None)
+        or dataset.frequency
+        or variable.frequency
+        or "fx"
+    )
     variant_label = dataset.variant_label()
     version = str(dataset.version or f"v{date.today():%Y%m%d}")
     time_range = _time_range(ds, frequency) if frequency != "fx" else None
@@ -415,7 +423,7 @@ def _time_range(ds: xr.Dataset | None, frequency: str = "mon") -> str | None:
         return None
     time = ds["time"]
     units = time.attrs.get("units")
-    calendar = time.attrs.get("calendar", ds.attrs.get("calendar", "standard"))
+    calendar = time.attrs.get("calendar", "standard")
     climatology_bounds_name = time.attrs.get("climatology")
     climatology = bool(climatology_bounds_name)
     if climatology:

@@ -18,8 +18,14 @@ from cf_units import Unit
 from . import _netcdf
 from ._metadata import DatasetMetadata
 from ._time import elapsed_seconds, decode_time_value
-from .axis import Axis, validate_and_normalize_axes
+from .axis import (
+    Axis,
+    _is_sampling_time_axis,
+    _resolve_frequency,
+    validate_and_normalize_axes,
+)
 from .datasetinfo import DatasetInfo
+from .exceptions import AxisValidationError, TableValidationError
 from .grid import Grid, validate_grid_coords, validate_grid_mapping
 from .variable import Variable, validate_variable_values
 from .zfactor import ZFactor
@@ -48,6 +54,7 @@ def validate_metadata(
 ) -> ValidationContext:
     """Validate project metadata and resolve dimensions without data values."""
 
+    dataset, axes = resolve_time_metadata(dataset, variable, axes)
     dataset, variable = dataset_for_variable(dataset, variable)
     axes = _dataset_axes(dataset, axes, variable)
     axes = validate_and_normalize_axes(dataset, variable, axes)
@@ -85,6 +92,39 @@ def validate_metadata(
     )
     validate_zfactor_values(ctx)
     return ctx
+
+
+def resolve_time_metadata(
+    dataset: DatasetMetadata, variable: Variable, axes: Sequence[Axis]
+) -> tuple[DatasetMetadata, tuple[Axis, ...]]:
+    """Resolve axis-owned time metadata before project metadata validation."""
+    user_info = (
+        dataset.user_info
+        if isinstance(dataset, DatasetInfo) and dataset.project is not None
+        else dataset.extra
+    )
+    if user_info.get("calendar") is not None:
+        raise AxisValidationError(
+            "Set calendar on the time axis instead of DatasetInfo."
+        )
+    time_axes = [axis for axis in axes if _is_sampling_time_axis(axis)]
+    frequencies = {_resolve_frequency(axis, variable) for axis in time_axes}
+    frequencies.discard("")
+    if len(frequencies) > 1:
+        raise ValueError("Time axes must agree on the dataset frequency.")
+    frequency = next(
+        iter(frequencies), variable.frequency or ("fx" if not time_axes else None)
+    )
+    calendar = time_axes[0].calendar if time_axes else "standard"
+    resolved_axes = []
+    for axis in axes:
+        if _is_sampling_time_axis(axis):
+            axis = axis.updated(frequency=frequency)
+        elif axis.standard_name == "forecast_reference_time":
+            reference_calendar = axis.calendar or calendar
+            axis = axis.updated(calendar=reference_calendar)
+        resolved_axes.append(axis)
+    return dataset.model_copy(update={"frequency": frequency}), tuple(resolved_axes)
 
 
 def validate_data_chunk(ctx: ValidationContext, data: Any) -> np.ndarray:
@@ -150,6 +190,12 @@ def validate_final_dataset(
             ctx.axes,
             grid=ctx.grid,
             zfactors=ctx.zfactors,
+        )
+
+    if ds.attrs.get("frequency") != ctx.dataset.frequency:
+        raise TableValidationError(
+            f"Output frequency={ds.attrs.get('frequency')!r} does not match "
+            f"resolved time/variable frequency={ctx.dataset.frequency!r}."
         )
 
     var_name = ctx.variable.names()[0]
@@ -328,8 +374,6 @@ def _validate_final_zfactor(
 
 def build_axis_mappings(
     axes: Sequence[Axis],
-    *,
-    calendar: str | None = None,
 ) -> tuple[
     dict[str, Any],
     dict[str, Any],
@@ -353,7 +397,6 @@ def build_axis_mappings(
             axis_dims,
             scalar_coord_names,
             auxiliary_coord_names,
-            calendar=calendar,
         )
     return coords, data_vars, axis_dims, scalar_coord_names, auxiliary_coord_names
 
@@ -362,8 +405,6 @@ def derive_forecast_coords(
     axes: Sequence[Axis],
     coords: dict[str, Any],
     coord_table: Any = None,
-    *,
-    calendar: str = "standard",
 ) -> str | None:
     """Add or validate ``leadtime`` derived from ``time - reftime``.
 
@@ -403,16 +444,10 @@ def derive_forecast_coords(
             "Cannot derive leadtime because the time axis has no relative-time units."
         )
 
-    axis_calendar = str(
-        time_axis.calendar
-        or reference_axis.calendar
-        or time_axis.attrs.get("calendar")
-        or reference_axis.attrs.get("calendar")
-        or calendar
-        or "standard"
-    )
     reference_value = reference_values.reshape(-1)[0]
-    reference_date = decode_time_value(reference_value, reference_units, axis_calendar)
+    reference_date = decode_time_value(
+        reference_value, reference_units, reference_axis.calendar
+    )
     if reference_date is None:
         raise ValueError(
             "Cannot derive leadtime from the forecast reference-time coordinate."
@@ -420,7 +455,7 @@ def derive_forecast_coords(
 
     leadtime_values: list[float] = []
     for value in time_values.reshape(-1):
-        valid_date = decode_time_value(value, time_units, axis_calendar)
+        valid_date = decode_time_value(value, time_units, time_axis.calendar)
         seconds = (
             elapsed_seconds(reference_date, valid_date)
             if valid_date is not None
@@ -550,24 +585,11 @@ def add_axis(
     axis_dims: dict[str, tuple[str, ...]],
     scalar_coord_names: list[str],
     auxiliary_coord_names: list[str],
-    *,
-    calendar: str | None = None,
 ) -> None:
     name = axis.name
     out_name = str(axis.out_name or axis.name)
     values = axis.values_array()
     coord_attrs = axis.attributes()
-    if (
-        calendar
-        and "calendar" not in coord_attrs
-        and (
-            str(axis.axis or "").upper() == "T"
-            or str(axis.standard_name or "").lower() == "time"
-            or str(axis.name).lower().startswith("time")
-        )
-    ):
-        coord_attrs["calendar"] = calendar
-
     if bool(axis.scalar):
         scalar_value: Any
         if values.shape == ():
@@ -738,13 +760,12 @@ def build_dataset(
         axis_dims,
         scalar_coord_names,
         auxiliary_coord_names,
-    ) = build_axis_mappings(axes, calendar=dataset.calendar)
+    ) = build_axis_mappings(axes)
 
     forecast_coord_name = derive_forecast_coords(
         axes,
         coords,
         getattr(dataset, "project", None),
-        calendar=str(dataset.calendar or "standard"),
     )
     if forecast_coord_name is not None:
         auxiliary_coord_names.append(forecast_coord_name)

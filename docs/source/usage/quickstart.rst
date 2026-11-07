@@ -52,7 +52,7 @@ Here's a minimal example of creating a CF-compliant NetCDF file:
    time_bounds = [[0, 30], [30, 60], [60, 90]]
 
    axes = [
-       project.axis("time", values=time_values, bounds=time_bounds,
+       project.axis("time", frequency="mon", calendar="standard", values=time_values, bounds=time_bounds,
                     units="days since 1850-01-01"),
        project.axis("latitude", values=[-45.0, 45.0],
                     bounds=[[-90, 0], [0, 90]]),

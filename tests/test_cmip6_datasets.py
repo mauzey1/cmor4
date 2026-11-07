@@ -119,7 +119,6 @@ def _amip_attrs(outpath: str | Path, **overrides: Any) -> dict[str, Any]:
         "experiment_id": "amip",
         "variant_label": "r3i1p1f1",
         "grid_label": "gn",
-        "frequency": "mon",
         "outpath": str(outpath),
         # Additional CMIP6 required global attributes
         "source_type": "AGCM",
@@ -165,7 +164,6 @@ def _ssp434_attrs(outpath: str | Path, **overrides: Any) -> dict[str, Any]:
         "variant_label": "r3i1p1f1",
         "source_type": "AOGCM",
         "grid_label": "gn",
-        "frequency": "mon",
         "sub_experiment_id": "none",
         "sub_experiment": "none",
         "parent_experiment_id": "historical",
@@ -193,7 +191,6 @@ def _dcpp_hindcast_attrs(outpath: str | Path, **overrides: Any) -> dict[str, Any
         "source_type": "AOGCM",
         "variant_label": "r11i123p4556f333",
         "grid_label": "gn",
-        "frequency": "mon",
         "sub_experiment_id": "s1960",
         "sub_experiment": "initialized near end of year 1960",
         "parent_experiment_id": "dcppA-assim",
@@ -645,7 +642,6 @@ class TestParentExperimentValidation(unittest.TestCase):
                     "source_type": "AOGCM AER",
                     "variant_label": "r3i1p1f1",
                     "grid_label": "gn",
-                    "frequency": "mon",
                     "sub_experiment_id": "s2014",
                     "sub_experiment": "initialized near end of year 2014",
                     "parent_experiment_id": "historical",  # wrong
@@ -1130,7 +1126,7 @@ class TestFxTable(unittest.TestCase):
         blons = np.arange(0, 360.0 + dlon, dlon)
 
         with tempfile.TemporaryDirectory() as tmp:
-            info = self.project.dataset_info(_amip_attrs(tmp, frequency="fx"))
+            info = self.project.dataset_info(_amip_attrs(tmp))
             variable = self.project.variable("areacella")
             lat_axis = self.project.axis(
                 "latitude",

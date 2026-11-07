@@ -247,7 +247,7 @@ class DatasetMetadata(MetadataModel):
     initialization_index: str | int | None = None
     physics_index: str | int | None = None
     forcing_index: str | int | None = None
-    calendar: str | None = None
+    # Derived during assembly from the time axis / variable table.
     frequency: str | None = None
     nominal_resolution: str | None = None
     outpath: str | None = None

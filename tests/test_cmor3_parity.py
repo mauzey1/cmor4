@@ -144,7 +144,6 @@ _MINIMAL_DATASET: dict = {
     "physics_index": "p1",
     "forcing_index": "f1",
     "grid_label": "gn",
-    "frequency": "mon",
     "outpath": ".",
 }
 
@@ -242,7 +241,7 @@ class TestFrequencyRequired(unittest.TestCase):
         axis = self._time_axis()
         with self.assertRaises(AxisValidationError):
             validate_time_interval(
-                DatasetInfo(frequency=""), None, axis, axis.values_array()
+                DatasetInfo(), None, axis.updated(frequency=""), axis.values_array()
             )
 
     def test_error_message_contains_guidance(self):
@@ -264,11 +263,11 @@ class TestFrequencyRequired(unittest.TestCase):
     # Happy-path cases
     # -----------------------------------------------------------------------
 
-    def test_frequency_in_dataset_passes(self):
-        """frequency in dataset metadata → no error."""
-        axis = self._time_axis()
+    def test_frequency_on_axis_passes(self):
+        """frequency and calendar on the time axis → no error."""
+        axis = self._time_axis().updated(frequency="mon", calendar="360_day")
         validate_time_interval(
-            DatasetInfo(frequency="mon", calendar="360_day"),
+            DatasetInfo(),
             None,
             axis,
             axis.values_array(),

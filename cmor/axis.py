@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Any, Literal, Sequence
 
 import cftime
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ._metadata import AxisStr, BoolCoerced, CoercedF, MetadataModel, StrSeq
 from ._metadata import numeric_or_none as _numeric_or_none
 from ._time import cftime_interval_days as _cftime_interval_days
-from .exceptions import AxisValidationError
+from .exceptions import AxisValidationError, TableValidationError
 
 if TYPE_CHECKING:
     from ._metadata import DatasetMetadata
@@ -82,6 +82,14 @@ class Axis(MetadataModel):
         Extra attributes for the bounds variable.
     attrs:
         Extra attributes for the coordinate variable.
+    calendar:
+        CF calendar for an absolute time coordinate; sampling time axes default
+        to ``standard``. Forecast reference axes inherit it during assembly.
+        Supply this field directly; ``attrs["calendar"]`` is not supported.
+    frequency:
+        Sampling frequency for the time axis. Defaults to the variable table
+        frequency during dataset assembly and must agree with it when supplied.
+        Written as a dataset global attribute, not a coordinate attribute.
     stored_direction:
         Expected ordering of coordinate values: ``"increasing"`` or
         ``"decreasing"``.
@@ -111,6 +119,7 @@ class Axis(MetadataModel):
     auxiliary_attrs: dict[str, Any] = Field(default_factory=dict)
     climatology: BoolCoerced = None
     calendar: str | None = None
+    frequency: str | None = None
     generic_level_name: str | None = None
     z_factors: str | None = None
     z_bounds_factors: str | None = None
@@ -125,6 +134,16 @@ class Axis(MetadataModel):
     bounds_attrs: dict[str, Any] = Field(default_factory=dict)
     attrs: dict[str, Any] = Field(default_factory=dict)
     isgridaxis: bool = False
+
+    @model_validator(mode="after")
+    def _prepare_calendar(self) -> Axis:
+        if "calendar" in self.attrs:
+            raise ValueError(
+                "Pass calendar=... on Axis instead of attrs={'calendar': ...}."
+            )
+        if _is_sampling_time_axis(self) and not self.calendar:
+            object.__setattr__(self, "calendar", "standard")
+        return self
 
     # ------------------------------------------------------------------
     # NetCDF output helpers
@@ -249,6 +268,12 @@ def _validate_and_normalize_axis(
     enforce_required_bounds: bool = True,
     normalize: bool = True,
 ) -> Axis:
+    if _is_sampling_time_axis(axis) or axis.standard_name == "forecast_reference_time":
+        validate_calendar(axis)
+    if axis.frequency and not _is_sampling_time_axis(axis):
+        raise AxisValidationError("frequency can only be set on a sampling time axis.")
+    if _is_sampling_time_axis(axis):
+        _resolve_frequency(axis, variable)
     values = axis.values_array()
     bounds = axis.bounds_array() if axis.bounds is not None else None
     name = str(axis.table_entry or axis.name)
@@ -287,7 +312,7 @@ def _validate_and_normalize_axis(
         ):
             values = _time_values_from_bounds(values, bounds, name)
 
-    if not defer_time_value_checks and is_time_axis(axis) and not climatology:
+    if not defer_time_value_checks and _is_sampling_time_axis(axis) and not climatology:
         validate_time_interval(dataset, variable, axis, values)
 
     if not normalize:
@@ -491,33 +516,25 @@ def validate_time_interval(
     axis: Axis,
     values: np.ndarray,
 ) -> None:
-    var_freq = (
-        str(getattr(variable, "frequency", "") or "") if variable is not None else ""
-    )
-    frequency = str(dataset.frequency or var_freq) if dataset is not None else var_freq
+    frequency = _resolve_frequency(axis, variable)
     if not frequency:
         if dataset is not None:
             raise AxisValidationError(
-                "No frequency attribute provided in the dataset configuration. "
+                "No frequency provided for the time axis. "
                 "A 'frequency' value is required when a time axis is present. "
-                "Set frequency in the dataset metadata or ensure the variable "
+                "Set frequency on the time axis or ensure the variable "
                 "table entry defines a frequency."
             )
         return
     flat = values.reshape(-1)
     if flat.size < 2:
         return
-    spec = _interval_spec(dataset, variable)
+    spec = _interval_spec(dataset, frequency)
     if spec is None or spec.days <= 0:
         return
-    # calendar may be stored in axis.attrs (user-supplied) or in dataset
     units = str(axis.units or "days since ?")
-    calendar = str(
-        axis.attrs.get("calendar")
-        or (dataset.calendar if dataset is not None else None)
-        or "standard"
-    )
-    interval_days = time_interval_days(flat, units, calendar)
+    assert axis.calendar is not None
+    interval_days = time_interval_days(flat, units, axis.calendar)
     if interval_days.size == 0:
         return
     differences = np.abs(interval_days - spec.days) / spec.days
@@ -548,17 +565,13 @@ def time_interval_days(values: np.ndarray, units: str, calendar: str) -> np.ndar
 
 
 def _interval_spec(
-    dataset: DatasetMetadata | None, variable: Variable | None
+    dataset: DatasetMetadata | None, frequency: str
 ) -> _IntervalSpec | None:
-    var_freq = (
-        str(getattr(variable, "frequency", "") or "") if variable is not None else ""
-    )
-    frequency = str(dataset.frequency or var_freq) if dataset is not None else var_freq
     if not frequency:
         return None
     project = getattr(dataset, "project", None)
     cv = getattr(project, "cv", None)
-    frequency_component = getattr(cv, "frequency", None)
+    frequency_component = getattr(cv, "_frequency", None)
     if frequency_component is not None:
         entry = frequency_component.interval_for(frequency)
         if entry is not None and entry.approx_interval is not None:
@@ -642,9 +655,9 @@ def _validate_stored_direction(axis: Axis, values: np.ndarray, name: str) -> Non
         )
 
 
-def validate_calendar(dataset: DatasetMetadata) -> None:
-    """Validate the calendar declared in the dataset metadata."""
-    calendar = str(dataset.calendar or "").strip()
+def validate_calendar(axis: Axis) -> None:
+    """Validate the calendar declared on an absolute time coordinate."""
+    calendar = axis.calendar
     if not calendar:
         return
     try:
@@ -670,8 +683,9 @@ def validate_calendar(dataset: DatasetMetadata) -> None:
 
 
 def is_time_axis(axis: Axis) -> bool:
-    return str(axis.axis or "").upper() == "T" or (
-        str(axis.standard_name or "").lower() == "time"
+    return (
+        str(axis.axis or "").upper() == "T"
+        or str(axis.standard_name or "").lower() == "time"
     )
 
 
@@ -707,3 +721,38 @@ def _numeric_list(value: Any) -> list[float]:
         if number is not None:
             parsed.append(number)
     return parsed
+
+
+def _is_sampling_time_axis(axis: Axis) -> bool:
+    """Identify valid time, excluding forecast reference times and durations."""
+    return (
+        is_time_axis(axis)
+        or any(
+            re.fullmatch(r"time\d*", str(name).lower()) is not None
+            for name in (
+                axis.name,
+                axis.out_name,
+                axis.table_entry,
+                axis.axis_entry,
+                axis.coordinate,
+            )
+            if name
+        )
+    ) and axis.standard_name not in {"forecast_reference_time", "forecast_period"}
+
+
+def _resolve_frequency(axis: Axis, variable: Variable | None) -> str:
+    """Resolve sampling frequency and reject disagreement with the table."""
+    table_frequency = variable.frequency if variable is not None else None
+    if (
+        variable is not None
+        and axis.frequency
+        and table_frequency
+        and axis.frequency != table_frequency
+    ):
+        raise TableValidationError(
+            f"time axis frequency={axis.frequency!r} does not match "
+            f"variable {variable.table_id or ''}:{variable.name} "
+            f"frequency={table_frequency!r}."
+        )
+    return str(axis.frequency or table_frequency or "")

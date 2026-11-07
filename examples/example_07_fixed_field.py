@@ -26,10 +26,8 @@ def write_example(output_dir: Path) -> str:
     )
     dataset = project.dataset_info({
         "activity_id": "CMIP",
-        "calendar": "360_day",
         "experiment_id": "amip",
         "forcing_index": "f1",
-        "frequency": "fx",
         "grid_label": "g010",
         "initialization_index": "i1",
         "institution_id": "MOHC",

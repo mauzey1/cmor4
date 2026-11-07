@@ -389,6 +389,8 @@ class TestMustCallCmorGrid(unittest.TestCase):
         project = self._make_project()
         time_axis = Axis(
             name="time",
+            calendar="standard",
+            frequency="mon",
             values=np.array([0.5]),
             units="days since 2000-01-01",
             axis="T",
@@ -566,6 +568,8 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         lat2d, lon2d = _latlon(nj, ni)
         time_axis = Axis(
             name="time",
+            calendar="standard",
+            frequency="mon",
             values=np.array([15.0]),
             units="days since 2000-01-01",
             axis="T",
@@ -586,7 +590,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
             frequency="mon",
         )
         data = np.random.rand(1, nj, ni).astype("f4") + 273.15
-        dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"outpath": "/tmp"})
 
         ds = open_created_dataset(dataset, variable, [time_axis], data, grid=grid)
 
@@ -617,6 +621,8 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         i_axis = Axis(name="i", out_name="i", values=np.arange(ni, dtype="f4"))
         time_axis = Axis(
             name="time",
+            calendar="standard",
+            frequency="mon",
             values=np.array([15.0]),
             units="days since 2000-01-01",
             axis="T",
@@ -635,7 +641,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
             frequency="mon",
         )
         data = np.random.rand(1, nj, ni).astype("f4") + 273.15
-        dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"outpath": "/tmp"})
 
         ds = open_created_dataset(dataset, variable, [time_axis], data, grid=grid)
 
@@ -653,6 +659,8 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
         lat2d, lon2d = _latlon(nj, ni)
         time_axis = Axis(
             name="time",
+            calendar="standard",
+            frequency="mon",
             values=np.array([15.0]),
             units="days since 2000-01-01",
             axis="T",
@@ -668,7 +676,7 @@ class TestCreateDatasetWithGridAxes(unittest.TestCase):
             frequency="mon",
         )
         data = np.random.rand(1, nj, ni).astype("f4") + 273.15
-        dataset = DatasetInfo.from_prepared({"outpath": "/tmp", "frequency": "mon"})
+        dataset = DatasetInfo.from_prepared({"outpath": "/tmp"})
 
         # Pass j and i explicitly in the caller's axes list as well as via grid
         ds = open_created_dataset(

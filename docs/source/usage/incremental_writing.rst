@@ -79,7 +79,7 @@ Write data one time slice at a time:
 
    # Define axes (time axis is empty - values provided per write)
    axes = [
-       project.axis("time", units="days since 1850-01-01"),
+       project.axis("time", frequency="mon", calendar="standard", units="days since 1850-01-01"),
        project.axis("latitude", values=[-45.0, 45.0],
                     bounds=[[-90, 0], [0, 90]]),
        project.axis("longitude", values=[90.0, 270.0],
@@ -119,6 +119,8 @@ If you know the complete time range upfront:
 
    time_axis = project.axis(
        "time",
+       frequency="mon",
+       calendar="standard",
        values=time_values.tolist(),
        bounds=time_bounds.tolist(),
        units="days since 1850-01-01",
@@ -835,7 +837,7 @@ Here's a full example with error handling and progress monitoring:
        variable = project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
 
        axes = [
-           project.axis("time", units="days since 1850-01-01"),
+           project.axis("time", frequency="mon", calendar="standard", units="days since 1850-01-01"),
            project.axis("latitude", values=np.linspace(-90, 90, 180).tolist()),
            project.axis("longitude", values=np.linspace(0, 360, 360, endpoint=False).tolist()),
        ]

@@ -149,6 +149,11 @@
             "None"
           ],
           [
+            "frequency",
+            "KEYWORD_ONLY",
+            "None"
+          ],
+          [
             "generic_level_name",
             "KEYWORD_ONLY",
             "None"
@@ -396,7 +401,7 @@
       "validate_calendar": {
         "signature": [
           [
-            "dataset",
+            "axis",
             "POSITIONAL_OR_KEYWORD",
             "<class 'inspect._empty'>"
           ]
@@ -793,11 +798,6 @@
           ],
           [
             "forcing_index",
-            "KEYWORD_ONLY",
-            "None"
-          ],
-          [
-            "calendar",
             "KEYWORD_ONLY",
             "None"
           ],
