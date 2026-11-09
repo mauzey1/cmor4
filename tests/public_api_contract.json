@@ -12,7 +12,6 @@
     "open_dataset",
     "DatasetInfo",
     "ProjectTables",
-    "string_from_template",
     "TableValidationError",
     "Variable",
     "VariableValidationError",
@@ -698,35 +697,6 @@
           ],
           [
             "ds",
-            "POSITIONAL_OR_KEYWORD",
-            "None"
-          ]
-        ]
-      },
-      "string_from_template": {
-        "signature": [
-          [
-            "template",
-            "POSITIONAL_OR_KEYWORD",
-            "<class 'inspect._empty'>"
-          ],
-          [
-            "dataset",
-            "POSITIONAL_OR_KEYWORD",
-            "<class 'inspect._empty'>"
-          ],
-          [
-            "variable",
-            "POSITIONAL_OR_KEYWORD",
-            "<class 'inspect._empty'>"
-          ],
-          [
-            "ds",
-            "POSITIONAL_OR_KEYWORD",
-            "None"
-          ],
-          [
-            "separator",
             "POSITIONAL_OR_KEYWORD",
             "None"
           ]

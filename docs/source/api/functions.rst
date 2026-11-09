@@ -23,5 +23,3 @@ Utilities
 ---------
 
 .. autofunction:: build_output_path
-
-.. autofunction:: string_from_template

@@ -576,38 +576,6 @@ class Cmor4Test(unittest.TestCase):
                     grid=grid,
                 )
 
-    def test_string_from_template_uses_global_attrs_and_special_values(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            variable = cmor.Variable(name="sample", dimensions=["time"])
-            info = cmor.DatasetInfo.from_prepared(
-                dataset_info(Path(tmp_dir)),
-            )
-            ds = open_created_dataset(
-                info, variable, [time_axis()], np.ones(2, dtype="f4")
-            )
-
-            self.assertEqual(
-                cmor.string_from_template(
-                    "<variable_id>_<source_id>_<time_range>_<version>",
-                    info,
-                    variable,
-                    ds=ds,
-                ),
-                "sample_CNRM-ESM2-1e_200001-200002_v20200101",
-            )
-
-            path_info = cmor.DatasetInfo.from_prepared(
-                {
-                    **info.to_dict(),
-                    "output_path_template": "<activity_id>",
-                    "output_file_template": ("<variable_id>_<frequency>_<time_range>"),
-                },
-            )
-            self.assertEqual(
-                cmor.build_output_path(path_info, variable, ds=ds).name,
-                "sample_mon_200001-200002.nc",
-            )
-
     def test_scalar_height_and_pressure_level_patterns(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_info = dataset_info(Path(tmp_dir))

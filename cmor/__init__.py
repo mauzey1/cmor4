@@ -7,7 +7,6 @@ from .dataset import (
     cmorize,
     create_dataset,
     open_dataset,
-    string_from_template,
     write_netcdf,
 )
 from .axis import Axis
@@ -38,7 +37,6 @@ __all__ = [
     "open_dataset",
     "DatasetInfo",
     "ProjectTables",
-    "string_from_template",
     "TableValidationError",
     "Variable",
     "VariableValidationError",

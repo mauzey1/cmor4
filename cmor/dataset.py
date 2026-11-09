@@ -331,40 +331,6 @@ def build_output_path(
     return root / directory / filename
 
 
-def string_from_template(
-    template: str,
-    dataset: DatasetMetadata,
-    variable: Variable,
-    ds: xr.Dataset | None = None,
-    separator: str | None = None,
-) -> str:
-    """Render a template from global attributes and computed path tokens.
-
-    Parameters
-    ----------
-    template:
-        Template string containing ``<token>`` placeholders.
-    dataset:
-        Dataset-level metadata used as template tokens.
-    variable:
-        Variable metadata used as template tokens.
-    ds:
-        Optional dataset used to derive time-range tokens.
-    separator:
-        Separator inserted between non-empty rendered token values.
-
-    Returns
-    -------
-    str
-        Rendered template string.
-    """
-
-    if ds is not None and ds.attrs.get("frequency"):
-        dataset = dataset.model_copy(update={"frequency": ds.attrs["frequency"]})
-    dataset, variable = _assembly.dataset_for_variable(dataset, variable)
-    return render_template(template, _template_tokens(dataset, variable, ds), separator)
-
-
 def _template_tokens(
     dataset: DatasetMetadata,
     variable: Variable,
