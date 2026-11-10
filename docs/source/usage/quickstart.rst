@@ -6,13 +6,7 @@ This guide will get you started with CMOR in minutes.
 Installation
 ------------
 
-Install CMOR from PyPI:
-
-.. code-block:: bash
-
-   pip install cmor
-
-Or install from source:
+Install from source:
 
 .. code-block:: bash
 
@@ -23,7 +17,7 @@ Or install from source:
 Basic Example
 -------------
 
-Here's a minimal example of creating a CMOR-compliant NetCDF file:
+Here's a minimal example of creating a CF-compliant NetCDF file:
 
 .. code-block:: python
 
@@ -58,7 +52,7 @@ Here's a minimal example of creating a CMOR-compliant NetCDF file:
    time_bounds = [[0, 30], [30, 60], [60, 90]]
 
    axes = [
-       project.axis("time", values=time_values, bounds=time_bounds,
+       project.axis("time", frequency="mon", calendar="standard", values=time_values, bounds=time_bounds,
                     units="days since 1850-01-01"),
        project.axis("latitude", values=[-45.0, 45.0],
                     bounds=[[-90, 0], [0, 90]]),
@@ -87,7 +81,7 @@ What Just Happened?
 3. **Selected a variable** from the project tables (sea surface temperature)
 4. **Defined coordinate axes** with values and bounds
 5. **Created sample data** matching the axis dimensions
-6. **Wrote a CMOR-compliant NetCDF file** with automatic validation
+6. **Wrote a CF-compliant NetCDF file** with automatic validation
 
 The output file includes:
 

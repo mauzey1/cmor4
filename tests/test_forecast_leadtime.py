@@ -5,17 +5,25 @@ import pytest
 from netCDF4 import Dataset
 
 from cmor import Axis, DatasetInfo, DatasetWriter, Variable, cmorize
-from cmor.utils.construction import build_axis_mappings, derive_forecast_coords
-from cmor.utils.tables import CoordinateTable
+from cmor._assembly import build_axis_mappings, derive_forecast_coords
+from cmor._coordinate_tables import CoordinateTable
 
 
-def _time(values=(0.0, 6.0, 12.0), units="hours since 2020-01-01") -> Axis:
+def _time(
+    values=(0.0, 6.0, 12.0),
+    units="hours since 2020-01-01",
+    *,
+    calendar="standard",
+    frequency="6hr",
+) -> Axis:
     return Axis(
         name="time",
         values=values,
         units=units,
         standard_name="time",
         axis="T",
+        calendar=calendar,
+        frequency=frequency,
     )
 
 
@@ -43,7 +51,7 @@ def test_generated_file_contains_derived_leadtime(tmp_path):
     axes = [_time(), _reftime()]
 
     path = cmorize(
-        DatasetInfo(calendar="standard", frequency="6hr"),
+        DatasetInfo(),
         Variable(name="tas", dimensions=("time",), units="K"),
         axes,
         np.ones(3),
@@ -64,7 +72,7 @@ def test_generated_file_contains_derived_leadtime(tmp_path):
 
 def test_generated_file_supports_size_one_nonscalar_reftime(tmp_path):
     axes = [
-        _time(values=(30.0, 60.0), units="days since 2000-01-01"),
+        _time(values=(30.0, 60.0), units="days since 2000-01-01", frequency="mon"),
         _reftime(
             values=(10.0,),
             units="days since 2000-01-01",
@@ -73,7 +81,7 @@ def test_generated_file_supports_size_one_nonscalar_reftime(tmp_path):
     ]
 
     path = cmorize(
-        DatasetInfo(calendar="standard", frequency="mon"),
+        DatasetInfo(),
         Variable(name="tas", dimensions=("time", "reftime1"), units="K"),
         axes,
         np.ones((2, 1)),
@@ -89,10 +97,15 @@ def test_generated_file_supports_size_one_nonscalar_reftime(tmp_path):
 
 def test_dataset_writer_derives_leadtime_across_chunked_writes(tmp_path):
     writer = DatasetWriter(
-        DatasetInfo(calendar="360_day", frequency="mon"),
+        DatasetInfo(),
         Variable(name="tas", dimensions=("time",), units="K"),
         [
-            _time(values=(), units="days since 2000-01-01"),
+            _time(
+                values=(),
+                units="days since 2000-01-01",
+                frequency="mon",
+                calendar="360_day",
+            ),
             _reftime(values=(10.0,), units="days since 2000-01-01"),
         ],
         path=tmp_path / "chunked-forecast.nc",
@@ -146,7 +159,7 @@ def test_generated_file_retains_valid_explicit_leadtime(tmp_path):
     axes = [_time(), _reftime(), leadtime]
 
     path = cmorize(
-        DatasetInfo(calendar="standard", frequency="6hr"),
+        DatasetInfo(),
         Variable(name="tas", dimensions=("time",), units="K"),
         axes,
         np.ones(3),
@@ -178,11 +191,16 @@ def test_explicit_leadtime_mismatch_raises():
 
 def test_generated_file_uses_the_requested_calendar(tmp_path):
     axes = [
-        _time(values=(0.0, 30.0), units="days since 2001-01-01"),
+        _time(
+            values=(0.0, 30.0),
+            units="days since 2001-01-01",
+            frequency="mon",
+            calendar="360_day",
+        ),
         _reftime(values=(0.0,), units="days since 2000-12-01"),
     ]
     path = cmorize(
-        DatasetInfo(calendar="360_day", frequency="mon"),
+        DatasetInfo(),
         Variable(name="tas", dimensions=("time",), units="K"),
         axes,
         np.ones(2),

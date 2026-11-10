@@ -7,21 +7,22 @@ import pytest
 
 from cmor.cv import ControlledVocabulary
 from cmor.exceptions import ControlledVocabularyError
-from cmor.utils.cv_models import (
-    AttributeRule,
+from cmor._cv_models import AttributeRule, SourceTypeComponent
+from cmor._cv_models import (
     ControlledVocabularyModel,
     DRSComponent,
-    ExperimentComponent,
     ForcingComponent,
     FrequencyComponent,
     GridLabelComponent,
-    LicenseComponent,
-    SourceComponent,
-    SourceTypeComponent,
     TrackingIdComponent,
     VariantLabelComponent,
 )
-from cmor.utils.dataset_metadata import DatasetMetadata
+from cmor._cv_models import (
+    ExperimentComponent,
+    LicenseComponent,
+    SourceComponent,
+)
+from cmor._metadata import DatasetMetadata
 
 
 def _sample_cv(
@@ -175,9 +176,9 @@ def test_optional_derived_attributes_preserve_user_values():
     assert values["source"] == "user source description"
     assert values["experiment"] == "user experiment description"
     assert values["institution"] == "user institution description"
-    cv._validate_derived_attributes(prepared)
-    cv._validate_source_attributes(prepared)
-    cv._validate_experiment(prepared)
+    cv._validate_derived_attributes(prepared.to_dict())
+    cv._validate_source_attributes(prepared.to_dict())
+    cv._validate_experiment(prepared.to_dict())
 
 
 def test_empty_optional_derived_attributes_are_filled_from_cv():
@@ -271,11 +272,11 @@ def test_specialized_catalogs_are_used_by_existing_validation_api():
         is not None
     )
 
-    cv._validate_experiment(valid)
-    cv._validate_source_attributes(valid)
+    cv._validate_experiment(valid.to_dict())
+    cv._validate_source_attributes(valid.to_dict())
 
     try:
-        cv._validate_source_attributes(invalid)
+        cv._validate_source_attributes(invalid.to_dict())
     except ControlledVocabularyError as error:
         assert "source_id='MODEL-A'" in str(error)
     else:
@@ -362,7 +363,7 @@ def test_variant_component_assembles_indices_and_drives_defaults(indices):
     assert cv._variant_label.validation_error(metadata) is None
     prepared = cv.get_dataset_info(DatasetMetadata.from_mapping(metadata))
     assert prepared.variant_label_value == "r9i2p3f4"
-    cv._validate_variant_indices(prepared)
+    cv._validate_variant_indices(prepared.to_dict())
 
 
 @pytest.mark.parametrize(
@@ -406,7 +407,7 @@ def test_variant_component_reports_explicit_and_assembled_format_errors():
     assert error is not None
     assert "required pattern" in error
     with pytest.raises(ControlledVocabularyError, match="required pattern"):
-        cv._validate_variant_indices(DatasetMetadata.from_mapping(invalid))
+        cv._validate_variant_indices(DatasetMetadata.from_mapping(invalid).to_dict())
 
     # Legacy regex placeholders skip integer validation but cannot form a label.
     error = cv._variant_label.validation_error({
@@ -435,7 +436,7 @@ def test_grid_component_drives_fallback_validation(label):
     assert error is not None
     assert "does not match the required format" in error
     with pytest.raises(ControlledVocabularyError) as caught:
-        cv._validate_dataset_values(DatasetMetadata.from_mapping(metadata))
+        cv._validate_dataset_values(DatasetMetadata.from_mapping(metadata).to_dict())
     assert str(caught.value) == error
 
 
@@ -456,7 +457,7 @@ def test_grid_component_defers_to_explicit_project_definitions(definition):
 
     assert cv._grid_label.rule is not None
     assert cv._grid_label.validation_error(metadata) is None
-    cv._validate_dataset_values(DatasetMetadata.from_mapping(metadata))
+    cv._validate_dataset_values(DatasetMetadata.from_mapping(metadata).to_dict())
 
 
 @pytest.mark.parametrize("definition", [[], {}])

@@ -1,7 +1,7 @@
 Incremental Writing with DatasetWriter
 =======================================
 
-:class:`cmor.DatasetWriter` enables memory-bounded incremental writing of CMOR-compliant NetCDF files. Write data one time slice at a time as it becomes available, perfect for streaming model output or datasets larger than RAM.
+:class:`cmor.DatasetWriter` enables memory-bounded incremental writing of CF-compliant NetCDF files. Write data one time slice at a time as it becomes available, perfect for streaming model output or datasets larger than RAM.
 
 When to Use DatasetWriter
 --------------------------
@@ -31,6 +31,16 @@ DatasetWriter is designed for bounded memory usage:
 
 .. note::
    DatasetWriter uses Zarr for staging and Dask for lazy loading during finalization. This means the complete dataset is never loaded into memory - data is streamed directly from the Zarr store to NetCDF. You don't need to use Dask directly; it's handled automatically.
+
+DatasetWriter validates metadata against the project tables when initialized and
+validates each data chunk before staging it. Each ``write()`` appends a chunk to
+the temporary Zarr store; ``close()`` streams the staged data into the final
+NetCDF file. The staging directory is removed after a successful close and
+preserved if an error occurs, so you can inspect ``writer.staging_path``.
+
+Only the time dimension supports incremental writes. Provide complete values
+for spatial and other non-time axes when creating the writer. Time values can
+be supplied with each write or specified on the time axis in advance.
 
 Basic Usage
 -----------
@@ -69,7 +79,7 @@ Write data one time slice at a time:
 
    # Define axes (time axis is empty - values provided per write)
    axes = [
-       project.axis("time", units="days since 1850-01-01"),
+       project.axis("time", frequency="mon", calendar="standard", units="days since 1850-01-01"),
        project.axis("latitude", values=[-45.0, 45.0],
                     bounds=[[-90, 0], [0, 90]]),
        project.axis("longitude", values=[90.0, 270.0],
@@ -109,6 +119,8 @@ If you know the complete time range upfront:
 
    time_axis = project.axis(
        "time",
+       frequency="mon",
+       calendar="standard",
        values=time_values.tolist(),
        bounds=time_bounds.tolist(),
        units="days since 1850-01-01",
@@ -173,7 +185,6 @@ Create separate file segments with gaps between them:
 
    # Close with preserve_definition=True to reuse definition
    path1 = writer.close(preserve_definition=True)
-   ds1.close()
 
    # Second segment: 1950-2000 (gap from 1900-1950)
    writer.path = Path("segment_1950-2000.nc")
@@ -183,7 +194,6 @@ Create separate file segments with gaps between them:
        writer.write(data, time_values=time_vals, time_bounds=time_bnds)
 
    path2 = writer.close()
-   ds2.close()
 
 Custom Output Path
 ~~~~~~~~~~~~~~~~~~
@@ -273,6 +283,10 @@ Specify NetCDF encoding:
        axes,
        encoding=encoding,
    )
+
+If ``encoding`` is omitted, CMIP7 auto-chunking rules apply. Additional keyword
+arguments to ``DatasetWriter`` are passed to
+:meth:`xarray.Dataset.to_netcdf` when the file is finalized.
 
 Custom Staging Directory
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -823,7 +837,7 @@ Here's a full example with error handling and progress monitoring:
        variable = project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
 
        axes = [
-           project.axis("time", units="days since 1850-01-01"),
+           project.axis("time", frequency="mon", calendar="standard", units="days since 1850-01-01"),
            project.axis("latitude", values=np.linspace(-90, 90, 180).tolist()),
            project.axis("longitude", values=np.linspace(0, 360, 360, endpoint=False).tolist()),
        ]

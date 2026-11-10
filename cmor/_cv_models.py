@@ -1,65 +1,28 @@
-"""Internal typed components parsed from a project controlled vocabulary.
+"""Private rules, catalogs, and typed components for controlled vocabularies.
 
-These models support CMOR's validation implementation and are not public API.
+This module owns the parsed representation and cross-field rules used by
+:class:`cmor.cv.ControlledVocabulary`, which coordinates metadata defaulting
+and validation. Keeping their shared matchers and catalogs together makes a
+CV rule or component change local to this implementation module.
 
-The JSON files used by CMOR are intentionally extensible and contain several
-different kinds of data under one ``CV`` object.  This module turns the parts
-that affect dataset validation into small Pydantic models.  The coordinating
-:class:`cmor.cv.ControlledVocabulary` consumes these typed components rather
-than behaving like the source JSON mapping.
-
-The models are deliberately project-neutral.  A new project can add ordinary
-attributes without changing a monolithic schema: scalar, list, template, and
-lookup-table definitions become :class:`AttributeRule` instances.  Sections
-whose meaning spans multiple attributes use dedicated components instead.
+The models are deliberately project-neutral. Scalar, list, template, and lookup
+CV definitions become :class:`AttributeRule` instances; sections whose meaning
+spans multiple attributes use dedicated components. These models are internal
+implementation details and are not public API.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import re
+from collections.abc import Mapping
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .templates import is_unresolved_template, render_template
-
+from ._metadata import _RIPF_PREFIXES, ripf_index_error
+from ._templates import is_unresolved_template, render_template
 
 ScalarValue = str | int | float | bool
-
-# CMIP7 accepts prefixed indices; CMOR3 also accepts bare integers.
-_RIPF_PREFIXES = {
-    "realization_index": "r",
-    "initialization_index": "i",
-    "physics_index": "p",
-    "forcing_index": "f",
-}
-_RIPF_MAX = 2**31 - 1  # CMOR3 stores indices as signed 32-bit C integers.
-
-# Sections with dedicated semantics, or internal lookup data that must not be
-# copied to NetCDF attributes by generic nested-default processing.
-_NESTED_DEFAULT_EXCLUSIONS = frozenset({
-    "DRS",
-    "experiment_id",
-    "frequency",
-    "institution_id",
-    "license",
-    "license_id",
-    "source_id",
-    "source_type",
-})
-
-_EXPERIMENT_DEFAULT_EXCLUSIONS = frozenset({
-    "additional_allowed_model_components",
-    "end_year",
-    "min_number_yrs_per_sim",
-    "parent_activity_id",
-    "parent_experiment_id",
-    "required_source_type",
-    "source_type",
-    "start_year",
-    "tier",
-})
 
 
 class _CVModel(BaseModel):
@@ -203,243 +166,182 @@ class AttributeRule(_CVModel):
         )
 
 
-class GridLabelComponent(_CVModel):
-    """Fallback grid-label format when the project supplies no definition.
+def _choice_accepts(value: str, choice: str) -> bool:
+    """Match a list item literally first and as a translated POSIX regex second."""
 
-    Project definitions are validated by generic attribute rules. Any explicit
-    definition disables the fallback, allowing custom grid naming conventions.
-    """
+    if value == choice:
+        return True
+    pattern = (
+        choice
+        .replace("[[:digit:]]", r"\d")
+        .replace("[[:space:]]", r"\s")
+        .replace("[[:alpha:]]", r"[A-Za-z]")
+        .replace("\\{", "{")
+        .replace("\\}", "}")
+    )
+    try:
+        return re.fullmatch(pattern, value) is not None
+    except re.error:
+        return False
 
-    rule: AttributeRule | None = None
 
-    @classmethod
-    def from_definition(cls, definition: Any) -> "GridLabelComponent":
-        """Parse an explicit ``grid_label`` definition, even an empty one.
-
-        Use ``GridLabelComponent()`` when the CV omits the attribute entirely.
-        """
-
-        return cls(rule=AttributeRule.from_definition("grid_label", definition))
-
-    def validation_error(self, metadata: Mapping[str, Any]) -> str | None:
-        """Return a fallback format error, skipping absent or empty labels."""
-
-        label = metadata.get("grid_label")
-        if self.rule is not None or label in (None, ""):
-            return None
-        # CMOR3 grid families: g, c, or r, followed by lowercase letters/digits.
-        if not re.fullmatch(r"[gcr][a-z0-9]*", str(label)):
-            return (
-                f"grid_label={label!r} does not match the required format. "
-                "Grid labels must start with 'g', 'c', or 'r' followed by "
-                "lowercase letters and digits only (no hyphens or special "
-                "characters). "
-                "Valid examples: 'gn', 'gr1', 'cn', 'g999'. "
-                "Define grid_label in the project CV to allow a custom set."
-            )
+def _single_default(value: Any) -> Any:
+    if value in (None, "") or isinstance(value, Mapping):
         return None
+    if isinstance(value, list):
+        return value[0] if len(value) == 1 else None
+    return value
 
 
-class VariantLabelComponent(_CVModel):
-    """Variant-label assembly and validation of its four RIPF indices.
+def _definition_for(name: str, cv: Mapping[str, Any]) -> Any:
+    if name in cv:
+        return cv[name]
+    license_definition = cv.get("license")
+    if name == "license_id" and isinstance(license_definition, Mapping):
+        return license_definition.get("license_id")
+    return None
 
-    Indices accept bare integers or their corresponding ``r``, ``i``, ``p``,
-    or ``f`` prefix. Label format is checked only for a non-empty CV choice
-    list, preserving projects that allow arbitrary variant labels.
+
+def _definition_default(definition: Any) -> ScalarValue | None:
+    if isinstance(definition, Mapping):
+        keys = list(definition)
+        default: Any = keys[0] if len(keys) == 1 else None
+    else:
+        default = _single_default(definition)
+    if _looks_like_posix_regex_list(definition):
+        return None
+    if isinstance(default, str) and re.search(r"[\\^$\[\]{,}()|]", default):
+        return None
+    return default if isinstance(default, (str, int, float, bool)) else None
+
+
+def _conventions_default(definition: Any) -> str:
+    if isinstance(definition, list) and "CF-1.12" in definition:
+        return "CF-1.12"
+    if isinstance(definition, list) and definition:
+        candidate = str(definition[-1])
+        return (
+            "CF-1.7 CMIP-6.2"
+            if re.search(r"[\\^$\[\]{,}()|]", candidate)
+            else candidate
+        )
+    if isinstance(definition, str) and definition:
+        return definition
+    return "CF-1.12"
+
+
+def _looks_like_posix_regex_list(value: Any) -> bool:
+    if not isinstance(value, list) or len(value) != 1 or not isinstance(value[0], str):
+        return False
+    item = value[0]
+    return any(
+        indicator in item
+        for indicator in ("\\{", "[[:digit:]]", "[[:space:]]", "[[:alpha:]]")
+    ) or bool(re.match(r"^\^.*\.\*", item))
+
+
+def _values(value: Any) -> tuple[Any, ...]:
+    if value in (None, ""):
+        return ()
+    if isinstance(value, list):
+        return tuple(item for item in value if item not in (None, ""))
+    return (value,)
+
+
+def _pattern_matches(value: str, pattern: Any) -> bool:
     """
+    Check if a string matches the pattern in POSIX Extended Regular Expression format
+    """
+    pattern_text = (
+        str(pattern)
+        .replace("[[:digit:]]", r"\d")
+        .replace("[[:space:]]", r"\s")
+        .replace("[[:alpha:]]", r"[A-Za-z]")
+        .replace("\\{", "{")
+        .replace("\\}", "}")
+    )
+    try:
+        return re.search(pattern_text, value) is not None
+    except re.error:
+        return value == str(pattern)
 
-    rule: AttributeRule
+
+class SourceTypeComponent(_CVModel):
+    """Source-type vocabulary and experiment-specific composition rules."""
+
+    values: frozenset[str] = frozenset()
 
     @classmethod
-    def from_definition(cls, definition: Any) -> "VariantLabelComponent":
-        """Parse the CV's ``variant_label`` definition, including its absence."""
+    def from_definition(cls, definition: Any) -> "SourceTypeComponent":
+        if isinstance(definition, Mapping):
+            values = frozenset(str(value) for value in definition)
+        elif isinstance(definition, list):
+            values = frozenset(str(value) for value in definition)
+        else:
+            values = frozenset()
+        return cls(values=values)
 
-        return cls(rule=AttributeRule.from_definition("variant_label", definition))
+    def accepts(self, source_type: Any) -> bool:
+        """Return whether every source-type token is in the project CV."""
 
-    def render(self, metadata: Mapping[str, Any]) -> str | None:
-        """Return an explicit label or assemble one when all indices are present.
+        if not self.values:
+            return True
+        return all(token in self.values for token in str(source_type).split() if token)
 
-        Bare digits receive their canonical prefix; other strings are kept
-        as supplied, matching CMOR3's ``cmor_addRIPF`` behavior.
-        """
+    def validation_error(
+        self,
+        source_type: Any,
+        experiment_entry: Mapping[str, Any],
+        *,
+        experiment_id: Any = None,
+    ) -> str | None:
+        """Return an experiment composition error, or ``None`` when valid."""
 
-        label = metadata.get("variant_label")
-        if label not in (None, ""):
-            return str(label)
-        pieces: list[str] = []
-        for key, prefix in _RIPF_PREFIXES.items():
-            value = metadata.get(key)
-            if value in (None, ""):
-                return None
-            value_str = str(value)
-            pieces.append(
-                f"{prefix}{value_str}" if re.fullmatch(r"\d+", value_str) else value_str
-            )
-        return "".join(pieces)
+        required_source_types = _values(experiment_entry.get("required_source_type"))
+        required = required_source_types or _values(
+            experiment_entry.get("required_model_components")
+        )
+        additional = _values(
+            experiment_entry.get("additional_allowed_model_components")
+        )
+        if not required and not additional:
+            return None
+        if source_type in (None, ""):
+            return "source_type is required." if required_source_types else None
 
-    def validation_error(self, metadata: Mapping[str, Any]) -> str | None:
-        """Return the first index range or label format error, if any.
-
-        Missing indices and legacy CV regex placeholders are skipped. Literal
-        choices and project regexes remain subject to generic attribute rules.
-        """
-
-        for key, prefix in _RIPF_PREFIXES.items():
-            value = metadata.get(key)
-            if value in (None, ""):
-                continue
-            value_str = str(value)
-            if re.search(r"[\\^$\[\]{,}]", value_str):
-                continue
-            numeric_part = (
-                value_str[1:]
-                if value_str.startswith(prefix) and len(value_str) > 1
-                else value_str
-            )
-            try:
-                int_value = int(numeric_part)
-            except (TypeError, ValueError):
+        source_type_text = str(source_type)
+        for expected in required:
+            if not _pattern_matches(source_type_text, expected):
                 return (
-                    f"{key}={value!r} must be a positive integer "
-                    f"(with optional '{prefix}' prefix, e.g. '{prefix}1')."
+                    f"source_type={source_type!r} is missing required "
+                    f"source type {expected!r}."
                 )
-            if not 1 <= int_value <= _RIPF_MAX:
-                return (
-                    f"{key}={value!r} numeric value {int_value} is out of the "
-                    f"valid range [1, {_RIPF_MAX}]."
-                )
-
-        if self.rule.is_choice_constraint:
-            label = self.render(metadata)
-            if label and not re.fullmatch(r"r\d+i\d+p\d+f\d+", label):
-                origin = (
-                    " assembled from RIPF indices"
-                    if metadata.get("variant_label") in (None, "")
+        allowed = (*required, *additional)
+        for token in source_type_text.split():
+            if not any(_pattern_matches(token, item) for item in allowed):
+                context = (
+                    f" by experiment_id={experiment_id!r}"
+                    if experiment_id not in (None, "")
                     else ""
                 )
                 return (
-                    f"variant_label={label!r}{origin} does not match the required "
-                    "pattern 'r<N>i<N>p<N>f<N>'."
+                    f"source_type={source_type!r} contains source type "
+                    f"{token!r} that is not allowed{context}."
                 )
         return None
 
 
-class DRSComponent(_CVModel):
-    """Directory and filename templates from the CV's ``DRS`` section."""
-
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    directory_path_template: str | None = None
-    filename_template: str | None = None
-
-    @field_validator("directory_path_template", "filename_template", mode="before")
-    @classmethod
-    def _ignore_non_string_templates(cls, value: Any) -> str | None:
-        return value if isinstance(value, str) and value else None
-
-    @classmethod
-    def from_definition(cls, definition: Any) -> "DRSComponent | None":
-        if not isinstance(definition, Mapping):
-            return None
-        return cls.model_validate(definition)
-
-    def templates(self) -> tuple[str | None, str | None]:
-        """Return ``(directory_path_template, filename_template)``."""
-
-        return self.directory_path_template, self.filename_template
-
-
-class NestedDefaultComponent(_CVModel):
-    """Scalar attributes contributed by selected two-level CV entries."""
-
-    entries: dict[str, dict[str, dict[str, ScalarValue]]] = Field(default_factory=dict)
-
-    @classmethod
-    def from_mapping(cls, cv: Mapping[str, Any]) -> "NestedDefaultComponent":
-        catalogs: dict[str, dict[str, dict[str, ScalarValue]]] = {}
-        for attribute, definition in cv.items():
-            if attribute in _NESTED_DEFAULT_EXCLUSIONS or not isinstance(
-                definition, Mapping
-            ):
-                continue
-            entries: dict[str, dict[str, ScalarValue]] = {}
-            for selector, raw_values in definition.items():
-                if not isinstance(raw_values, Mapping) or not all(
-                    isinstance(value, (str, int, float))
-                    for value in raw_values.values()
-                ):
-                    continue
-                entries[str(selector)] = {
-                    str(key): value for key, value in raw_values.items()
-                }
-            if entries:
-                catalogs[str(attribute)] = entries
-        return cls(entries=catalogs)
-
-    def defaults_for(self, metadata: Mapping[str, Any]) -> dict[str, ScalarValue]:
-        """Return defaults contributed by every selected nested entry."""
-
-        defaults: dict[str, ScalarValue] = {}
-        for attribute, entries in self.entries.items():
-            selected = metadata.get(attribute)
-            if selected in (None, ""):
-                continue
-            for key, value in entries.get(str(selected), {}).items():
-                defaults.setdefault(key, value)
-        return defaults
-
-
-class DefaultValuesComponent(_CVModel):
-    """Static scalar, nested, and required-attribute defaults."""
-
-    scalars: dict[str, ScalarValue] = Field(default_factory=dict)
-    nested: NestedDefaultComponent = Field(default_factory=NestedDefaultComponent)
-    required: dict[str, ScalarValue] = Field(default_factory=dict)
-    conventions: str = "CF-1.12"
-
-    @classmethod
-    def from_mapping(cls, cv: Mapping[str, Any]) -> "DefaultValuesComponent":
-        scalars = {
-            str(key): value
-            for key, value in cv.items()
-            if isinstance(value, (str, int, float))
-            and not (isinstance(value, str) and ("<" in value or ">" in value))
-        }
-        required_names = cv.get("required_global_attributes", ())
-        required: dict[str, ScalarValue] = {}
-        if isinstance(required_names, (list, tuple)):
-            for raw_name in required_names:
-                name = str(raw_name)
-                definition = _definition_for(name, cv)
-                default = _definition_default(definition)
-                if default is not None:
-                    required[name] = default
-        return cls(
-            scalars=scalars,
-            nested=NestedDefaultComponent.from_mapping(cv),
-            required=required,
-            conventions=_conventions_default(cv.get("Conventions")),
-        )
-
-    def scalar_defaults_for(
-        self, metadata: Mapping[str, Any]
-    ) -> dict[str, ScalarValue]:
-        """Return scalar defaults missing from *metadata*."""
-
-        return {
-            key: value for key, value in self.scalars.items() if key not in metadata
-        }
-
-    def nested_defaults_for(
-        self, metadata: Mapping[str, Any]
-    ) -> dict[str, ScalarValue]:
-        """Return selected nested defaults missing from *metadata*."""
-
-        return {
-            key: value
-            for key, value in self.nested.defaults_for(metadata).items()
-            if key not in metadata
-        }
+_EXPERIMENT_DEFAULT_EXCLUSIONS = frozenset({
+    "additional_allowed_model_components",
+    "end_year",
+    "min_number_yrs_per_sim",
+    "parent_activity_id",
+    "parent_experiment_id",
+    "required_source_type",
+    "source_type",
+    "start_year",
+    "tier",
+})
 
 
 class LicenseRecord(_CVModel):
@@ -796,69 +698,262 @@ class InstitutionComponent(_CVModel):
         return self.entries.get(str(institution_id))
 
 
-class SourceTypeComponent(_CVModel):
-    """Source-type vocabulary and experiment-specific composition rules."""
+def _required_value_error(
+    metadata: Mapping[str, Any], key: str, expected: Any, experiment_id: Any
+) -> str | None:
+    value = metadata.get(key)
+    if value in (None, ""):
+        return f"{key} is required."
+    matches = (
+        str(value) in {str(item) for item in expected}
+        if isinstance(expected, list)
+        else str(value) == str(expected)
+    )
+    if expected not in (None, "") and not matches:
+        return (
+            f"{key}={value!r} does not match experiment_id={experiment_id!r} "
+            f"CV value {expected!r}."
+        )
+    return None
 
-    values: frozenset[str] = frozenset()
+
+# Sections with dedicated semantics, or internal lookup data that must not be
+# copied to NetCDF attributes by generic nested-default processing.
+_NESTED_DEFAULT_EXCLUSIONS = frozenset({
+    "DRS",
+    "experiment_id",
+    "frequency",
+    "institution_id",
+    "license",
+    "license_id",
+    "source_id",
+    "source_type",
+})
+
+
+class GridLabelComponent(_CVModel):
+    """Fallback grid-label format when the project supplies no definition.
+
+    Project definitions are validated by generic attribute rules. Any explicit
+    definition disables the fallback, allowing custom grid naming conventions.
+    """
+
+    rule: AttributeRule | None = None
 
     @classmethod
-    def from_definition(cls, definition: Any) -> "SourceTypeComponent":
-        if isinstance(definition, Mapping):
-            values = frozenset(str(value) for value in definition)
-        elif isinstance(definition, list):
-            values = frozenset(str(value) for value in definition)
-        else:
-            values = frozenset()
-        return cls(values=values)
+    def from_definition(cls, definition: Any) -> "GridLabelComponent":
+        """Parse an explicit ``grid_label`` definition, even an empty one.
 
-    def accepts(self, source_type: Any) -> bool:
-        """Return whether every source-type token is in the project CV."""
+        Use ``GridLabelComponent()`` when the CV omits the attribute entirely.
+        """
 
-        if not self.values:
-            return True
-        return all(token in self.values for token in str(source_type).split() if token)
+        return cls(rule=AttributeRule.from_definition("grid_label", definition))
 
-    def validation_error(
-        self,
-        source_type: Any,
-        experiment_entry: Mapping[str, Any],
-        *,
-        experiment_id: Any = None,
-    ) -> str | None:
-        """Return an experiment composition error, or ``None`` when valid."""
+    def validation_error(self, metadata: Mapping[str, Any]) -> str | None:
+        """Return a fallback format error, skipping absent or empty labels."""
 
-        required_source_types = _values(experiment_entry.get("required_source_type"))
-        required = required_source_types or _values(
-            experiment_entry.get("required_model_components")
-        )
-        additional = _values(
-            experiment_entry.get("additional_allowed_model_components")
-        )
-        if not required and not additional:
+        label = metadata.get("grid_label")
+        if self.rule is not None or label in (None, ""):
             return None
-        if source_type in (None, ""):
-            return "source_type is required." if required_source_types else None
+        # CMOR3 grid families: g, c, or r, followed by lowercase letters/digits.
+        if not re.fullmatch(r"[gcr][a-z0-9]*", str(label)):
+            return (
+                f"grid_label={label!r} does not match the required format. "
+                "Grid labels must start with 'g', 'c', or 'r' followed by "
+                "lowercase letters and digits only (no hyphens or special "
+                "characters). "
+                "Valid examples: 'gn', 'gr1', 'cn', 'g999'. "
+                "Define grid_label in the project CV to allow a custom set."
+            )
+        return None
 
-        source_type_text = str(source_type)
-        for expected in required:
-            if not _pattern_matches(source_type_text, expected):
-                return (
-                    f"source_type={source_type!r} is missing required "
-                    f"source type {expected!r}."
-                )
-        allowed = (*required, *additional)
-        for token in source_type_text.split():
-            if not any(_pattern_matches(token, item) for item in allowed):
-                context = (
-                    f" by experiment_id={experiment_id!r}"
-                    if experiment_id not in (None, "")
+
+class VariantLabelComponent(_CVModel):
+    """Variant-label assembly and validation of its four RIPF indices.
+
+    Indices accept bare integers or their corresponding ``r``, ``i``, ``p``,
+    or ``f`` prefix. Label format is checked only for a non-empty CV choice
+    list, preserving projects that allow arbitrary variant labels.
+    """
+
+    rule: AttributeRule
+
+    @classmethod
+    def from_definition(cls, definition: Any) -> "VariantLabelComponent":
+        """Parse the CV's ``variant_label`` definition, including its absence."""
+
+        return cls(rule=AttributeRule.from_definition("variant_label", definition))
+
+    def render(self, metadata: Mapping[str, Any]) -> str | None:
+        """Return an explicit label or assemble one when all indices are present.
+
+        Bare digits receive their canonical prefix; other strings are kept
+        as supplied, matching CMOR3's ``cmor_addRIPF`` behavior.
+        """
+
+        label = metadata.get("variant_label")
+        if label not in (None, ""):
+            return str(label)
+        pieces: list[str] = []
+        for key, prefix in _RIPF_PREFIXES.items():
+            value = metadata.get(key)
+            if value in (None, ""):
+                return None
+            value_str = str(value)
+            pieces.append(
+                f"{prefix}{value_str}" if re.fullmatch(r"\d+", value_str) else value_str
+            )
+        return "".join(pieces)
+
+    def validation_error(self, metadata: Mapping[str, Any]) -> str | None:
+        """Return the first index range or label format error, if any.
+
+        Missing indices and legacy CV regex placeholders are skipped. Literal
+        choices and project regexes remain subject to generic attribute rules.
+        """
+
+        for key in _RIPF_PREFIXES:
+            value = metadata.get(key)
+            if value in (None, ""):
+                continue
+            value_str = str(value)
+            if re.search(r"[\\^$\[\]{,}]", value_str):
+                continue
+            error = ripf_index_error(key, value)
+            if error is not None:
+                return error
+
+        if self.rule.is_choice_constraint:
+            label = self.render(metadata)
+            if label and not re.fullmatch(r"r\d+i\d+p\d+f\d+", label):
+                origin = (
+                    " assembled from RIPF indices"
+                    if metadata.get("variant_label") in (None, "")
                     else ""
                 )
                 return (
-                    f"source_type={source_type!r} contains source type "
-                    f"{token!r} that is not allowed{context}."
+                    f"variant_label={label!r}{origin} does not match the required "
+                    "pattern 'r<N>i<N>p<N>f<N>'."
                 )
         return None
+
+
+class DRSComponent(_CVModel):
+    """Directory and filename templates from the CV's ``DRS`` section."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    directory_path_template: str | None = None
+    filename_template: str | None = None
+
+    @field_validator("directory_path_template", "filename_template", mode="before")
+    @classmethod
+    def _ignore_non_string_templates(cls, value: Any) -> str | None:
+        return value if isinstance(value, str) and value else None
+
+    @classmethod
+    def from_definition(cls, definition: Any) -> "DRSComponent | None":
+        if not isinstance(definition, Mapping):
+            return None
+        return cls.model_validate(definition)
+
+    def templates(self) -> tuple[str | None, str | None]:
+        """Return ``(directory_path_template, filename_template)``."""
+
+        return self.directory_path_template, self.filename_template
+
+
+class NestedDefaultComponent(_CVModel):
+    """Scalar attributes contributed by selected two-level CV entries."""
+
+    entries: dict[str, dict[str, dict[str, ScalarValue]]] = Field(default_factory=dict)
+
+    @classmethod
+    def from_mapping(cls, cv: Mapping[str, Any]) -> "NestedDefaultComponent":
+        catalogs: dict[str, dict[str, dict[str, ScalarValue]]] = {}
+        for attribute, definition in cv.items():
+            if attribute in _NESTED_DEFAULT_EXCLUSIONS or not isinstance(
+                definition, Mapping
+            ):
+                continue
+            entries: dict[str, dict[str, ScalarValue]] = {}
+            for selector, raw_values in definition.items():
+                if not isinstance(raw_values, Mapping) or not all(
+                    isinstance(value, (str, int, float))
+                    for value in raw_values.values()
+                ):
+                    continue
+                entries[str(selector)] = {
+                    str(key): value for key, value in raw_values.items()
+                }
+            if entries:
+                catalogs[str(attribute)] = entries
+        return cls(entries=catalogs)
+
+    def defaults_for(self, metadata: Mapping[str, Any]) -> dict[str, ScalarValue]:
+        """Return defaults contributed by every selected nested entry."""
+
+        defaults: dict[str, ScalarValue] = {}
+        for attribute, entries in self.entries.items():
+            selected = metadata.get(attribute)
+            if selected in (None, ""):
+                continue
+            for key, value in entries.get(str(selected), {}).items():
+                defaults.setdefault(key, value)
+        return defaults
+
+
+class DefaultValuesComponent(_CVModel):
+    """Static scalar, nested, and required-attribute defaults."""
+
+    scalars: dict[str, ScalarValue] = Field(default_factory=dict)
+    nested: NestedDefaultComponent = Field(default_factory=NestedDefaultComponent)
+    required: dict[str, ScalarValue] = Field(default_factory=dict)
+    conventions: str = "CF-1.12"
+
+    @classmethod
+    def from_mapping(cls, cv: Mapping[str, Any]) -> "DefaultValuesComponent":
+        scalars = {
+            str(key): value
+            for key, value in cv.items()
+            if isinstance(value, (str, int, float))
+            and not (isinstance(value, str) and ("<" in value or ">" in value))
+        }
+        required_names = cv.get("required_global_attributes", ())
+        required: dict[str, ScalarValue] = {}
+        if isinstance(required_names, (list, tuple)):
+            for raw_name in required_names:
+                name = str(raw_name)
+                definition = _definition_for(name, cv)
+                default = _definition_default(definition)
+                if default is not None:
+                    required[name] = default
+        return cls(
+            scalars=scalars,
+            nested=NestedDefaultComponent.from_mapping(cv),
+            required=required,
+            conventions=_conventions_default(cv.get("Conventions")),
+        )
+
+    def scalar_defaults_for(
+        self, metadata: Mapping[str, Any]
+    ) -> dict[str, ScalarValue]:
+        """Return scalar defaults missing from *metadata*."""
+
+        return {
+            key: value for key, value in self.scalars.items() if key not in metadata
+        }
+
+    def nested_defaults_for(
+        self, metadata: Mapping[str, Any]
+    ) -> dict[str, ScalarValue]:
+        """Return selected nested defaults missing from *metadata*."""
+
+        return {
+            key: value
+            for key, value in self.nested.defaults_for(metadata).items()
+            if key not in metadata
+        }
 
 
 class ForcingComponent(_CVModel):
@@ -1033,122 +1128,3 @@ class ControlledVocabularyModel(_CVModel):
                 else GridLabelComponent()
             ),
         )
-
-
-def _choice_accepts(value: str, choice: str) -> bool:
-    """Match a list item literally first and as a translated POSIX regex second."""
-
-    if value == choice:
-        return True
-    pattern = (
-        choice
-        .replace("[[:digit:]]", r"\d")
-        .replace("[[:space:]]", r"\s")
-        .replace("[[:alpha:]]", r"[A-Za-z]")
-        .replace("\\{", "{")
-        .replace("\\}", "}")
-    )
-    try:
-        return re.fullmatch(pattern, value) is not None
-    except re.error:
-        return False
-
-
-def _single_default(value: Any) -> Any:
-    if value in (None, "") or isinstance(value, Mapping):
-        return None
-    if isinstance(value, list):
-        return value[0] if len(value) == 1 else None
-    return value
-
-
-def _definition_for(name: str, cv: Mapping[str, Any]) -> Any:
-    if name in cv:
-        return cv[name]
-    license_definition = cv.get("license")
-    if name == "license_id" and isinstance(license_definition, Mapping):
-        return license_definition.get("license_id")
-    return None
-
-
-def _definition_default(definition: Any) -> ScalarValue | None:
-    if isinstance(definition, Mapping):
-        keys = list(definition)
-        default: Any = keys[0] if len(keys) == 1 else None
-    else:
-        default = _single_default(definition)
-    if _looks_like_posix_regex_list(definition):
-        return None
-    if isinstance(default, str) and re.search(r"[\\^$\[\]{,}()|]", default):
-        return None
-    return default if isinstance(default, (str, int, float, bool)) else None
-
-
-def _conventions_default(definition: Any) -> str:
-    if isinstance(definition, list) and "CF-1.12" in definition:
-        return "CF-1.12"
-    if isinstance(definition, list) and definition:
-        candidate = str(definition[-1])
-        return (
-            "CF-1.7 CMIP-6.2"
-            if re.search(r"[\\^$\[\]{,}()|]", candidate)
-            else candidate
-        )
-    if isinstance(definition, str) and definition:
-        return definition
-    return "CF-1.12"
-
-
-def _looks_like_posix_regex_list(value: Any) -> bool:
-    if not isinstance(value, list) or len(value) != 1 or not isinstance(value[0], str):
-        return False
-    item = value[0]
-    return any(
-        indicator in item
-        for indicator in ("\\{", "[[:digit:]]", "[[:space:]]", "[[:alpha:]]")
-    ) or bool(re.match(r"^\^.*\.\*", item))
-
-
-def _values(value: Any) -> tuple[Any, ...]:
-    if value in (None, ""):
-        return ()
-    if isinstance(value, list):
-        return tuple(item for item in value if item not in (None, ""))
-    return (value,)
-
-
-def _required_value_error(
-    metadata: Mapping[str, Any], key: str, expected: Any, experiment_id: Any
-) -> str | None:
-    value = metadata.get(key)
-    if value in (None, ""):
-        return f"{key} is required."
-    matches = (
-        str(value) in {str(item) for item in expected}
-        if isinstance(expected, list)
-        else str(value) == str(expected)
-    )
-    if expected not in (None, "") and not matches:
-        return (
-            f"{key}={value!r} does not match experiment_id={experiment_id!r} "
-            f"CV value {expected!r}."
-        )
-    return None
-
-
-def _pattern_matches(value: str, pattern: Any) -> bool:
-    """
-    Check if a string matches the pattern in POSIX Extended Regular Expression format
-    """
-    pattern_text = (
-        str(pattern)
-        .replace("[[:digit:]]", r"\d")
-        .replace("[[:space:]]", r"\s")
-        .replace("[[:alpha:]]", r"[A-Za-z]")
-        .replace("\\{", "{")
-        .replace("\\}", "}")
-    )
-    try:
-        return re.search(pattern_text, value) is not None
-    except re.error:
-        return value == str(pattern)

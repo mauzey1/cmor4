@@ -26,10 +26,8 @@ def write_example(output_dir: Path) -> str:
     )
     dataset = project.dataset_info({
         "activity_id": "CMIP",
-        "calendar": "360_day",
         "experiment_id": "amip",
         "forcing_index": "f1",
-        "frequency": "mon",
         "grid_label": "g010",
         "initialization_index": "i1",
         "institution_id": "MOHC",
@@ -114,6 +112,8 @@ def write_example(output_dir: Path) -> str:
     )
     time_axis = project.axis(
         "time",
+        calendar="360_day",
+        frequency="mon",
         values=np.array([15.0, 45.0], dtype="d"),
         bounds=np.array([[0.0, 30.0], [30.0, 60.0]], dtype="d"),
         units="days since 1979-01-01",

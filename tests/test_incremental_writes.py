@@ -16,10 +16,8 @@ from table_helpers import cmip7_project
 def dataset_info(tmp_path: Path) -> dict[str, str]:
     return {
         "activity_id": "CMIP",
-        "calendar": "standard",
         "experiment_id": "amip",
         "forcing_index": "f3",
-        "frequency": "mon",
         "grid_label": "g101",
         "initialization_index": "i1",
         "institution_id": "CNRM-CERFACS",
@@ -55,7 +53,11 @@ def time_axis(
     values: list[float] | None = None,
     bounds: list[list[float]] | None = None,
 ) -> cmor.Axis:
-    kwargs = {"units": "days since 2000-01-01"}
+    kwargs = {
+        "units": "days since 2000-01-01",
+        "calendar": "standard",
+        "frequency": "mon",
+    }
     if values is not None:
         kwargs["values"] = values
     if bounds is not None:

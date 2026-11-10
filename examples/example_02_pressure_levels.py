@@ -26,10 +26,8 @@ def write_example(output_dir: Path) -> str:
     )
     dataset = project.dataset_info({
         "activity_id": "CMIP",
-        "calendar": "360_day",
         "experiment_id": "amip",
         "forcing_index": "f1",
-        "frequency": "mon",
         "grid_label": "g010",
         "initialization_index": "i1",
         "institution_id": "MOHC",
@@ -68,6 +66,8 @@ def write_example(output_dir: Path) -> str:
     axes = [
         project.axis(
             "time",
+            calendar="360_day",
+            frequency="mon",
             values=np.array([15.0, 45.0], dtype="d"),
             bounds=np.array([[0.0, 30.0], [30.0, 60.0]], dtype="d"),
             units="days since 1979-01-01",
@@ -90,9 +90,7 @@ def write_example(output_dir: Path) -> str:
     variable = project.variable(
         "ta_tavg-p19-hxy-air", table_id="atmos", missing_value=np.float64(1.0e20)
     )
-    data = np.linspace(250.0, 275.0, 2 * 19 * 3 * 4, dtype="f4").reshape(
-        2, 19, 3, 4
-    )
+    data = np.linspace(250.0, 275.0, 2 * 19 * 3 * 4, dtype="f4").reshape(2, 19, 3, 4)
     data[0, 0, 0, 0] = np.float32(1.0e20)
     return str(cmor.cmorize(dataset, variable, axes, data))
 

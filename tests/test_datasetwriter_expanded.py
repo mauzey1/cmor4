@@ -25,10 +25,8 @@ def dataset_info(tmp_path: Path) -> dict[str, str]:
     """Standard CMIP7 dataset metadata for tests."""
     return {
         "activity_id": "CMIP",
-        "calendar": "standard",
         "experiment_id": "amip",
         "forcing_index": "f3",
-        "frequency": "mon",
         "grid_label": "g101",
         "initialization_index": "i1",
         "institution_id": "CNRM-CERFACS",
@@ -67,7 +65,11 @@ def time_axis(
     **kwargs,
 ) -> cmor.Axis:
     """Create a time axis with optional values and bounds."""
-    axis_kwargs = {"units": "days since 2000-01-01"}
+    axis_kwargs = {
+        "units": "days since 2000-01-01",
+        "calendar": "standard",
+        "frequency": "mon",
+    }
     if values is not None:
         axis_kwargs["values"] = values
     if bounds is not None:
@@ -261,7 +263,6 @@ class DatasetWriterEquivalenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             info_dict = dataset_info(tmp_path)
-            info_dict["calendar"] = "360_day"
             info = self.project.dataset_info(info_dict)
             variable = self.project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
 

@@ -6,12 +6,13 @@ import pytest
 from pydantic import ValidationError
 
 from cmor import Axis, DatasetInfo, Grid, Variable, ZFactor
-from cmor.utils.table_models import (
+from cmor._coordinate_tables import (
     CoordinateTableDocument,
     FormulaTableDocument,
     GridTableDocument,
-    VariableTableDocument,
 )
+
+from cmor._variable_tables import VariableTableDocument
 
 
 def test_coordinate_document_normalizes_runtime_values_and_dimensions() -> None:

@@ -51,7 +51,7 @@ filterwarnings = [
 ]
 
 [tool.setuptools]
-packages = ["cmor", "cmor.utils"]
+packages = ["cmor"]
 package-dir = { cmor = "cmor" }
 
 [tool.setuptools.package-data]

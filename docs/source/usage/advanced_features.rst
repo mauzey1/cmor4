@@ -36,7 +36,7 @@ Define custom grid structures:
    ])
 
    axes = [
-       project.axis("time", values=[15.0], bounds=[[0, 30]],
+       project.axis("time", frequency="mon", calendar="standard", values=[15.0], bounds=[[0, 30]],
                     units="days since 2000-01-01"),
        project.axis("latitude", values=lat_values.tolist(),
                     bounds=lat_bounds.tolist()),
@@ -187,7 +187,7 @@ For atmospheric model levels:
    ]
 
    axes = [
-       project.axis("time", values=[15.0], bounds=[[0, 30]],
+       project.axis("time", frequency="mon", calendar="standard", values=[15.0], bounds=[[0, 30]],
                     units="days since 2000-01-01"),
        lev_axis,
        project.axis("latitude", values=np.linspace(-90, 90, 90).tolist()),
@@ -226,7 +226,7 @@ Ocean Depth Coordinates
    )
 
    axes = [
-       project.axis("time", values=[15.0], bounds=[[0, 30]],
+       project.axis("time", frequency="mon", calendar="standard", values=[15.0], bounds=[[0, 30]],
                     units="days since 2000-01-01"),
        depth_axis,
        project.axis("latitude", values=np.linspace(-90, 90, 180).tolist()),
@@ -235,6 +235,30 @@ Ocean Depth Coordinates
 
 Time Handling
 -------------
+
+Set ``calendar`` and ``frequency`` on the time axis when it is created.
+``calendar`` defaults to ``standard`` on sampling time axes. It is a dedicated
+Axis field and cannot be supplied through ``attrs``. If ``frequency`` is omitted, CMOR uses
+the variable table's frequency; supply it explicitly when the table has none.
+An explicit frequency must agree with the variable table. CMOR validates the
+calendar and checks time spacing using the resolved frequency and project CV
+interval tolerances.
+
+Project CVs may also supply required global calendar metadata. This does not
+set the time axis calendar. CMOR writes the axis ``calendar`` on the time
+coordinate and derives the dataset global
+``frequency`` and filename tokens during assembly. Do not put these inputs in
+``DatasetInfo``. A legacy dataset calendar raises an error during assembly;
+move it to ``project.axis(..., calendar=...)``. The internal prepared dataset
+frequency is derived metadata. Fixed
+fields need no time axis: their frequency comes from the variable table, or
+falls back to ``fx``. Final dataset, table, and controlled-vocabulary validation
+still run before writing.
+
+Forecast reference time inherits the sampling time axis's calendar when its
+own calendar is omitted. A forecast-period coordinate is a duration and does
+not need a calendar or sampling frequency. These rules also apply to
+``DatasetWriter``, including append operations.
 
 Different Calendar Types
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -246,6 +270,7 @@ CMOR supports various calendar types:
    # Standard Gregorian calendar
    time_axis = project.axis(
        "time",
+       frequency="mon",
        values=[15.0, 45.0, 74.0],
        bounds=[[0, 30], [30, 60], [60, 90]],
        units="days since 1850-01-01",
@@ -255,6 +280,7 @@ CMOR supports various calendar types:
    # No-leap calendar (365-day years)
    time_axis = project.axis(
        "time",
+       frequency="mon",
        values=[15.0, 45.0, 74.0],
        bounds=[[0, 30], [30, 60], [60, 90]],
        units="days since 1850-01-01",
@@ -264,6 +290,7 @@ CMOR supports various calendar types:
    # 360-day calendar
    time_axis = project.axis(
        "time",
+       frequency="mon",
        values=[15.0, 45.0, 74.0],
        bounds=[[0, 30], [30, 60], [60, 90]],
        units="days since 1850-01-01",
@@ -312,6 +339,8 @@ CMOR automatically derives forecast coordinates for forecast/initialized model o
    # Define forecast time axis
    time_axis = project.axis(
        "time",
+       frequency="mon",
+       calendar="standard",
        values=[30.0, 60.0, 90.0],  # Monthly forecasts
        bounds=[[0, 30], [30, 60], [60, 90]],
        units="days since 2020-01-01",
@@ -352,6 +381,8 @@ For ensemble forecasts with multiple initialization times:
    # Time axis spans both forecasts
    time_axis = project.axis(
        "time",
+       frequency="mon",
+       calendar="standard",
        values=[30.0, 60.0, 395.0, 425.0],
        units="days since 2020-01-01",
    )
@@ -399,6 +430,8 @@ For climatology data (multi-year means):
 
    time_axis = project.axis(
        "time",
+       frequency="mon",
+       calendar="standard",
        values=time_values,
        bounds=time_values,  # Regular time bounds
        climatology_bounds=climatology_bounds,
@@ -418,6 +451,8 @@ Variables with no spatial dimensions:
    # Global mean surface temperature (time series only)
    time_axis = project.axis(
        "time",
+       frequency="mon",
+       calendar="standard",
        values=np.arange(0, 3650, 30.0).tolist(),
        units="days since 1850-01-01",
    )
@@ -449,7 +484,7 @@ Data at specific locations:
    site_lon = [-120.0, -110.0, -100.0]
 
    axes = [
-       project.axis("time", values=[15.0], bounds=[[0, 30]],
+       project.axis("time", frequency="mon", calendar="standard", values=[15.0], bounds=[[0, 30]],
                     units="days since 2000-01-01"),
        site_axis,
    ]
@@ -641,9 +676,9 @@ Starting from Xarray Datasets
    lat_values = ds_in["lat"].values
    lon_values = ds_in["lon"].values
 
-   # Convert to CMOR-compliant
+   # Convert to CF-compliant
    axes = [
-       project.axis("time", values=time_values.tolist(),
+       project.axis("time", frequency="mon", calendar="standard", values=time_values.tolist(),
                     units="days since 1850-01-01"),
        project.axis("latitude", values=lat_values.tolist()),
        project.axis("longitude", values=lon_values.tolist()),

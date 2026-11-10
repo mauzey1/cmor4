@@ -28,10 +28,8 @@ def _requires_tables(test):
 _BASE_CMIP7_DATASET = {
     "mip_era": "CMIP7",
     "activity_id": "CMIP",
-    "calendar": "360_day",
     "experiment_id": "amip",
     "forcing_index": "f1",
-    "frequency": "mon",
     "grid_label": "g101",
     "initialization_index": "i1",
     "institution_id": "CNRM-CERFACS",
@@ -46,10 +44,8 @@ _BASE_CMIP7_DATASET = {
 _BASE_CMIP6_DATASET = {
     "mip_era": "CMIP6",
     "activity_id": "CMIP",
-    "calendar": "360_day",
     "experiment_id": "amip",
     "forcing_index": "f1",
-    "frequency": "mon",
     "grid_label": "g101",
     "initialization_index": "i1",
     "institution_id": "CNRM-CERFACS",
@@ -200,6 +196,8 @@ class TestCMIP7AutoChunking(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -256,6 +254,8 @@ class TestCMIP7AutoChunking(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -298,6 +298,8 @@ class TestCMIP7AutoChunking(unittest.TestCase):
         axes = [
             cmor.Axis(
                 name="time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -358,6 +360,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -394,6 +398,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -436,6 +442,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -480,6 +488,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -521,6 +531,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -562,6 +574,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -601,6 +615,8 @@ class TestCMIP7ChunkingValidation(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -670,6 +686,8 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -723,6 +741,8 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -768,6 +788,8 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -814,6 +836,8 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -863,6 +887,8 @@ class TestCMIP7EncodingParameters(unittest.TestCase):
         axes = [
             self.project.axis(
                 "time",
+                calendar="360_day",
+                frequency="mon",
                 values=time_vals,
                 bounds=time_bnds,
                 units="days since 2000-01-01",
@@ -928,6 +954,8 @@ class TestCheckCMIP7RepackChunking(unittest.TestCase, CMIP7ChunkingCheckAssertio
         name = "time1" if point else "time"
         kwargs = {
             "values": time_vals,
+            "calendar": "360_day",
+            "frequency": "mon",
             "units": "days since 2000-01-01",
         }
         if not point:

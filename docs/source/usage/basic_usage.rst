@@ -6,7 +6,7 @@ This guide covers common CMOR usage patterns for creating climate model output.
 One-Shot Writing with cmorize()
 --------------------------------
 
-The :func:`cmor.cmorize` function is the simplest way to write CMOR-compliant NetCDF files when your complete dataset fits in memory.
+The :func:`cmor.cmorize` function is the simplest way to write CF-compliant NetCDF files when your complete dataset fits in memory.
 
 Simple 3D Dataset (time, lat, lon)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -56,7 +56,7 @@ Simple 3D Dataset (time, lat, lon)
    ])
 
    axes = [
-       project.axis("time", values=time_values.tolist(),
+       project.axis("time", frequency="mon", calendar="standard", values=time_values.tolist(),
                     bounds=time_bounds.tolist(),
                     units="days since 1850-01-01"),
        project.axis("latitude", values=lat_values.tolist(),
@@ -78,6 +78,10 @@ Simple 3D Dataset (time, lat, lon)
 
    print(f"Wrote {output_path}")
    print(f"File size: {ds.nbytes / 1e6:.1f} MB")
+
+Dataset creation automatically adds fixed scalar axes required by the variable
+table, such as a fixed height coordinate. You do not need to supply these axes
+explicitly.
 
 4D Dataset with Height Levels
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -113,7 +117,7 @@ Simple 3D Dataset (time, lat, lon)
                   7000, 5000, 3000, 2000, 1000]  # Pa
 
    axes = [
-       project.axis("time", values=[15.0], bounds=[[0, 30]],
+       project.axis("time", frequency="mon", calendar="standard", values=[15.0], bounds=[[0, 30]],
                     units="days since 2000-01-01"),
        project.axis("plev", values=plev_values),
        project.axis("latitude", values=np.linspace(-90, 90, 90).tolist()),

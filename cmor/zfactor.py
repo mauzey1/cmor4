@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 from pydantic import Field
 
-from .utils.metadata import CoercedF, MetadataModel, StrSeq
+from ._metadata import CoercedF, MetadataModel, StrSeq
 
 
 class ZFactor(MetadataModel):

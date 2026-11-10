@@ -49,10 +49,8 @@ def _requires_tables(test):
 
 _BASE_DATASET = {
     "activity_id": "CMIP",
-    "calendar": "360_day",
     "experiment_id": "amip",
     "forcing_index": "f1",
-    "frequency": "mon",
     "grid_label": "g101",
     "initialization_index": "i1",
     "institution_id": "CNRM-CERFACS",
@@ -98,6 +96,8 @@ def _make_dataset(project, base: dict, outpath: str):
 def _time_axis(project):
     return project.axis(
         "time",
+        calendar="360_day",
+        frequency="mon",
         values=_TIME_VALS,
         bounds=_TIME_BNDS,
         units=_TIME_UNITS,
@@ -1156,7 +1156,7 @@ class TestExample07FixedField(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
-        base = {**_BASE_DATASET, "frequency": "fx"}
+        base = dict(_BASE_DATASET)
         project = _project("CMIP7_land.json")
         dataset = _make_dataset(project, base, self.tmp)
         variable = project.variable(
@@ -1237,7 +1237,7 @@ class TestExample08LongNameOverrides(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         # NH region dataset with daily frequency
-        base = {**_BASE_DATASET, "frequency": "day", "region": "nh"}
+        base = {**_BASE_DATASET, "region": "nh"}
         project = _project("CMIP7_seaIce.json")
         dataset = _make_dataset(project, base, self.tmp)
         variable = project.variable(
@@ -1246,6 +1246,8 @@ class TestExample08LongNameOverrides(unittest.TestCase):
         # Daily time axis
         time_axis = project.axis(
             "time",
+            calendar="360_day",
+            frequency="day",
             values=np.array([0.5, 1.5], dtype="d"),
             bounds=np.array([[0.0, 1.0], [1.0, 2.0]], dtype="d"),
             units=_TIME_UNITS,
@@ -1334,7 +1336,9 @@ class TestDatasetWriterIntegration01(unittest.TestCase):
             "tos_tavg-u-hxy-sea", table_id="ocean", missing_value=np.float32(1.0e20)
         )
         # Time axis without values (to be provided incrementally)
-        time_axis = project.axis("time", units=_TIME_UNITS)
+        time_axis = project.axis(
+            "time", calendar="360_day", frequency="mon", units=_TIME_UNITS
+        )
         axes = [time_axis, _lat_axis(project), _lon_axis(project)]
         data = np.array(
             [
@@ -1491,7 +1495,9 @@ class TestDatasetWriterIntegration05(unittest.TestCase):
         variable = project.variable(
             "cl_tavg-al-hxy-u", table_id="atmos", missing_value=np.float32(1.0e20)
         )
-        time_axis = project.axis("time", units=_TIME_UNITS)
+        time_axis = project.axis(
+            "time", calendar="360_day", frequency="mon", units=_TIME_UNITS
+        )
         lat_axis = _lat_axis(project)
         lon_axis = _lon_axis(project)
         lev_axis = project.axis(
@@ -1729,7 +1735,9 @@ class TestDatasetWriterIntegration02(unittest.TestCase):
             "ta_tavg-p19-hxy-air", table_id="atmos", missing_value=np.float32(1.0e20)
         )
         plev_axis = project.axis("plev19", values=self._PLEV19)
-        time_axis = project.axis("time", units=_TIME_UNITS)
+        time_axis = project.axis(
+            "time", calendar="360_day", frequency="mon", units=_TIME_UNITS
+        )
         axes = [time_axis, plev_axis, _lat_axis(project), _lon_axis(project)]
         data = np.linspace(250.0, 275.0, 2 * 19 * 3 * 4, dtype="f4").reshape(
             2, 19, 3, 4

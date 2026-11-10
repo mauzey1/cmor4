@@ -92,7 +92,7 @@ dataset = project.dataset_info({
 variable = project.variable("tas", missing_value=1.0e20)
 
 axes = [
-    project.axis("time", values=[15.0, 45.0], 
+    project.axis("time", frequency="mon", calendar="standard", values=[15.0, 45.0],
                  bounds=[[0.0, 30.0], [30.0, 60.0]],
                  units="days since 2000-01-01"),
     project.axis("lat", values=np.linspace(-90, 90, 180)),
@@ -102,7 +102,7 @@ axes = [
 # Prepare data
 data = np.random.randn(2, 180, 360) + 288.0
 
-# Write CMOR-compliant NetCDF file
+# Write CF-compliant NetCDF file
 path = cmor.cmorize(dataset, variable, axes, data)
 print(f"Created: {path}")
 ```
@@ -121,7 +121,7 @@ variable = project.variable("tas")
 
 # Define axes - time axis can be empty (values provided per write)
 axes = [
-    project.axis("time", units="days since 2000-01-01"),
+    project.axis("time", frequency="mon", calendar="standard", units="days since 2000-01-01"),
     project.axis("latitude", values=np.linspace(-90, 90, 180)),
     project.axis("longitude", values=np.linspace(0, 360, 360)),
 ]
@@ -132,7 +132,7 @@ with cmor.DatasetWriter(dataset, variable, axes) as writer:
         # Load one year at a time
         time_vals, data = load_year(year)  # Your function: returns (12,) and (12, 180, 360)
         time_bnds = compute_bounds(time_vals)  # Your function: returns (12, 2)
-        
+
         # Write this year's data
         writer.write(data, time_values=time_vals, time_bounds=time_bnds)
         print(f"Wrote year {year}")
@@ -169,6 +169,10 @@ See the [Incremental Writing documentation](docs/source/usage/incremental_writin
 ## Example notebooks
 
 Jupyter notebook examples with visualizations are available in [notebooks](./notebooks/)
+
+## Documentation
+
+CMOR usage examples and API reference can be found on the [documentation site](https://mauzey1.github.io/cmor4/).
 
 ## Support
 

@@ -1,3 +1,5 @@
+"""Render output templates and identify unresolved metadata tokens."""
+
 from __future__ import annotations
 
 import re

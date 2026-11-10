@@ -1,3 +1,5 @@
+"""Public project-table orchestration over private table and domain modules."""
+
 from __future__ import annotations
 
 import hashlib
@@ -5,30 +7,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-import numpy as np
 from pydantic import ValidationError
 
-from .utils.templates import is_unresolved_template as _is_unresolved_template
-from .utils.tables import (
-    CoordinateTable,
-    FormulaTable,
-    GridTable,
-    VariableEntry,
-    VariableTable,
+from ._coordinate_tables import CoordinateTable, FormulaTable, GridTable
+from ._metadata import DatasetMetadata
+from ._templates import is_unresolved_template as _is_unresolved_template
+from ._variable_tables import VariableEntry, VariableTable
+from .axis import (
+    Axis,
+    validate_axes,
+    validate_axis_values_early,
 )
-from .axis import Axis
 from .cv import ControlledVocabulary
 from .datasetinfo import DatasetInfo
 from .exceptions import ControlledVocabularyError, TableValidationError
-from .grid import Grid
-from .utils.unit_conversion import units_are_convertible as _units_are_convertible
-from .utils.dataset_metadata import DatasetMetadata
-from .utils.validation import (
-    _validate_calendar,
-    validate_axes as _validate_axes,
-    validate_axis_values_early as _validate_axis_values_early,
-    validate_grid_mapping as _validate_grid_mapping,
-)
+from .grid import Grid, validate_grid_mapping
 from .variable import Variable
 from .zfactor import ZFactor
 
@@ -46,6 +39,10 @@ class ProjectTables:
     include realm, variable_id, branding suffix, frequency, and region. These
     remappings are treated as effective variable-table values during
     preparation and validation.
+
+    Use the factory methods below to prepare dataset metadata and components.
+    Dataset creation performs the remaining table checks and adds any required
+    fixed scalar axes automatically.
 
     Parameters
     ----------
@@ -103,7 +100,7 @@ class ProjectTables:
         )
         self.grid_table = GridTable.from_file(self.grid_table_file)
         self.coordinate_table = CoordinateTable.from_file(
-            self.coordinate_table_file, self.grid_table_file
+            self.coordinate_table_file, self.grid_table
         )
         self.formula_table = FormulaTable.from_file(self.formula_table_file)
 
@@ -217,10 +214,10 @@ class ProjectTables:
 
         This is called by create_dataset to merge variable metadata into
         dataset and perform initial validation. Full component validation
-        happens later via validate_dataset. If contextual remapping tables are
-        loaded, matching ``long_name`` and ``cell_measures`` values are applied
-        to the returned ``Variable`` and used as the expected table values for
-        validation.
+        happens later during dataset validation. If contextual remapping
+        tables are loaded, matching ``long_name`` and ``cell_measures`` values
+        are applied to the returned ``Variable`` and used as the expected table
+        values for validation.
 
         Returns
         -------
@@ -252,13 +249,7 @@ class ProjectTables:
             user_info=dict(user_info),
         )
 
-        # Quick validation check for dataset-variable consistency
-        # This is duplicated in validate_components but done early for fast
-        # failure.
         self.variable_table.validate_against(variable, variable_entry)
-        self._validate_dataset_variable_consistency(
-            prepared_dataset, variable, variable_entry
-        )
 
         return prepared_dataset, variable
 
@@ -367,7 +358,9 @@ class ProjectTables:
             time_axis = project.axis(
                 "time",
                 values=[0, 31, 59, 90],
-                bounds=[[0, 31], [31, 59], [59, 90], [90, 120]]
+                bounds=[[0, 31], [31, 59], [59, 90], [90, 120]],
+                calendar="standard",
+                frequency="mon",
             )
 
         Create a latitude axis from table::
@@ -392,7 +385,7 @@ class ProjectTables:
 
         request = Axis.model_validate({"name": name, **values})
         axis = self.coordinate_table.build(request)
-        _validate_axis_values_early(axis)
+        validate_axis_values_early(axis)
         return self._mark_prepared_axis(axis)
 
     def _axes(
@@ -417,10 +410,10 @@ class ProjectTables:
             for axis in axes
         ]
         if variable is not None:
-            merged_axes.extend(self.scalar_axes_for(variable, merged_axes))
+            merged_axes.extend(self._scalar_axes_for(variable, merged_axes))
         return tuple(self._mark_prepared_axis(axis) for axis in merged_axes)
 
-    def scalar_axes_for(
+    def _scalar_axes_for(
         self,
         variable: Variable,
         axes: Sequence[Axis] = (),
@@ -448,30 +441,7 @@ class ProjectTables:
             by the variable's dimensions but not present in the provided axes.
             Each axis is marked as scalar and includes the table-defined value.
 
-        Notes
-        -----
-        This method is called automatically by ``create_dataset`` when using
-        project-backed metadata. It can also be called directly to preview
-        which scalar axes will be auto-added.
-
-        Examples
-        --------
-        Check which scalar axes a variable needs::
-
-            project = ProjectTables.from_directory(...)
-            variable = project.variable("tas")  # dimensions include "height2m"
-            lat = project.axis("lat", values=[...])
-            lon = project.axis("lon", values=[...])
-            time = project.axis("time", values=[...])
-
-            missing = project.scalar_axes_for(variable, [lat, lon, time])
-            # Returns tuple with height2m axis
-
-        Preview scalar axes before dataset creation::
-
-            variable = project.variable("tas")
-            scalar_axes = project.scalar_axes_for(variable)
-            # Returns all required scalar axes if no axes provided
+        This is used internally while preparing axes for dataset creation.
         """
 
         present = {
@@ -500,7 +470,7 @@ class ProjectTables:
                 scalar=True,
             )
             axis = self.coordinate_table.build(request)
-            _validate_axis_values_early(axis)
+            validate_axis_values_early(axis)
             missing_axes.append(axis)
             present.update(
                 str(value)
@@ -513,50 +483,6 @@ class ProjectTables:
                 if value
             )
         return tuple(self._mark_prepared_axis(axis) for axis in missing_axes)
-
-    def complete_axes(
-        self,
-        variable: Variable,
-        axes: Sequence[Axis],
-    ) -> tuple[Axis, ...]:
-        """Return supplied axes plus fixed scalar axes required by variable.
-
-        This convenience method combines user-provided axes with any required
-        scalar axes, returning a complete set ready for dataset creation. It
-        ensures all axes are merged with project table metadata.
-
-        Parameters
-        ----------
-        variable
-            Variable whose dimensions determine which scalar axes are required.
-        axes
-            User-provided axes for the variable.
-
-        Returns
-        -------
-        tuple[Axis, ...]
-            Complete tuple of axes including both the provided axes (merged
-            with table metadata if needed) and any required scalar axes.
-
-        See Also
-        --------
-        scalar_axes_for : Get only the missing scalar axes without merging.
-
-        Examples
-        --------
-        Get complete axis set for a variable::
-
-            project = ProjectTables.from_directory(...)
-            variable = project.variable("tas")
-            time = project.axis("time", values=[...])
-            lat = project.axis("lat", values=[...])
-            lon = project.axis("lon", values=[...])
-
-            complete = project.complete_axes(variable, [time, lat, lon])
-            # Returns (time, lat, lon, height2m) with height2m auto-added
-        """
-
-        return self._axes(axes, variable)
 
     def grid(
         self,
@@ -665,7 +591,7 @@ class ProjectTables:
             or values.get("mapping_name") is not None
             or values.get("grid_mapping_name") is not None
         ):
-            _validate_grid_mapping(
+            validate_grid_mapping(
                 gm_entry,
                 values,
                 axes=axes,
@@ -757,7 +683,7 @@ class ProjectTables:
         request = ZFactor.model_validate({"name": name, **values})
         return self.formula_table.build(request)
 
-    def validate_dataset(
+    def _validate_dataset(
         self,
         dataset_info: DatasetMetadata | None,
         variable: Variable,
@@ -769,10 +695,8 @@ class ProjectTables:
         """Validate metadata records and dataset configuration comprehensively.
 
         This is the complete validation check that ensures all components are
-        consistent with each other and with the loaded project tables. It can
-        be used both as the final check before dataset creation and as a
-        user-facing validation function to verify metadata setup before
-        writing data.
+        consistent with each other and with the loaded project tables. Dataset
+        creation calls this before writing data.
 
         Components created via this ProjectTables instance (using factory
         methods or with project=self) already have validated attributes
@@ -810,20 +734,6 @@ class ProjectTables:
             the loaded project tables or if components are inconsistent with
             each other.
 
-        Examples
-        --------
-        Validate components before creating a dataset::
-
-            project = ProjectTables(...)
-            dataset = project.dataset_info({...})
-            variable = project.variable("tas")
-            axes = [project.axis("time", ...), project.axis("lat", ...)]
-
-            # Validate everything before attempting to create dataset
-            project.validate_dataset(dataset, variable, axes)
-
-            # If validation passes, safe to create the NetCDF file
-            path = create_dataset(dataset, variable, axes, data)
         """
 
         # must_call_cmor_grid fast-fail: if any axis in the user-provided axes
@@ -842,8 +752,8 @@ class ProjectTables:
 
         # Variable validation: ensure stored attributes match table entry
         # Note: This may be redundant with validation in _dataset_for_variable,
-        # but we validate again here to ensure consistency when called directly
-        # by users or if variable was modified after _dataset_for_variable
+        # but we validate again here to ensure consistency if the variable was
+        # modified after preparation.
         variable_entry = self.variable_table.resolve(variable)
 
         if dataset_info is not None:
@@ -854,50 +764,17 @@ class ProjectTables:
 
         self.variable_table.validate_against(variable, variable_entry)
 
-        # Dataset-variable consistency checks
-        if dataset_info is not None:
-            self._validate_dataset_variable_consistency(
-                dataset_info, variable, variable_entry
-            )
-
         # Axis validation: only validate axes not prepared by this instance
         for axis in axes:
             if not self._is_prepared_axis(axis):
-                # Check if this is a grid coordinate (auxiliary lat/lon)
-                adict = axis.to_dict()
-                if ae := self.coordinate_table.resolve_grid_coord(axis):
-                    # Grid coordinates validated against grid coordinate table
-                    ae.validate_metadata(
-                        adict,
-                        ("units", "standard_name", "long_name"),
-                        "grid coordinate",
-                    )
-                elif ae := self.coordinate_table.resolve_coord(axis):
-                    # Regular coordinates validated against coordinate table
-                    ae.validate_metadata(
-                        adict,
-                        (
-                            "units",
-                            "standard_name",
-                            "long_name",
-                            "axis",
-                            "positive",
-                            "formula",
-                        ),
-                        "axis",
-                    )
+                self.coordinate_table.validate_metadata(axis)
 
         # Dataset-axis consistency checks
         # (must_have_bounds, time interval,etc.)
         # Run unconditionally so that must_have_bounds and the variable's
         # table-declared frequency are enforced even when no dataset is
         # provided.
-        _validate_axes(dataset_info, variable, axes)
-
-        # Calendar validation: warn if the dataset specifies a calendar that
-        # is technically valid per CF but inappropriate for MIP data.
-        if dataset_info is not None:
-            _validate_calendar(dataset_info)
+        validate_axes(dataset_info, variable, axes)
 
         # Check that required scalar axes are present (if not auto-added)
         present = {
@@ -929,108 +806,21 @@ class ProjectTables:
                 if dimension_name in self.coordinate_table.scalar_entries:
                     raise TableValidationError(
                         f"Variable requires scalar axis {dimension_name!r} "
-                        "but it was not provided. Use "
-                        "ProjectTables.scalar_axes_for() or "
-                        "ProjectTables.complete_axes() to get required "
-                        "scalar axes."
+                        "but it was not provided. Supply the required scalar "
+                        "axis when creating the dataset."
                     )
                 # Non-scalar dimension not found - will be caught elsewhere
                 # (e.g., when building dataset if dimension truly missing)
 
         # Grid validation: ensure stored attributes match tables
         if grid is not None:
-            requested = str(grid.table_entry or grid.mapping_entry or grid.name or "")
-            _gm = self.grid_table.resolve_mapping(requested) if requested else None
-            entry_name, entry = (_gm.name, _gm) if _gm else (None, None)
-            if entry is not None:
-                for key, user_val in (
-                    ("mapping_name", grid.mapping_name),
-                    ("grid_mapping_name", grid.grid_mapping_name),
-                ):
-                    expected = getattr(entry, key)
-                    if (
-                        expected is not None
-                        and user_val is not None
-                        and str(user_val) != str(expected)
-                    ):
-                        raise TableValidationError(
-                            f"grid mapping {entry_name!r} {key}="
-                            f"{user_val!r} does not match table value "
-                            f"{expected!r}."
-                        )
-
-            # Validate dimensional axes and lat/lon shape consistency.
-            grid_axes = getattr(grid, "axes", [])
-            if grid_axes:
-                _validate_grid_dimensions(grid, axes)
-            elif grid.dimensions:
-                _validate_grid_dimensions(grid, axes)
+            self.grid_table.validate_metadata(grid, axes)
 
         # ZFactor validation: ensure stored attributes match tables
         for zfactor in zfactors:
-            formula_entry = self.formula_table.resolve(zfactor)
-            formula_entry_name = formula_entry.name if formula_entry else None
-            if formula_entry is None:
-                continue
+            self.formula_table.validate_metadata(zfactor)
 
-            # Units must be dimensionally convertible, not just equal.
-            # Use the same cf_units-based check as Variable units validation.
-            table_units = formula_entry.units
-            user_units = zfactor.units
-            if (
-                table_units is not None
-                and str(table_units) != "?"
-                and user_units not in (None, "")
-                and str(user_units) != str(table_units)
-                and not _units_are_convertible(str(user_units), str(table_units))
-            ):
-                raise TableValidationError(
-                    f"formula term {formula_entry_name!r} units={user_units!r} does "
-                    f"not match table value {table_units!r} and the two are "
-                    f"not dimensionally convertible."
-                )
-
-            # Validate remaining metadata (standard_name, long_name)
-            # by exact match.
-            formula_entry.validate_metadata(
-                zfactor.to_dict(),
-                ("standard_name", "long_name"),
-                "formula term",
-            )
-
-            # When the formula-term table entry has no declared
-            # dimensions the term is expected to be a scalar.  Accept a
-            # size-1 array (CMOR3-compatible) but reject larger arrays.
-            if not formula_entry.dimensions and zfactor.values is not None:
-                arr = np.asarray(zfactor.values)
-                if arr.ndim > 0 and arr.size != 1:
-                    raise TableValidationError(
-                        f"formula term {formula_entry_name!r} has no declared "
-                        "dimensions (expected a scalar value) but values "
-                        f"with shape {arr.shape} were provided."
-                    )
-
-    def _validate_dataset_variable_consistency(
-        self,
-        dataset_info: DatasetMetadata,
-        variable: Variable,
-        variable_entry: VariableEntry,
-    ) -> None:
-        """Validate consistency between dataset and variable metadata."""
-        # Check frequency consistency
-        dataset_frequency = dataset_info.frequency
-        if (
-            dataset_frequency is not None
-            and variable.frequency is not None
-            and str(dataset_frequency) != str(variable.frequency)
-        ):
-            raise TableValidationError(
-                f"dataset frequency={dataset_frequency!r} does not match "
-                f"variable {variable_entry.table_id}:{variable_entry.name} "
-                f"frequency={variable.frequency!r}."
-            )
-
-    def validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
+    def _validate_global_attributes(self, attrs: Mapping[str, Any]) -> None:
         """Validate final NetCDF global attributes against project tables.
 
         Parameters
@@ -1101,106 +891,6 @@ class ProjectTables:
                 dataset.setdefault(
                     key,
                     value[0] if isinstance(value, list) and len(value) == 1 else value,
-                )
-
-
-def _validate_grid_dimensions(
-    grid: Grid,
-    axes: Sequence[Axis],
-) -> None:
-    """Validate that grid dimensions correspond to spatial axes in the right order.
-
-    When ``grid.axes`` is non-empty the dimensional axes are already owned by
-    the grid; validation checks that each axis carries coordinate values and
-    that the lat/lon array shapes match the axis lengths in declared order.
-
-    When ``grid.axes`` is empty (name-based path) every name in
-    ``grid.dimensions`` must resolve to one of the supplied *axes* by any
-    recognised name variant, and the same shape checks apply.
-
-    Parameters
-    ----------
-    grid
-        Grid whose dimensional axes are to be validated.
-    axes
-        The axis objects supplied alongside the grid (non-grid axes such as
-        time).  Only consulted on the name-based path.
-
-    Raises
-    ------
-    TableValidationError
-        If a grid dimension name cannot be matched to any axis, or if the
-        lat/lon array size along a given axis index does not match the axis
-        length.
-    """
-    if getattr(grid, "axes", None):
-        # --- Axis-based path: grid owns its dimensional Axis objects -------
-        grid_axes = list(grid.axes)
-
-        lat = grid.latitude
-        lon = grid.longitude
-        for array, label in ((lat, "latitude"), (lon, "longitude")):
-            if array is None:
-                continue
-            arr = np.asarray(array)
-            for i, axis in enumerate(grid_axes):
-                axis_len = len(axis.values_array())
-                if arr.shape[i] != axis_len:
-                    dim_name = str(axis.out_name or axis.name)
-                    raise TableValidationError(
-                        f"Grid {label} array shape {arr.shape} does not match "
-                        f"the axis lengths implied by grid.axes. "
-                        f"Axis {dim_name!r} (index {i}) has {axis_len} "
-                        f"coordinate values but {label} has size "
-                        f"{arr.shape[i]} along that axis."
-                    )
-        return
-
-    # --- Name-based path: match dimension strings to supplied axes ----------
-    if not grid.dimensions:
-        return
-
-    # Build a lookup from every recognised name variant to the axis object.
-    name_to_axis: dict[str, Axis] = {}
-    for axis in axes:
-        for value in (
-            axis.name,
-            axis.table_entry,
-            axis.axis_entry,
-            axis.coordinate,
-            axis.out_name,
-            axis.generic_level_name,
-        ):
-            if value:
-                name_to_axis.setdefault(str(value), axis)
-
-    grid_dims = [str(d) for d in grid.dimensions]
-
-    for dim_name in grid_dims:
-        if dim_name not in name_to_axis:
-            raise TableValidationError(
-                f"Grid dimension {dim_name!r} does not correspond to any "
-                "of the supplied axes.  Each grid spatial dimension must "
-                "match an axis by name, out_name, or table_entry."
-            )
-
-    lat = grid.latitude
-    lon = grid.longitude
-    for array, label in ((lat, "latitude"), (lon, "longitude")):
-        if array is None:
-            continue
-        arr = np.asarray(array)
-        for i, dim_name in enumerate(grid_dims):
-            axis = name_to_axis[dim_name]
-            axis_len = len(axis.values_array())
-            if arr.shape[i] != axis_len:
-                raise TableValidationError(
-                    f"Grid {label} array shape {arr.shape} does not match "
-                    f"the axis lengths implied by grid dimensions "
-                    f"{grid_dims!r}. "
-                    f"Dimension {dim_name!r} (index {i}) has {axis_len} "
-                    f"coordinate values but {label} has size "
-                    f"{arr.shape[i]} along that axis."
                 )
 
 
