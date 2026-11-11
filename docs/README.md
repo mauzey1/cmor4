@@ -63,10 +63,13 @@ docs/
 ├── source/
 │   ├── usage/                  # User guide
 │   │   ├── index.rst          # Usage guide index
-│   │   ├── quickstart.rst     # Quick start guide
-│   │   ├── basic_usage.rst    # Basic cmorize() examples
+│   │   ├── installation.rst   # Installation instructions
+│   │   ├── basic_usage.rst    # Basic cmorize() walkthrough
 │   │   ├── incremental_writing.rst  # DatasetWriter guide
-│   │   └── advanced_features.rst    # Advanced topics
+│   │   ├── grids.rst          # Spatial grids and mappings
+│   │   ├── vertical_coordinates.rst # Levels and formula terms
+│   │   ├── time_coordinates.rst # Calendars and forecasts
+│   │   └── controlled_vocabularies.rst # Dataset metadata rules
 │   ├── api/                    # API reference pages
 │   │   ├── Axis.rst           # Individual class pages
 │   │   ├── DatasetInfo.rst
@@ -90,10 +93,13 @@ docs/
 
 The user guide provides practical examples for common CMOR tasks:
 
-- **Quick Start** - Get started in minutes with a minimal example
-- **Basic Usage** - Common patterns using `cmorize()` for one-shot writes
-- **Incremental Writing** - Complete guide to `DatasetWriter` for large datasets
-- **Advanced Features** - Custom grids, formula terms, parallel processing, etc.
+- **Installation** - Install CMOR and initialize the example project tables
+- **Basic Usage** - Write a variable with `cmorize()`
+- **Incremental Writing** - Write large variables with bounded data memory using `DatasetWriter`
+- **Grids** - Rectilinear and curvilinear grids, plus CF grid mappings
+- **Vertical Coordinates** - Pressure levels and hybrid formula terms
+- **Time Coordinates** - Calendars, frequency, and forecast coordinates
+- **Controlled Vocabularies** - Dataset metadata defaults and validation
 
 ## Adding New Documentation
 

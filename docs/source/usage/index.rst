@@ -1,14 +1,17 @@
 Usage Guide
 ===========
 
-This guide provides practical examples of using CMOR to create CF-compliant climate model output.
+Install CMOR, then start with :doc:`basic_usage` and choose the capability
+you need. Each guide focuses on CMOR's metadata, validation, and writing APIs.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-   quickstart
+   installation
    basic_usage
    incremental_writing
-   advanced_features
+   grids
+   vertical_coordinates
+   time_coordinates
    controlled_vocabularies
