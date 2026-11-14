@@ -1,17 +1,22 @@
 Vertical Coordinates and Formula Terms
 ======================================
 
-Add a vertical axis to ``axes`` when the variable table declares one. For
-dimensionless hybrid coordinates, also supply the formula terms that define
-physical height or pressure. The project loads coordinate and formula tables
-alongside its variable table. Start with :doc:`basic_usage` for dataset
-metadata and ordinary time and horizontal axes.
+If the variable table lists a vertical dimension, add a vertical axis to
+``axes``.
+
+Some vertical coordinates, such as hybrid sigma-pressure levels, have no
+units of their own. To turn them into pressure or height, you also supply
+*formula terms*: extra arrays such as ``a``, ``b``, ``p0`` and ``ps``. CMOR
+calls these *z-factors*, and their definitions come from the project's
+formula table.
 
 Pressure levels
 ---------------
 
-A pressure-level variable takes a pressure axis in the same position as its
-table dimensions. Use the axis entry required by that variable:
+For a pressure-level variable, create the pressure axis the variable
+table asks for (here ``plev``). List the axes in the same order as the
+table's dimensions. This code creates a three-level pressure axis and
+places it between the time and horizontal axes:
 
 .. code-block:: python
 
@@ -19,16 +24,19 @@ table dimensions. Use the axis entry required by that variable:
    pressure_axes = [axes[0], pressure, axes[1], axes[2]]
    # The data shape follows (time, pressure, latitude, longitude).
 
-The variable table determines whether a fixed scalar level is needed. CMOR
-adds table-defined fixed scalar axes automatically when possible.
+Some variables are defined at a single fixed level, such as 850 hPa. The
+variable table says so, and CMOR adds that scalar axis for you.
 
 Hybrid sigma-pressure coordinates
 ---------------------------------
 
-The following uses the CMIP7 atmosphere table and reuses the dataset metadata
-from Basic Usage. The cloud variable has shape ``(time, lev, lat, lon)``.
-The ``a`` and ``b`` coefficients and reference pressure are static; surface
-pressure varies over time and space.
+This example writes cloud fraction on hybrid sigma-pressure levels. Load
+the formula table along with the variable table. The variable has shape
+``(time, lev, lat, lon)``.
+
+The formula for this coordinate needs four terms. The ``a`` and ``b``
+coefficients and the reference pressure ``p0`` are constant. The surface
+pressure ``ps`` changes with time and location.
 
 .. code-block:: python
 
@@ -41,7 +49,21 @@ pressure varies over time and space.
        variable_tables=["tables/CMIP7_atmos.json"],
        formula_table="tables/CMIP7_formula_terms.json",
    )
-   dataset = project.dataset_info(dataset.user_info)
+   dataset = project.dataset_info({
+       "activity_id": "CMIP",
+       "experiment_id": "amip",
+       "forcing_index": "f1",
+       "grid_label": "g101",
+       "initialization_index": "i1",
+       "institution_id": "CNRM-CERFACS",
+       "license_id": "CC-BY-4.0",
+       "nominal_resolution": "100 km",
+       "physics_index": "p1",
+       "realization_index": "r1",
+       "region": "glb",
+       "source_id": "CNRM-ESM2-1e",
+       "outpath": "./output",
+   })
    cloud_variable = project.variable("cl_tavg-al-hxy-u", table_id="atmos")
 
    time_axis = project.axis(
@@ -83,9 +105,11 @@ pressure varies over time and space.
    data = np.full((2, 5, 3, 4), 50.0, dtype="f4")
    path = cmor.cmorize(
        dataset, cloud_variable, hybrid_axes, data, zfactors=zfactors,
+       path="./output/cl_hybrid.nc",
    )
+   print(path)
 
-For time-varying formula terms written in chunks, leave ``ps`` without
-values in the initial definition and pass each surface-pressure chunk to
+To write this variable in pieces, create ``ps`` without values. Then pass
+the surface pressure for each piece with
 ``DatasetWriter.write(..., zfactors={"ps": ps_chunk})``. See
 :doc:`incremental_writing`.

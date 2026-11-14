@@ -1,25 +1,53 @@
 Incremental Writing
 ===================
 
-:class:`cmor.DatasetWriter` writes large variables while keeping data memory
-use bounded by the size of each write. It validates and stages each chunk in
-Zarr, then streams the staged data into a NetCDF file when ``close()`` runs.
-Choose chunks that fit comfortably in memory. Only the time dimension can
-grow: provide complete spatial and vertical axes when creating the writer.
-Start with :doc:`basic_usage` for the project, dataset, and variable
-definitions used below.
+:class:`cmor.DatasetWriter` writes a variable in pieces, so you never
+need the whole variable in memory. Memory use depends only on the size of
+each piece you write.
+
+How it works:
+
+1. Each ``write()`` call checks one piece (a *chunk*) and saves it to a
+   temporary Zarr store on disk.
+2. ``close()`` copies the saved data into the final NetCDF file.
+
+Chunks split the data along time only. Give the full spatial and vertical
+axes when you create the writer. Pick a chunk size that fits easily in
+memory.
 
 Write data in chunks
 --------------------
 
-The time axis can start without values. Give each ``write()`` call the time
-values and, when the variable needs them, matching bounds. The following uses
-``project``, ``dataset``, and ``variable`` from the Basic Usage example:
+Create the time axis without values. Then give each ``write()`` call the
+time values for its chunk and, if the variable needs them, the time
+bounds:
 
 .. code-block:: python
 
    import cmor
    import numpy as np
+
+   project = cmor.ProjectTables.from_directory(
+       "project_tables/cmip7-cmor-tables",
+       cv_file="tables-cvs/cmor-cvs.json",
+       variable_tables=["tables/CMIP7_ocean.json"],
+   )
+   dataset = project.dataset_info({
+       "activity_id": "CMIP",
+       "experiment_id": "amip",
+       "forcing_index": "f1",
+       "grid_label": "g101",
+       "initialization_index": "i1",
+       "institution_id": "CNRM-CERFACS",
+       "license_id": "CC-BY-4.0",
+       "nominal_resolution": "100 km",
+       "physics_index": "p1",
+       "realization_index": "r1",
+       "region": "glb",
+       "source_id": "CNRM-ESM2-1e",
+       "outpath": "./output",
+   })
+   variable = project.variable("tos_tavg-u-hxy-sea", table_id="ocean")
 
    axes = [
        project.axis(
@@ -48,17 +76,24 @@ values and, when the variable needs them, matching bounds. The following uses
            np.full((1, 3, 4), 21.0, dtype="f4"),
            time_values=[45.5], time_bounds=[[31.0, 60.0]],
        )
+   print(writer.path)
 
-The context manager calls ``close()`` after a successful block. You can call
-``close()`` yourself to get the output path. The time values must increase,
-chunk shapes must match the non-time axes, and bounds must be supplied
-consistently across writes.
+The ``with`` block calls ``close()`` for you when it ends without an
+error. You can also call ``close()`` yourself; it returns the output path.
+
+Rules for each write:
+
+* time values must keep increasing from one write to the next;
+* each chunk's shape must match the non-time axes;
+* time bounds must be given in every write or in none, and must join up
+  without gaps.
 
 Pre-specified time values
 -------------------------
 
-When the complete time axis is known, set its values and bounds at creation.
-``write()`` then takes successive slices from that axis:
+If you know all the time values in advance, set them and their bounds on
+the axis when you create it. Each ``write()`` call then uses the next time
+values from the axis, so you pass only the data:
 
 .. code-block:: python
 
@@ -77,8 +112,9 @@ When the complete time axis is known, set its values and bounds at creation.
 Append to an existing file
 --------------------------
 
-Use ``existing="append"`` to add later time records to a file created with
-the same variable, non-time axes, and compatible metadata:
+To add later times to a file that already exists, pass
+``existing="append"``. The writer must use the same variable and non-time
+axes as the existing file:
 
 .. code-block:: python
 
@@ -97,16 +133,22 @@ the same variable, non-time axes, and compatible metadata:
            time_values=[45.5], time_bounds=[[31.0, 60.0]],
        )
 
-The other ``existing`` choices are ``"error"`` (the default) and
-``"replace"``. Append validates the new data against the existing file,
-including its axes, grid mapping, formula terms, metadata, and time sequence.
-A failed append leaves the original file intact.
+``existing`` also accepts ``"error"`` (the default, which fails if the
+file exists) and ``"replace"``.
+
+When appending, CMOR checks the new data against the existing file: its
+axes, grid mapping, formula terms, metadata, and that the new times come
+after the old ones. If the append fails, the original file is not
+changed.
 
 Write separate segments
 -----------------------
 
-``close(preserve_definition=True)`` writes a file and keeps the variable and
-axis definitions for another segment. Separate files may have a time gap:
+To split a series into several files, call
+``close(preserve_definition=True)``. This finishes the current file but
+keeps the writer's variable and axes, so you can set a new ``path`` and keep
+writing. Unlike chunks in one file, separate files may have a gap in
+time:
 
 .. code-block:: python
 
@@ -131,11 +173,11 @@ axis definitions for another segment. Separate files may have a time gap:
 Time-varying formula terms
 --------------------------
 
-For a hybrid vertical coordinate, define static formula terms when creating
-the writer. Leave a time-varying term such as surface pressure without values,
-then supply its values in every chunk. The following uses ``project``,
-``dataset``, ``cloud_variable``, ``hybrid_axes``, the coefficient arrays, and
-``data`` from :doc:`vertical_coordinates`:
+For a hybrid vertical coordinate, give the constant formula terms their
+values when you create the writer. Create a term that changes with time,
+such as surface pressure ``ps``, without values. Then pass its values with
+every chunk. This code writes hybrid-level cloud fraction one month at
+a time, passing a new surface pressure array with each month:
 
 .. code-block:: python
 
@@ -161,15 +203,17 @@ then supply its values in every chunk. The following uses ``project``,
            time_bounds=[[31.0, 60.0]], zfactors={"ps": ps_chunk_2},
        )
 
-Each ``ps`` chunk must have the dimensions required by its formula-term table
-entry. Once a time-varying term is supplied, it must be supplied in every
-subsequent write.
+Each ``ps`` chunk must have the dimensions listed in the formula table
+(here ``(time, lat, lon)``). Once you pass a time-varying term, you must
+pass it in every later write.
 
 Output and recovery options
 ---------------------------
 
-``DatasetWriter`` accepts ``path``, ``attrs``, and ``encoding`` as in
-:func:`cmor.cmorize`. Use ``staging_dir`` to choose where temporary Zarr data
-is stored. CMOR removes the staging directory after a successful close and
-preserves it after an error; ``writer.staging_path`` identifies the staged
-data for inspection. See :class:`cmor.DatasetWriter` for the full API.
+``DatasetWriter`` accepts ``path``, ``attrs`` and ``encoding``, which
+work as in :func:`cmor.cmorize`.
+
+Use ``staging_dir`` to choose where the temporary Zarr data goes. After a
+successful ``close()``, CMOR deletes it. After an error, CMOR keeps it so
+you can inspect it; ``writer.staging_path`` gives its location. See
+:class:`cmor.DatasetWriter` for the full API.

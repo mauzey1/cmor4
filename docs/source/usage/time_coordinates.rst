@@ -1,18 +1,23 @@
 Time Coordinates
 ================
 
-Put ``calendar`` and ``frequency`` on the sampling time axis. CMOR validates
-the calendar and time spacing, writes the coordinate's calendar, and derives
-the dataset frequency used for output metadata. An explicit frequency must
-agree with the variable table; when omitted, CMOR uses the table frequency.
-Fixed fields need no time axis.
+Set ``calendar`` and ``frequency`` on the time axis. From these, CMOR:
+
+* checks that the calendar is valid and that the time values are spaced as
+  the frequency requires;
+* writes the calendar on the time coordinate;
+* sets the dataset's ``frequency`` attribute.
+
+If you set ``frequency``, it must match the variable table. If you leave it
+out, CMOR uses the table's frequency. Fixed fields, such as land area, have
+no time axis.
 
 Calendars and bounds
 --------------------
 
-The time axis in :doc:`basic_usage` uses a ``360_day`` calendar. Change the
-calendar to match the source data and give time values and bounds in the
-axis's stated units:
+Set the calendar that your source data uses. Give time values and bounds
+in the axis's ``units``. This code creates a monthly time axis on a
+``noleap`` calendar:
 
 .. code-block:: python
 
@@ -23,17 +28,18 @@ axis's stated units:
        units="days since 1850-01-01",
    )
 
-``calendar`` is an Axis field; it cannot be supplied through ``attrs``.
-Project CVs can separately require global calendar metadata. See
-:doc:`controlled_vocabularies` for dataset metadata rules.
+Pass ``calendar`` as an argument to the axis, as above. Putting it in the
+axis's ``attrs`` or in the dataset metadata raises an error. A project's CV
+can still require other calendar-related global attributes; see
+:doc:`controlled_vocabularies`.
 
 Forecast reference time
 -----------------------
 
-When a forecast reference-time coordinate is present, CMOR derives a
-``forecast_period`` (lead time) coordinate from it and the sampling time.
-This small example uses metadata objects directly so the coordinate behavior
-is clear:
+Forecast data has a *reference time*: the time the forecast started. When
+you include a reference-time axis, CMOR adds a ``leadtime`` coordinate equal
+to ``time - reference time``. This short example builds the axes and
+variable directly, without project tables, to keep the focus on time:
 
 .. code-block:: python
 
@@ -55,9 +61,10 @@ is clear:
    )
    path = cmor.cmorize(
        cmor.DatasetInfo(), variable, [time, reference_time],
-       np.full(3, 280.0), path="forecast.nc",
+       np.full(3, 280.0), path="./output/forecast.nc",
    )
+   print(path)
 
-The output includes ``leadtime`` with values ``[0, 6, 12]`` and units of
-hours. ``DatasetWriter`` derives lead time across successive time chunks too;
-see :doc:`incremental_writing` for the writing pattern.
+The output file has a ``leadtime`` coordinate with values ``[0, 6, 12]``
+in hours. ``DatasetWriter`` also adds ``leadtime`` when you write in pieces;
+see :doc:`incremental_writing`.

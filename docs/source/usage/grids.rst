@@ -1,17 +1,22 @@
 Grids
 =====
 
-Use ordinary latitude and longitude axes for a rectilinear grid. Use
-:meth:`cmor.ProjectTables.grid` when geographic coordinates are auxiliary
-arrays or the variable has a CF grid mapping. The examples build on the
-project and dataset metadata in :doc:`basic_usage`.
+How you describe a grid depends on its shape:
+
+* **Rectilinear**: latitude and longitude are each one-dimensional. Use
+  ordinary latitude and longitude axes.
+* **Curvilinear**: latitude and longitude are two-dimensional arrays over
+  ``(y, x)`` index axes. Use :meth:`cmor.ProjectTables.grid`.
+* **Projected**: the grid is defined by a map projection. Use
+  :meth:`cmor.ProjectTables.grid` with a CF grid mapping.
 
 Rectilinear grids
 -----------------
 
-For independent latitude and longitude coordinates, pass both axes to
-:func:`cmor.cmorize`. The values need not be evenly spaced; the axes and their
-bounds still describe the grid:
+Pass a latitude axis and a longitude axis to :func:`cmor.cmorize`. The
+values do not have to be evenly spaced; the values and bounds describe the
+grid fully. This code builds unevenly spaced latitude and longitude
+axes and lists them after the time axis:
 
 .. code-block:: python
 
@@ -30,10 +35,15 @@ bounds still describe the grid:
 Curvilinear grids
 -----------------
 
-For a two-dimensional grid, create its indexing axes with the project's grid
-table, then give ``grid()`` the geographic coordinates. The grid owns its
-indexing axes; pass only the other axes to ``cmorize()``. This example uses
-the ``dataset`` created in Basic Usage to reuse its dataset metadata:
+For a two-dimensional grid:
+
+1. Create the ``y`` and ``x`` index axes from the project's grid table.
+2. Pass them, with the latitude and longitude arrays, to ``grid()``.
+3. Pass the grid to ``cmorize()`` with ``grid=``. List only the other axes
+   (here, time) in ``axes``; do not list ``y`` and ``x`` again.
+
+Load the grid table along with the variable table. This example writes
+latent heat flux on a 3 x 4 curvilinear grid:
 
 .. code-block:: python
 
@@ -46,7 +56,21 @@ the ``dataset`` created in Basic Usage to reuse its dataset metadata:
        variable_tables=["tables/CMIP7_atmos.json"],
        grid_table="tables/CMIP7_grids.json",
    )
-   grid_dataset = grid_project.dataset_info(dataset.user_info)
+   grid_dataset = grid_project.dataset_info({
+       "activity_id": "CMIP",
+       "experiment_id": "amip",
+       "forcing_index": "f1",
+       "grid_label": "g101",
+       "initialization_index": "i1",
+       "institution_id": "CNRM-CERFACS",
+       "license_id": "CC-BY-4.0",
+       "nominal_resolution": "100 km",
+       "physics_index": "p1",
+       "realization_index": "r1",
+       "region": "glb",
+       "source_id": "CNRM-ESM2-1e",
+       "outpath": "./output",
+   })
    grid_variable = grid_project.variable("hfls_tavg-u-hxy-u", table_id="atmos")
 
    y = grid_project.axis("y", values=[0.0, 10000.0, 20000.0])
@@ -68,17 +92,21 @@ the ``dataset`` created in Basic Usage to reuse its dataset metadata:
        grid_dataset, grid_variable, [time_axis], data, grid=grid,
        path="./output/hfls_curvilinear.nc",
    )
+   print(path)
 
-Latitude and longitude arrays must have the shape of the grid axes, here
-``(y, x)``. To write cell vertices, supply ``latitude_vertices`` and
-``longitude_vertices`` arrays with shape ``(y, x, n_vertices)``.
+The latitude and longitude arrays must have the shape of the index axes,
+here ``(y, x)``. To also write cell corners, pass ``latitude_vertices`` and
+``longitude_vertices`` with shape ``(y, x, n_vertices)``.
 
 CF grid mappings
 ----------------
 
-Add mapping metadata to the grid when the coordinates use a projection. CMOR
-validates the mapping name and parameters against CF conventions and writes
-the mapping variable and reference from the data variable:
+If the grid comes from a map projection, give ``grid()`` the CF mapping
+name and its parameters. Each parameter value is a ``[value, units]`` pair;
+``""`` means no units. CMOR checks the name and parameters against the CF
+conventions. It then writes a grid-mapping variable and links the data
+variable to it. This code adds a Lambert conformal conic projection to
+the curvilinear grid:
 
 .. code-block:: python
 
@@ -99,6 +127,6 @@ the mapping variable and reference from the data variable:
        path="./output/hfls_mapped.nc",
    )
 
-For a single spatial index, the same grid API accepts one index axis and
-one-dimensional latitude and longitude arrays. See :class:`cmor.Grid` for
-the complete grid metadata fields.
+Data on a list of points or sites, with one spatial index, uses the same
+``grid()`` call with one index axis and one-dimensional latitude and
+longitude arrays. See :class:`cmor.Grid` for all grid options.

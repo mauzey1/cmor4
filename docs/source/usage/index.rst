@@ -1,8 +1,11 @@
 Usage Guide
 ===========
 
-Install CMOR, then start with :doc:`basic_usage` and choose the capability
-you need. Each guide focuses on CMOR's metadata, validation, and writing APIs.
+This guide shows how to use CMOR to write NetCDF files that follow a
+project's tables and controlled vocabulary.
+
+Start with :doc:`installation`, then work through :doc:`basic_usage`. Read
+the other pages as you need each topic.
 
 .. toctree::
    :maxdepth: 2

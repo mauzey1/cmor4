@@ -1,17 +1,21 @@
 Basic Usage
 ===========
 
-Use :func:`cmor.cmorize` when the complete variable fits in memory. CMOR uses
-project tables to validate metadata and coordinates, then writes a NetCDF file
-at the project's output path. For variables too large to hold in memory, see
-:doc:`incremental_writing`.
+CMOR has two ways to write a variable:
+
+* :func:`cmor.cmorize` writes a whole variable in one call. Use it when the
+  data fits in memory.
+* :class:`cmor.DatasetWriter` writes a variable in pieces. Use it for data
+  too large to hold in memory (see :doc:`incremental_writing`).
+
+Both check your metadata and coordinates against the project tables, then
+write a NetCDF file under the project's output path.
 
 Write a variable
 ----------------
 
-This example uses the CMIP7 tables included as a repository submodule. Run it
-from the repository root after initializing that submodule. Replace the sample
-values and output directory with your own data and metadata.
+This example uses the CMIP7 tables (see :doc:`installation`). Run it from
+the repository root.
 
 .. code-block:: python
 
@@ -70,17 +74,25 @@ values and output directory with your own data and metadata.
    path = cmor.cmorize(dataset, variable, axes, data)
    print(path)
 
-The variable and axis tables supply output metadata. CMOR can also add
-fixed scalar axes required by the variable table; they need not be supplied
-in ``axes``. :doc:`controlled_vocabularies` explains how dataset attributes
-are defaulted and validated.
+Most of the metadata in the output file comes from the tables, not from
+your code:
+
+* The variable and axis tables supply variable and coordinate attributes
+  such as units and standard names.
+* If the variable table requires a fixed scalar axis (for example, a single
+  height level), CMOR adds it for you. You do not need to include it in
+  ``axes``.
+* The controlled vocabulary fills in and checks the global attributes. See
+  :doc:`controlled_vocabularies` for how CMOR applies defaults and
+  validates them.
 
 Output options
 --------------
 
-Pass ``attrs`` for additional global attributes and ``encoding`` for NetCDF
-encoding. The encoding keys are output variable names, which can differ from
-the variable's table entry name:
+Use ``attrs`` to add global attributes and ``encoding`` to set NetCDF
+encoding options such as compression. Keys in ``encoding`` are the names of
+variables *in the output file*. These can differ from the table entry name:
+here the entry ``tos_tavg-u-hxy-sea`` is written as ``tos``.
 
 .. code-block:: python
 
@@ -91,14 +103,16 @@ the variable's table entry name:
        path="./output/tos_encoded.nc",
    )
 
-CMIP7 chunk sizes are chosen automatically unless you supply them in
-``encoding``. CMOR validates user-supplied CMIP7 chunk sizes.
+For CMIP7, CMOR chooses chunk sizes for you. If you set chunk sizes in
+``encoding`` instead, CMOR checks that they meet the CMIP7 rules, such as a
+minimum data chunk size of 4 MiB.
 
 Missing values
 --------------
 
-Set the variable's missing value when the data uses a sentinel. The sentinel
-and data type should agree:
+If your data marks missing points with a special fill value, pass that
+value as ``missing_value``. Use the same data type for the value as for the
+data (here ``float32``):
 
 .. code-block:: python
 
@@ -111,5 +125,10 @@ and data type should agree:
        dataset, variable, axes, data, path="./output/tos_missing.nc",
    )
 
-For other coordinate layouts, see :doc:`grids`,
-:doc:`vertical_coordinates`, and :doc:`time_coordinates`.
+Next steps
+----------
+
+* :doc:`grids`: curvilinear grids and map projections.
+* :doc:`vertical_coordinates`: pressure levels and hybrid coordinates.
+* :doc:`time_coordinates`: calendars and forecast times.
+* :doc:`incremental_writing`: writing large variables in pieces.
