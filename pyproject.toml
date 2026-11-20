@@ -32,9 +32,12 @@ notebook = [
   "nbstripout>=0.9",
   "nbqa>=1.9",
 ]
-dev = [
+test = [
   "pytest>=8.0",
+  "pytest-cov>=5.0",
   "pyfive>=1.1",
+]
+dev = [
   "ruff>=0.15",
   "mypy>=2.1",
 ]
