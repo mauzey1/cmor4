@@ -1,0 +1,10 @@
+name: cmor-dev
+channels:
+  - conda-forge
+dependencies:
+  - python=3.14
+  - pip
+  - cf-units>=3.3
+  - netcdf4>=1.6
+  - pip:
+      - -e .[dev,test]
