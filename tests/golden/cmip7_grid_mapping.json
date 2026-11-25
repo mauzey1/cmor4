@@ -1,0 +1,602 @@
+{
+ "coords": [
+  "time",
+  "x",
+  "y"
+ ],
+ "data_vars": [
+  "crs",
+  "hfls",
+  "latitude",
+  "longitude",
+  "time_bnds",
+  "vertices_latitude",
+  "vertices_longitude",
+  "x_bnds",
+  "y_bnds"
+ ],
+ "dims": {
+  "bnds": 2,
+  "time": 2,
+  "vertices": 4,
+  "x": 4,
+  "y": 3
+ },
+ "file_name": "hfls_tavg-u-hxy-u_mon_glb_g101_CNRM-ESM2-1e_amip_r9i1p1f3_200001-200002.nc",
+ "global_attributes": {
+  "Conventions": "CF-1.12",
+  "activity_id": "CMIP",
+  "area_label": "u",
+  "branded_variable": "hfls_tavg-u-hxy-u",
+  "branding_suffix": "tavg-u-hxy-u",
+  "cmor_version": "4.0.0a1",
+  "creation_date": "<volatile>",
+  "data_specs_version": "MIP-DS7.1.0.0",
+  "description": "Simulation of the climate of the recent past with prescribed sea surface temperatures and sea ice concentrations.",
+  "drs_specs": "MIP-DRS7",
+  "experiment": "Simulation of the climate of the recent past with prescribed sea surface temperatures and sea ice concentrations.",
+  "experiment_id": "amip",
+  "external_variables": "areacella",
+  "forcing_index": "f3",
+  "frequency": "mon",
+  "grid_label": "g101",
+  "history": "<volatile>",
+  "horizontal_label": "hxy",
+  "initialization_index": "i1",
+  "institution": "CNRM (Centre National de Recherches Meteorologiques, Toulouse 31057, France), CERFACS (Centre Europeen de Recherche et de Formation Avancee en Calcul Scientifique, Toulouse 31057, France)",
+  "institution_id": "CNRM-CERFACS",
+  "license": "CC-BY-4.0; CMIP7 data produced by CNRM-CERFACS is licensed under a Creative Commons Attribution 4.0 International License (https://creativecommons.org/licenses/by/4.0). Consult https://wcrp-cmip.github.io/cmip7-guidance/docs/CMIP7/Guidance_for_users/#2-terms-of-use-and-citations-requirements for terms of use governing CMIP7 output, including citation requirements and proper acknowledgment. The data producers and data providers make no warranty, either express or implied, including, but not limited to, warranties of merchantability and fitness for a particular purpose. All liabilities arising from the supply of the information (including any liability arising in negligence) are excluded to the fullest extent permitted by law.",
+  "license_id": "CC-BY-4.0",
+  "mip_era": "CMIP7",
+  "nominal_resolution": "100 km",
+  "physics_index": "p1",
+  "product": "model-output",
+  "realization_index": "r9",
+  "realm": "atmos",
+  "region": "glb",
+  "source": "CNRM-ESM2-1e: aerosol: tactic; atmosphere: arpege-climat-version-6-3; atmospheric-chemistry: reprobus-c-v2-0; land-surface: surfex-v8-modeling-platform; ocean-biogeochemistry: piscesv2-gas; ocean: nemo-v3-6; sea-ice: gelato",
+  "source_id": "CNRM-ESM2-1e",
+  "table_id": "atmos",
+  "table_info": "Name: CMIP7_atmos.json; Creation Date:(2026-11-19 21:22:34) MD5:ace6aee3a948a7f5299964aeafece466",
+  "temporal_label": "tavg",
+  "title": "CNRM-ESM2-1e output prepared for CMIP7",
+  "tracking_id": "<volatile>",
+  "variable_id": "hfls",
+  "variant_label": "r9i1p1f3",
+  "version": "v20200101",
+  "vertical_label": "u"
+ },
+ "variables": {
+  "crs": {
+   "attrs": {
+    "grid_mapping_name": "lambert_azimuthal_equal_area",
+    "latitude_of_projection_origin": 90.0,
+    "longitude_of_projection_origin": 0.0
+   },
+   "dims": [],
+   "dtype": "int32",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "int32",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": -2147483647
+  },
+  "hfls": {
+   "attrs": {
+    "_FillValue": "NaN",
+    "_FillValue:dtype": "float32",
+    "area_label": "u",
+    "branded_variable_name": "hfls_tavg-u-hxy-u",
+    "branding_suffix": "tavg-u-hxy-u",
+    "cell_measures": "area: areacella",
+    "cell_methods": "area: time: mean",
+    "coordinates": "latitude longitude",
+    "grid_mapping": "crs",
+    "horizontal_label": "hxy",
+    "long_name": "Surface Upward Latent Heat Flux",
+    "positive": "up",
+    "standard_name": "surface_upward_latent_heat_flux",
+    "temporal_label": "tavg",
+    "units": "W m-2",
+    "vertical_label": "u"
+   },
+   "dims": [
+    "time",
+    "y",
+    "x"
+   ],
+   "dtype": "float32",
+   "encoding": {
+    "chunksizes": [
+     2,
+     3,
+     4
+    ],
+    "complevel": 0,
+    "dtype": "float32",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     [
+      0.0,
+      1.0,
+      2.0,
+      3.0
+     ],
+     [
+      4.0,
+      5.0,
+      6.0,
+      7.0
+     ],
+     [
+      8.0,
+      9.0,
+      10.0,
+      11.0
+     ]
+    ],
+    [
+     [
+      12.0,
+      13.0,
+      14.0,
+      15.0
+     ],
+     [
+      16.0,
+      17.0,
+      18.0,
+      19.0
+     ],
+     [
+      20.0,
+      21.0,
+      22.0,
+      23.0
+     ]
+    ]
+   ]
+  },
+  "latitude": {
+   "attrs": {
+    "bounds": "vertices_latitude",
+    "long_name": "latitude",
+    "standard_name": "latitude",
+    "units": "degrees_north"
+   },
+   "dims": [
+    "y",
+    "x"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     10.0,
+     12.0,
+     14.0,
+     16.0
+    ],
+    [
+     20.0,
+     22.0,
+     24.0,
+     26.0
+    ],
+    [
+     30.0,
+     32.0,
+     34.0,
+     36.0
+    ]
+   ]
+  },
+  "longitude": {
+   "attrs": {
+    "bounds": "vertices_longitude",
+    "long_name": "longitude",
+    "standard_name": "longitude",
+    "units": "degrees_east"
+   },
+   "dims": [
+    "y",
+    "x"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     100.0,
+     110.0,
+     120.0,
+     130.0
+    ],
+    [
+     102.0,
+     112.0,
+     122.0,
+     132.0
+    ],
+    [
+     104.0,
+     114.0,
+     124.0,
+     134.0
+    ]
+   ]
+  },
+  "time": {
+   "attrs": {
+    "axis": "T",
+    "bounds": "time_bnds",
+    "calendar": "standard",
+    "long_name": "Time Intervals",
+    "standard_name": "time",
+    "units": "days since 2000-01-01"
+   },
+   "dims": [
+    "time"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "chunksizes": [
+     2
+    ],
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    15.0,
+    45.0
+   ]
+  },
+  "time_bnds": {
+   "attrs": {},
+   "dims": [
+    "time",
+    "bnds"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "chunksizes": [
+     2,
+     2
+    ],
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     0.0,
+     30.0
+    ],
+    [
+     30.0,
+     60.0
+    ]
+   ]
+  },
+  "vertices_latitude": {
+   "attrs": {
+    "coordinates": "latitude longitude"
+   },
+   "dims": [
+    "y",
+    "x",
+    "vertices"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     [
+      9.5,
+      9.75,
+      10.5,
+      10.25
+     ],
+     [
+      11.5,
+      11.75,
+      12.5,
+      12.25
+     ],
+     [
+      13.5,
+      13.75,
+      14.5,
+      14.25
+     ],
+     [
+      15.5,
+      15.75,
+      16.5,
+      16.25
+     ]
+    ],
+    [
+     [
+      19.5,
+      19.75,
+      20.5,
+      20.25
+     ],
+     [
+      21.5,
+      21.75,
+      22.5,
+      22.25
+     ],
+     [
+      23.5,
+      23.75,
+      24.5,
+      24.25
+     ],
+     [
+      25.5,
+      25.75,
+      26.5,
+      26.25
+     ]
+    ],
+    [
+     [
+      29.5,
+      29.75,
+      30.5,
+      30.25
+     ],
+     [
+      31.5,
+      31.75,
+      32.5,
+      32.25
+     ],
+     [
+      33.5,
+      33.75,
+      34.5,
+      34.25
+     ],
+     [
+      35.5,
+      35.75,
+      36.5,
+      36.25
+     ]
+    ]
+   ]
+  },
+  "vertices_longitude": {
+   "attrs": {
+    "coordinates": "latitude longitude"
+   },
+   "dims": [
+    "y",
+    "x",
+    "vertices"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     [
+      99.5,
+      100.5,
+      100.5,
+      99.5
+     ],
+     [
+      109.5,
+      110.5,
+      110.5,
+      109.5
+     ],
+     [
+      119.5,
+      120.5,
+      120.5,
+      119.5
+     ],
+     [
+      129.5,
+      130.5,
+      130.5,
+      129.5
+     ]
+    ],
+    [
+     [
+      101.5,
+      102.5,
+      102.5,
+      101.5
+     ],
+     [
+      111.5,
+      112.5,
+      112.5,
+      111.5
+     ],
+     [
+      121.5,
+      122.5,
+      122.5,
+      121.5
+     ],
+     [
+      131.5,
+      132.5,
+      132.5,
+      131.5
+     ]
+    ],
+    [
+     [
+      103.5,
+      104.5,
+      104.5,
+      103.5
+     ],
+     [
+      113.5,
+      114.5,
+      114.5,
+      113.5
+     ],
+     [
+      123.5,
+      124.5,
+      124.5,
+      123.5
+     ],
+     [
+      133.5,
+      134.5,
+      134.5,
+      133.5
+     ]
+    ]
+   ]
+  },
+  "x": {
+   "attrs": {
+    "axis": "X",
+    "bounds": "x_bnds",
+    "long_name": "x coordinate of projection",
+    "standard_name": "projection_x_coordinate",
+    "units": "m"
+   },
+   "dims": [
+    "x"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    0.0,
+    10000.0,
+    20000.0,
+    30000.0
+   ]
+  },
+  "x_bnds": {
+   "attrs": {},
+   "dims": [
+    "x",
+    "bnds"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     -5000.0,
+     5000.0
+    ],
+    [
+     5000.0,
+     15000.0
+    ],
+    [
+     15000.0,
+     25000.0
+    ],
+    [
+     25000.0,
+     35000.0
+    ]
+   ]
+  },
+  "y": {
+   "attrs": {
+    "axis": "Y",
+    "bounds": "y_bnds",
+    "long_name": "y coordinate of projection",
+    "standard_name": "projection_y_coordinate",
+    "units": "m"
+   },
+   "dims": [
+    "y"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    0.0,
+    10000.0,
+    20000.0
+   ]
+  },
+  "y_bnds": {
+   "attrs": {},
+   "dims": [
+    "y",
+    "bnds"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     -5000.0,
+     5000.0
+    ],
+    [
+     5000.0,
+     15000.0
+    ],
+    [
+     15000.0,
+     25000.0
+    ]
+   ]
+  }
+ }
+}

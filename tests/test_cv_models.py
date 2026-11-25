@@ -629,3 +629,135 @@ def test_dataset_info_validation_runs_all_constraints(
         cv.validate_dataset_info(
             DatasetMetadata.from_mapping(metadata), check_required=check_required
         )
+
+
+# ---------------------------------------------------------------------------
+# Characterization of branches that the tests above don't reach (W0.2). These
+# pin today's behavior, including the exact error text, ahead of the _cv split.
+
+
+def _parent_experiments() -> ExperimentComponent:
+    component = ExperimentComponent.from_definition({
+        "historical": {
+            "parent_experiment_id": ["piControl"],
+            "parent_activity_id": ["CMIP"],
+        }
+    })
+    assert component is not None
+    return component
+
+
+_VALID_PARENT = {
+    "parent_experiment_id": "piControl",
+    "parent_activity_id": "CMIP",
+    "parent_source_id": "MODEL-A",
+    "mip_era": "CMIP7",
+    "parent_mip_era": "CMIP7",
+    "parent_time_units": "days since 1850-01-01",
+    "parent_variant_label": "r1i1p1f1",
+    "branch_time_in_child": 0.0,
+    "branch_time_in_parent": 0.0,
+}
+
+
+@pytest.mark.parametrize(
+    "update, message",
+    [
+        ({}, None),
+        (
+            {"parent_source_id": "MODEL-B"},
+            "parent_source_id='MODEL-B' is not in the CV.",
+        ),
+        (
+            {"parent_mip_era": "CMIP6"},
+            "parent_mip_era='CMIP6' does not match 'CMIP7'.",
+        ),
+        (
+            {"parent_variant_label": "r1i1p1"},
+            "parent_variant_label='r1i1p1' is invalid.",
+        ),
+        (
+            {"branch_time_in_parent": "noon"},
+            "branch_time_in_parent='noon' must be numeric.",
+        ),
+        ({"parent_activity_id": ""}, "parent_activity_id is required."),
+        ({"parent_source_id": None}, "parent_source_id is required."),
+        ({"parent_mip_era": None}, "parent_mip_era is required."),
+        ({"parent_time_units": ""}, "parent_time_units is required."),
+        ({"branch_time_in_child": None}, "branch_time_in_child is required."),
+    ],
+)
+def test_parent_validation_error_messages(update, message):
+    sources = SourceComponent.from_definition({"MODEL-A": {}})
+
+    error = _parent_experiments().parent_validation_error(
+        "historical", {**_VALID_PARENT, **update}, sources
+    )
+
+    assert error == message
+
+
+def test_invalid_regexes_fall_back_without_raising():
+    from cmor._cv_models import _choice_accepts, _pattern_matches
+
+    # Both try a literal match; on an invalid regex, _choice_accepts then
+    # rejects and _pattern_matches falls back to string equality.
+    assert _choice_accepts("(", "(") is True
+    assert _choice_accepts("a", "(") is False
+    assert _pattern_matches("(", "(") is True
+    assert _pattern_matches("x", "(") is False
+
+
+@pytest.mark.parametrize(
+    "definition, allowed",
+    [
+        (["a", "b"], ("a", "b")),
+        ({"k2": {}, "k1": {}}, ("k1", "k2")),
+        ("literal", ("literal",)),
+        (None, ()),
+    ],
+)
+def test_attribute_rule_allowed_values(definition, allowed):
+    assert AttributeRule.from_definition("x", definition).allowed_values == allowed
+
+
+def test_source_type_component_without_vocabulary_accepts_anything():
+    from cmor._cv_models import _values
+
+    assert SourceTypeComponent.from_definition({"AOGCM": "desc"}).values == {"AOGCM"}
+    empty = SourceTypeComponent.from_definition(None)
+    assert empty.values == frozenset()
+    assert empty.accepts("ANYTHING GOES")
+    assert SourceTypeComponent.from_definition(["A", "B"]).values == {"A", "B"}
+    assert _values(None) == ()
+    assert _values("") == ()
+    assert _values("x") == ("x",)
+
+
+def test_tracking_id_prefix_from_string_definition():
+    component = TrackingIdComponent.from_definitions("hdl:21.14100/", None)
+
+    assert component.prefix == "hdl:21.14100/"
+
+
+def test_license_component_selection_edge_cases():
+    templated = LicenseComponent.from_definition({
+        "license_id": {"CC0": {"license_type": "open", "license_url": "https://x"}},
+        "license_template": "<license_id> (<license_type>)",
+    })
+
+    assert templated.render({}) is None
+    assert templated.render({"license_id": "CC-BY"}) is None
+    assert templated.default_text is None
+    assert LicenseComponent.from_definition("Literal text").default_text == (
+        "Literal text"
+    )
+    assert templated.accepts("license_url", "https://x", {"license_id": "CC0"})
+    assert not templated.accepts("license_url", "https://y", {"license_id": "CC0"})
+    assert templated.accepts("license_url", "anything", {})
+    assert templated.accepts("unrelated", "anything", {})
+    assert templated.expected_selected_value("license_url", {}) is None
+    assert (
+        templated.expected_selected_value("license_url", {"license_id": "CC-BY"})
+        is None
+    )
