@@ -1,7 +1,7 @@
 """Saved notebook outputs must be free of warnings and errors.
 
 The notebooks in ``notebooks/`` are documentation. Their saved outputs are what
-readers see, so a warning there shows a misuse of CMOR (see audit item C12).
+readers see, so a warning there shows a misuse of CMOR.
 The notebooks are not executed here, only their saved outputs are checked.
 After editing a notebook, rebuild its outputs with
 ``tools/rebuild_notebook_output.sh``.
