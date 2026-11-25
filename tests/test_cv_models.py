@@ -632,8 +632,9 @@ def test_dataset_info_validation_runs_all_constraints(
 
 
 # ---------------------------------------------------------------------------
-# Characterization of branches that the tests above don't reach (W0.2). These
-# pin today's behavior, including the exact error text, ahead of the _cv split.
+# Characterization of branches that the tests above don't reach. These
+# pin today's behavior, including the exact error text, so a refactor of the
+# CV components can show that it changed nothing.
 
 
 def _parent_experiments() -> ExperimentComponent:

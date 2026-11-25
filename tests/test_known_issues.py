@@ -1,13 +1,10 @@
-"""Known bugs from the 4.0.0a1 documentation audit, recorded as strict xfails.
+"""Known bugs, recorded as strict xfails.
 
 Each test states the *correct* behavior and is marked
 ``xfail(strict=True, raises=...)`` with the exception it raises today. When the
 bug is fixed, the test starts to pass, and strict mode turns that XPASS into a
 failure. The fixing PR must then remove the marker. ``raises=`` ensures that an
 unrelated breakage is reported as a failure, not as the expected one.
-
-Item IDs (C2, C9, ...) refer to ``issues/docs-audit-4.0.0a1.md``, and the
-workstream IDs (W5.1, ...) to ``issues/combined-change-plan.md``.
 """
 
 from __future__ import annotations
@@ -53,7 +50,7 @@ def _data() -> np.ndarray:
 @pytest.mark.xfail(
     strict=True,
     raises=ValueError,
-    reason="C2 (W5.1): append fails for variables with a scalar coordinate",
+    reason="append fails for variables with a scalar coordinate",
 )
 def test_append_for_variable_with_scalar_coordinate(project, tmp_path):
     info = project.dataset_info(dataset_info(tmp_path))
@@ -85,7 +82,7 @@ def test_append_for_variable_with_scalar_coordinate(project, tmp_path):
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
-    reason="C3 (W5.2): missing_value is written as float64 on a float32 variable",
+    reason="missing_value is written as float64 on a float32 variable",
 )
 def test_missing_value_has_variable_type(project, tmp_path):
     info = project.dataset_info(dataset_info(tmp_path))
@@ -105,7 +102,7 @@ def test_missing_value_has_variable_type(project, tmp_path):
 @pytest.mark.xfail(
     strict=True,
     raises=pytest.fail.Exception,
-    reason="C4 (W5.3): Variable.chunksizes bypasses the CMIP7 chunk-size check",
+    reason="Variable.chunksizes bypasses the CMIP7 chunk-size check",
 )
 def test_variable_chunksizes_are_validated(project, tmp_path):
     info = project.dataset_info(dataset_info(tmp_path))
@@ -153,7 +150,7 @@ def test_bounds_formula_terms_standard_hybrid_sigma(project):
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
-    reason="C9 (W6.1): bounds formula_terms ignore the table's z_bounds_factors",
+    reason="bounds formula_terms ignore the table's z_bounds_factors",
 )
 @pytest.mark.parametrize(
     "axis_name",
@@ -175,7 +172,7 @@ def test_bounds_formula_terms_follow_table(project, axis_name):
 @pytest.mark.xfail(
     strict=True,
     raises=ValueError,
-    reason="C6 (W9.1): a DatasetWriter block with no writes raises and leaks staging",
+    reason="a DatasetWriter block with no writes raises and leaks staging",
 )
 def test_writer_block_without_writes_leaves_no_staging(project, tmp_path):
     staging_dir = tmp_path / "staging"
@@ -201,7 +198,7 @@ def test_writer_block_without_writes_leaves_no_staging(project, tmp_path):
 @pytest.mark.xfail(
     strict=True,
     raises=AttributeError,
-    reason="C7 (W9.2): assigning a str to DatasetWriter.path breaks close()",
+    reason="assigning a str to DatasetWriter.path breaks close()",
 )
 def test_writer_path_accepts_str(project, tmp_path):
     info = project.dataset_info(dataset_info(tmp_path))
@@ -225,7 +222,7 @@ def test_writer_path_accepts_str(project, tmp_path):
 @pytest.mark.xfail(
     strict=True,
     raises=UserWarning,
-    reason="C13 (W2.1): re-passing a prepared DatasetInfo warns about tracking_id",
+    reason="re-passing a prepared DatasetInfo warns about tracking_id",
 )
 def test_dataset_info_round_trip_does_not_warn(project, tmp_path):
     prepared = project.dataset_info(dataset_info(tmp_path))

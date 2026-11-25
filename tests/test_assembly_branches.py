@@ -1,12 +1,12 @@
-"""Characterization tests for branches of ``cmor._assembly`` (W0.2).
+"""Characterization tests for branches of ``cmor._assembly``.
 
-They pin today's behavior, including error text, so the ``_assembly`` split
-(W6) can show that it changed nothing. Public entry points are used where they
+They pin today's behavior, including error text, so a refactor of
+``_assembly`` can show that it changed nothing. Public entry points are used where they
 reach the branch. The internal-invariant guards in ``validate_final_dataset``
 can't be reached through them, because ``build_dataset`` always creates what
 they check. For those, the tests build a valid dataset, remove one piece, and
 call the guard directly. All uses of private ``_assembly`` names are in this
-file, so the W6 renames have one place to update.
+file, so renaming them later means updating only one place.
 """
 
 from __future__ import annotations
