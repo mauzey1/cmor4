@@ -172,7 +172,7 @@ def validate_cmip7_chunksizes(
         )
 
 
-def apply_dataset_encoding(
+def apply_dataset_encoding(  # noqa: C901 (see ruff.toml)
     ds: xr.Dataset,
     dataset: DatasetMetadata,
     variable: Variable,
@@ -467,7 +467,7 @@ def append_to_existing(
     return output_path
 
 
-def _validate_append_compatible(
+def _validate_append_compatible(  # noqa: C901 (see ruff.toml)
     existing_ds: xr.Dataset,
     new_ds: xr.Dataset,
     variable: Variable,

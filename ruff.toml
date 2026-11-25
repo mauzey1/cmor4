@@ -17,4 +17,24 @@ select = [
     "E",    # pycodestyle errors
     "W",    # pycodestyle warnings
     "F",    # Pyflakes
+    "C90",  # mccabe cyclomatic complexity
 ]
+
+# Complexity budget. New functions must stay at or below this limit; the
+# review checklist in CONTRIBUTING.md asks for 10 or below in new code.
+#
+# These existing functions are over the limit and carry a per-function
+# `# noqa: C901 (see ruff.toml)` on their `def` line. Remove the noqa when the
+# function is refactored (see issues/combined-change-plan.md), and lower
+# max-complexity to 10 once the list is empty.
+#   cmor/_cv_models.py      ExperimentComponent.parent_validation_error  (19)
+#   cmor/_netcdf.py         apply_dataset_encoding                       (34)
+#   cmor/_netcdf.py         _validate_append_compatible                  (19)
+#   cmor/_variable_tables.py VariableTable.validate_against              (18)
+#   cmor/axis.py            _validate_and_normalize_axis                 (17)
+#   cmor/grid.py            Grid.mapping_attributes                      (20)
+#   cmor/grid.py            validate_grid_mapping                        (41)
+#   cmor/grid.py            validate_grid_dimensions                     (16)
+#   cmor/tables.py          ProjectTables._validate_dataset              (16)
+[lint.mccabe]
+max-complexity = 15

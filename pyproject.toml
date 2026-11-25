@@ -40,6 +40,8 @@ test = [
 dev = [
   "ruff>=0.15",
   "mypy>=2.1",
+  "pytest-cov>=5.0",
+  "radon>=6.0",
 ]
 docs = [
   "sphinx>=7.0",

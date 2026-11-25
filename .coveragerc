@@ -4,3 +4,5 @@ branch = True
 
 [report]
 show_missing = True
+# Raise this floor as coverage improves; never lower it to make CI pass.
+fail_under = 90
