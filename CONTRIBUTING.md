@@ -50,10 +50,31 @@ ruff check cmor tests                      # lint, including complexity (C90)
 ruff format cmor tests --check             # formatting
 mypy --explicit-package-bases cmor         # type annotations
 python -m pytest --cov --cov-report=term-missing   # tests and coverage floor
+for f in examples/example_*.py; do                  # examples, warning-free
+  python -W error::RuntimeWarning "$f" --output-dir /tmp/cmor-examples || break
+done
 ```
 
 The `lint` job runs the two ruff commands. Each job in the build matrix runs mypy
 and the test suite with coverage. The job fails if coverage is below the floor.
+The `examples` job runs every script in `examples/` with `RuntimeWarning` treated
+as an error.
+
+The test suite includes these checks:
+
+- **Saved notebook outputs** (`tests/test_notebook_outputs.py`) must contain no
+  errors, no stderr output and no warnings. The notebooks are not run in CI.
+  After you edit a notebook, rebuild its outputs, for example
+  `tools/rebuild_notebook_output.sh notebooks/07_non_lat_lon_sea_ice_concentration.ipynb`,
+  and commit the result.
+- **Golden snapshots** (`tests/test_golden_datasets.py`) compare complete
+  `cmorize()` output with the files in `tests/golden/`. If your change is meant
+  to alter output, regenerate them with
+  `CMOR_UPDATE_GOLDEN=1 python -m pytest tests/test_golden_datasets.py` and
+  explain the diff in the pull request.
+- **Known bugs** (`tests/test_known_issues.py`) are strict `xfail` tests. A
+  fix makes its test pass, and strict mode then reports an XPASS failure.
+  Remove the `xfail` marker in the same pull request.
 
 ## Code style
 
