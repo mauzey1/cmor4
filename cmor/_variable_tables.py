@@ -405,7 +405,7 @@ class VariableTable:
                 data[key] = value
         return data
 
-    def validate_against(self, variable: Variable, entry: VariableEntry) -> None:
+    def validate_against(self, variable: Variable, entry: VariableEntry) -> None:  # noqa: C901 (see ruff.toml)
         """Validate *variable* metadata against a resolved/effective table entry.
 
         Parameters

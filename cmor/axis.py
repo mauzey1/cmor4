@@ -273,7 +273,7 @@ def validate_axis_values_early(axis: Axis) -> None:
     )
 
 
-def _validate_and_normalize_axis(
+def _validate_and_normalize_axis(  # noqa: C901 (see ruff.toml)
     dataset: DatasetMetadata | None,
     variable: Variable | None,
     axis: Axis,

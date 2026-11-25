@@ -580,7 +580,7 @@ class ExperimentComponent(_CVModel):
                 )
         return None
 
-    def parent_validation_error(
+    def parent_validation_error(  # noqa: C901 (see ruff.toml)
         self,
         experiment_id: Any,
         metadata: Mapping[str, Any],

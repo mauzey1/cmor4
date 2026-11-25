@@ -299,7 +299,7 @@ class Grid(MetadataModel):
         """True when this grid needs a CF grid-mapping variable."""
         return bool(self.grid_mapping_name or self.params or self.attrs)
 
-    def mapping_attributes(self) -> dict[str, Any]:
+    def mapping_attributes(self) -> dict[str, Any]:  # noqa: C901 (see ruff.toml)
         """Return NetCDF attributes for the grid-mapping scalar variable."""
         attrs = self.netcdf_attrs(self.attrs)
         mname = self.grid_mapping_name
@@ -577,7 +577,7 @@ def _allowed_grid_mapping_attributes(grid_mapping_name: str) -> frozenset[str] |
     return frozenset(allowed)
 
 
-def validate_grid_mapping(
+def validate_grid_mapping(  # noqa: C901 (see ruff.toml)
     entry: GridMappingEntry | None,
     data: Grid | Mapping[str, Any],
     *,
@@ -794,7 +794,7 @@ def validate_grid_coords(ds: xr.Dataset, grid: Grid) -> None:
             )
 
 
-def validate_grid_dimensions(
+def validate_grid_dimensions(  # noqa: C901 (see ruff.toml)
     grid: Grid,
     axes: Sequence[Axis],
 ) -> None:

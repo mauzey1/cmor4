@@ -542,7 +542,7 @@ class ProjectTables:
         request = ZFactor.model_validate({"name": name, **values})
         return self.formula_table.build(request)
 
-    def _validate_dataset(
+    def _validate_dataset(  # noqa: C901 (see ruff.toml)
         self,
         dataset_info: DatasetMetadata | None,
         variable: Variable,
