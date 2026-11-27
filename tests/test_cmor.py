@@ -15,28 +15,8 @@ import cmor.exceptions
 import cmor._time as time_utils
 import cmor.axis as axis_validation
 from cmor._paths import build_output_path
-from dataset_helpers import open_created_dataset
+from dataset_helpers import dataset_info, open_created_dataset
 from table_helpers import cmip7_project
-
-
-def dataset_info(tmp_path: Path):
-    return {
-        "activity_id": "CMIP",
-        "experiment_id": "amip",
-        "forcing_index": "f3",
-        "grid_label": "g101",
-        "initialization_index": "i1",
-        "institution_id": "CNRM-CERFACS",
-        "license_id": "CC-BY-4.0",
-        "mip_era": "CMIP7",
-        "nominal_resolution": "100 km",
-        "outpath": str(tmp_path),
-        "physics_index": "p1",
-        "realization_index": "r9",
-        "region": "glb",
-        "source_id": "CNRM-ESM2-1e",
-        "version": "v20200101",
-    }
 
 
 def horizontal_axes(project=None):
