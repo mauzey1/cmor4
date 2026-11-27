@@ -20,8 +20,8 @@ import xarray as xr
 
 import cmor
 from cmor import _assembly
+from dataset_helpers import dataset_info, horizontal_axes, time_axis
 from table_helpers import cmip7_project
-from test_utils import dataset_info, horizontal_axes, time_axis
 
 
 TAS = "tas_tavg-h2m-hxy-u"

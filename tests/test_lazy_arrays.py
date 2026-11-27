@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 
 from cmor import _assembly
+from dataset_helpers import dataset_info, horizontal_axes, time_axis
 from table_helpers import cmip7_project
-from test_utils import dataset_info, horizontal_axes, time_axis
 
 
 def _refuse_to_compute(*args, **kwargs):

@@ -29,13 +29,8 @@ import xarray as xr
 
 import cmor
 from cmor import Axis, DatasetInfo, Variable
+from dataset_helpers import curvilinear_grid, dataset_info, horizontal_axes, time_axis
 from table_helpers import cmip7_project
-from test_utils import (
-    curvilinear_grid,
-    dataset_info,
-    horizontal_axes,
-    time_axis,
-)
 
 
 GOLDEN_DIR = Path(__file__).parent / "golden"

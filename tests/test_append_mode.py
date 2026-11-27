@@ -8,14 +8,17 @@ import numpy as np
 import xarray as xr
 
 import cmor
-from dataset_helpers import load_dataset
-from table_helpers import cmip7_project
-from test_utils import (
+from dataset_helpers import (
     curvilinear_grid,
     dataset_info,
+    equivalent,
     horizontal_axes,
+    hybrid_axis,
+    hybrid_zfactors,
+    load_dataset,
     time_axis,
 )
+from table_helpers import cmip7_project
 
 
 def shifted_horizontal_axes(project: cmor.ProjectTables) -> list[cmor.Axis]:
@@ -31,47 +34,6 @@ def shifted_horizontal_axes(project: cmor.ProjectTables) -> list[cmor.Axis]:
             bounds=[[0.0, 180.0], [180.0, 360.0]],
         ),
     ]
-
-
-def hybrid_axis(project: cmor.ProjectTables) -> cmor.Axis:
-    return project.axis(
-        "standard_hybrid_sigma",
-        values=[0.9, 0.1],
-        bounds=[[1.0, 0.5], [0.5, 0.0]],
-    )
-
-
-def hybrid_zfactors(
-    project: cmor.ProjectTables,
-    ps_values: np.ndarray,
-    *,
-    a_values: list[float] | None = None,
-) -> list[cmor.ZFactor]:
-    a_vals = a_values or [0.9, 0.1]
-    return [
-        project.zfactor(
-            "a",
-            values=a_vals,
-            bounds=[[1.0, 0.5], [0.5, 0.0]],
-        ),
-        project.zfactor(
-            "b",
-            values=[0.9, 0.1],
-            bounds=[[1.0, 0.5], [0.5, 0.0]],
-        ),
-        project.zfactor("p0", values=100000.0),
-        project.zfactor("ps", values=ps_values),
-    ]
-
-
-def equivalent(ds: xr.Dataset) -> xr.Dataset:
-    normalized = ds.load().copy(deep=True)
-    normalized.attrs.pop("creation_date", None)
-    normalized.attrs.pop("history", None)
-    normalized.attrs.pop("tracking_id", None)
-    for variable in normalized.variables.values():
-        variable.attrs.pop("_FillValue", None)
-    return normalized
 
 
 class DatasetWriterAppendModeTests(unittest.TestCase):

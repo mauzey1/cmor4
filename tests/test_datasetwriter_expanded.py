@@ -17,96 +17,20 @@ import numpy as np
 import xarray as xr
 
 import cmor
-from dataset_helpers import load_dataset
+from dataset_helpers import (
+    assert_files_equivalent,
+    dataset_info,
+    equivalent,
+    horizontal_axes,
+    load_dataset,
+    time_axis,
+)
 from table_helpers import cmip7_project
-
-
-def dataset_info(tmp_path: Path) -> dict[str, str]:
-    """Standard CMIP7 dataset metadata for tests."""
-    return {
-        "activity_id": "CMIP",
-        "experiment_id": "amip",
-        "forcing_index": "f3",
-        "grid_label": "g101",
-        "initialization_index": "i1",
-        "institution_id": "CNRM-CERFACS",
-        "license_id": "CC-BY-4.0",
-        "mip_era": "CMIP7",
-        "nominal_resolution": "100 km",
-        "outpath": str(tmp_path),
-        "physics_index": "p1",
-        "realization_index": "r9",
-        "region": "glb",
-        "source_id": "CNRM-ESM2-1e",
-        "version": "v20200101",
-    }
-
-
-def horizontal_axes(project: cmor.ProjectTables) -> list[cmor.Axis]:
-    """Standard horizontal axes for tests."""
-    return [
-        project.axis(
-            "latitude",
-            values=[-45.0, 45.0],
-            bounds=[[-90.0, 0.0], [0.0, 90.0]],
-        ),
-        project.axis(
-            "longitude",
-            values=[90.0, 270.0],
-            bounds=[[0.0, 180.0], [180.0, 360.0]],
-        ),
-    ]
-
-
-def time_axis(
-    project: cmor.ProjectTables,
-    values: list[float] | None = None,
-    bounds: list[list[float]] | None = None,
-    **kwargs,
-) -> cmor.Axis:
-    """Create a time axis with optional values and bounds."""
-    axis_kwargs = {
-        "units": "days since 2000-01-01",
-        "calendar": "standard",
-        "frequency": "mon",
-    }
-    if values is not None:
-        axis_kwargs["values"] = values
-    if bounds is not None:
-        axis_kwargs["bounds"] = bounds
-    axis_kwargs.update(kwargs)
-    return project.axis("time", **axis_kwargs)
 
 
 def pressure_axis(project: cmor.ProjectTables) -> cmor.Axis:
     """Create a standard pressure level axis."""
     return project.axis("plev19")
-
-
-def equivalent(ds: xr.Dataset) -> xr.Dataset:
-    """Normalize dataset for comparison by removing time-dependent attributes."""
-    normalized = ds.load().copy(deep=True)
-    normalized.attrs.pop("creation_date", None)
-    normalized.attrs.pop("history", None)
-    normalized.attrs.pop("tracking_id", None)
-    for variable in normalized.variables.values():
-        variable.attrs.pop("_FillValue", None)
-    return normalized
-
-
-def assert_files_equivalent(
-    test: unittest.TestCase,
-    actual_path: Path,
-    expected_path: Path,
-) -> None:
-    """Assert that two NetCDF files are equivalent (ignoring timestamps)."""
-    test.assertTrue(actual_path.exists(), f"Actual file missing: {actual_path}")
-    test.assertTrue(expected_path.exists(), f"Expected file missing: {expected_path}")
-    with xr.open_dataset(actual_path, decode_times=False) as actual_opened:
-        actual = actual_opened.load()
-    with xr.open_dataset(expected_path, decode_times=False) as expected_opened:
-        expected = expected_opened.load()
-    xr.testing.assert_identical(equivalent(actual), equivalent(expected))
 
 
 class DatasetWriterEquivalenceTests(unittest.TestCase):
