@@ -19,7 +19,7 @@ import cmor
 from cmor import Axis, DatasetInfo, Variable, ZFactor, _assembly
 from cmor.exceptions import TableValidationError
 from table_helpers import cmip7_project
-from test_append_mode import curvilinear_grid, dataset_info, horizontal_axes, time_axis
+from test_utils import curvilinear_grid, dataset_info, horizontal_axes, time_axis
 
 
 @pytest.fixture(scope="module")
