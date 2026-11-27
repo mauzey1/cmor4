@@ -30,7 +30,7 @@ import xarray as xr
 import cmor
 from cmor import Axis, DatasetInfo, Variable
 from table_helpers import cmip7_project
-from test_append_mode import (
+from test_utils import (
     curvilinear_grid,
     dataset_info,
     horizontal_axes,
