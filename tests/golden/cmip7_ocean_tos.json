@@ -1,0 +1,270 @@
+{
+ "coords": [
+  "lat",
+  "lon",
+  "time"
+ ],
+ "data_vars": [
+  "lat_bnds",
+  "lon_bnds",
+  "time_bnds",
+  "tos"
+ ],
+ "dims": {
+  "bnds": 2,
+  "lat": 2,
+  "lon": 2,
+  "time": 2
+ },
+ "file_name": "tos_tavg-u-hxy-sea_mon_glb_g101_CNRM-ESM2-1e_amip_r9i1p1f3_200001-200002.nc",
+ "global_attributes": {
+  "Conventions": "CF-1.12",
+  "activity_id": "CMIP",
+  "area_label": "sea",
+  "branded_variable": "tos_tavg-u-hxy-sea",
+  "branding_suffix": "tavg-u-hxy-sea",
+  "cmor_version": "4.0.0a1",
+  "creation_date": "<volatile>",
+  "data_specs_version": "MIP-DS7.1.0.0",
+  "description": "Simulation of the climate of the recent past with prescribed sea surface temperatures and sea ice concentrations.",
+  "drs_specs": "MIP-DRS7",
+  "experiment": "Simulation of the climate of the recent past with prescribed sea surface temperatures and sea ice concentrations.",
+  "experiment_id": "amip",
+  "external_variables": "areacello",
+  "forcing_index": "f3",
+  "frequency": "mon",
+  "grid_label": "g101",
+  "history": "<volatile>",
+  "horizontal_label": "hxy",
+  "initialization_index": "i1",
+  "institution": "CNRM (Centre National de Recherches Meteorologiques, Toulouse 31057, France), CERFACS (Centre Europeen de Recherche et de Formation Avancee en Calcul Scientifique, Toulouse 31057, France)",
+  "institution_id": "CNRM-CERFACS",
+  "license": "CC-BY-4.0; CMIP7 data produced by CNRM-CERFACS is licensed under a Creative Commons Attribution 4.0 International License (https://creativecommons.org/licenses/by/4.0). Consult https://wcrp-cmip.github.io/cmip7-guidance/docs/CMIP7/Guidance_for_users/#2-terms-of-use-and-citations-requirements for terms of use governing CMIP7 output, including citation requirements and proper acknowledgment. The data producers and data providers make no warranty, either express or implied, including, but not limited to, warranties of merchantability and fitness for a particular purpose. All liabilities arising from the supply of the information (including any liability arising in negligence) are excluded to the fullest extent permitted by law.",
+  "license_id": "CC-BY-4.0",
+  "mip_era": "CMIP7",
+  "nominal_resolution": "100 km",
+  "physics_index": "p1",
+  "product": "model-output",
+  "realization_index": "r9",
+  "realm": "ocean",
+  "region": "glb",
+  "source": "CNRM-ESM2-1e: aerosol: tactic; atmosphere: arpege-climat-version-6-3; atmospheric-chemistry: reprobus-c-v2-0; land-surface: surfex-v8-modeling-platform; ocean-biogeochemistry: piscesv2-gas; ocean: nemo-v3-6; sea-ice: gelato",
+  "source_id": "CNRM-ESM2-1e",
+  "table_id": "ocean",
+  "table_info": "Name: CMIP7_ocean.json; Creation Date:(2026-11-19 11:22:16) MD5:88f0ec1c0d7c83b26cca261f7bc88de5",
+  "temporal_label": "tavg",
+  "title": "CNRM-ESM2-1e output prepared for CMIP7",
+  "tracking_id": "<volatile>",
+  "variable_id": "tos",
+  "variant_label": "r9i1p1f3",
+  "version": "v20200101",
+  "vertical_label": "u"
+ },
+ "variables": {
+  "lat": {
+   "attrs": {
+    "axis": "Y",
+    "bounds": "lat_bnds",
+    "long_name": "Latitude",
+    "standard_name": "latitude",
+    "units": "degrees_north"
+   },
+   "dims": [
+    "lat"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    -45.0,
+    45.0
+   ]
+  },
+  "lat_bnds": {
+   "attrs": {},
+   "dims": [
+    "lat",
+    "bnds"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     -90.0,
+     0.0
+    ],
+    [
+     0.0,
+     90.0
+    ]
+   ]
+  },
+  "lon": {
+   "attrs": {
+    "axis": "X",
+    "bounds": "lon_bnds",
+    "long_name": "Longitude",
+    "standard_name": "longitude",
+    "units": "degrees_east"
+   },
+   "dims": [
+    "lon"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    90.0,
+    270.0
+   ]
+  },
+  "lon_bnds": {
+   "attrs": {},
+   "dims": [
+    "lon",
+    "bnds"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     0.0,
+     180.0
+    ],
+    [
+     180.0,
+     360.0
+    ]
+   ]
+  },
+  "time": {
+   "attrs": {
+    "axis": "T",
+    "bounds": "time_bnds",
+    "calendar": "standard",
+    "long_name": "Time Intervals",
+    "standard_name": "time",
+    "units": "days since 2000-01-01"
+   },
+   "dims": [
+    "time"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "chunksizes": [
+     2
+    ],
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    15.0,
+    45.0
+   ]
+  },
+  "time_bnds": {
+   "attrs": {},
+   "dims": [
+    "time",
+    "bnds"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "chunksizes": [
+     2,
+     2
+    ],
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     0.0,
+     30.0
+    ],
+    [
+     30.0,
+     60.0
+    ]
+   ]
+  },
+  "tos": {
+   "attrs": {
+    "_FillValue": "NaN",
+    "_FillValue:dtype": "float32",
+    "area_label": "sea",
+    "branded_variable_name": "tos_tavg-u-hxy-sea",
+    "branding_suffix": "tavg-u-hxy-sea",
+    "cell_measures": "area: areacello",
+    "cell_methods": "area: mean where sea time: mean",
+    "horizontal_label": "hxy",
+    "long_name": "Sea Surface Temperature",
+    "standard_name": "sea_surface_temperature",
+    "temporal_label": "tavg",
+    "units": "degC",
+    "vertical_label": "u"
+   },
+   "dims": [
+    "time",
+    "lat",
+    "lon"
+   ],
+   "dtype": "float32",
+   "encoding": {
+    "chunksizes": [
+     2,
+     2,
+     2
+    ],
+    "complevel": 0,
+    "dtype": "float32",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     [
+      10.0,
+      11.0
+     ],
+     [
+      12.0,
+      13.0
+     ]
+    ],
+    [
+     [
+      14.0,
+      15.0
+     ],
+     [
+      16.0,
+      17.0
+     ]
+    ]
+   ]
+  }
+ }
+}

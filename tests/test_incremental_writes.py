@@ -10,114 +10,15 @@ import numpy as np
 import xarray as xr
 
 import cmor
+from dataset_helpers import (
+    assert_files_equivalent,
+    dataset_info,
+    horizontal_axes,
+    hybrid_axis,
+    hybrid_zfactors,
+    time_axis,
+)
 from table_helpers import cmip7_project
-
-
-def dataset_info(tmp_path: Path) -> dict[str, str]:
-    return {
-        "activity_id": "CMIP",
-        "experiment_id": "amip",
-        "forcing_index": "f3",
-        "grid_label": "g101",
-        "initialization_index": "i1",
-        "institution_id": "CNRM-CERFACS",
-        "license_id": "CC-BY-4.0",
-        "mip_era": "CMIP7",
-        "nominal_resolution": "100 km",
-        "outpath": str(tmp_path),
-        "physics_index": "p1",
-        "realization_index": "r9",
-        "region": "glb",
-        "source_id": "CNRM-ESM2-1e",
-        "version": "v20200101",
-    }
-
-
-def horizontal_axes(project: cmor.ProjectTables) -> list[cmor.Axis]:
-    return [
-        project.axis(
-            "latitude",
-            values=[-45.0, 45.0],
-            bounds=[[-90.0, 0.0], [0.0, 90.0]],
-        ),
-        project.axis(
-            "longitude",
-            values=[90.0, 270.0],
-            bounds=[[0.0, 180.0], [180.0, 360.0]],
-        ),
-    ]
-
-
-def time_axis(
-    project: cmor.ProjectTables,
-    values: list[float] | None = None,
-    bounds: list[list[float]] | None = None,
-) -> cmor.Axis:
-    kwargs = {
-        "units": "days since 2000-01-01",
-        "calendar": "standard",
-        "frequency": "mon",
-    }
-    if values is not None:
-        kwargs["values"] = values
-    if bounds is not None:
-        kwargs["bounds"] = bounds
-    return project.axis("time", **kwargs)
-
-
-def hybrid_axis(project: cmor.ProjectTables) -> cmor.Axis:
-    return project.axis(
-        "standard_hybrid_sigma",
-        values=[0.9, 0.1],
-        bounds=[[1.0, 0.5], [0.5, 0.0]],
-    )
-
-
-def hybrid_zfactors(
-    project: cmor.ProjectTables,
-    ps_values: np.ndarray | None = None,
-) -> list[cmor.ZFactor]:
-    return [
-        project.zfactor(
-            "a",
-            values=[0.9, 0.1],
-            bounds=[[1.0, 0.5], [0.5, 0.0]],
-        ),
-        project.zfactor(
-            "b",
-            values=[0.9, 0.1],
-            bounds=[[1.0, 0.5], [0.5, 0.0]],
-        ),
-        project.zfactor("p0", values=100000.0),
-        project.zfactor(
-            "ps",
-            **({} if ps_values is None else {"values": ps_values}),
-        ),
-    ]
-
-
-def equivalent(ds: xr.Dataset) -> xr.Dataset:
-    normalized = ds.load().copy(deep=True)
-    normalized.attrs.pop("creation_date", None)
-    normalized.attrs.pop("history", None)
-    normalized.attrs.pop("tracking_id", None)
-    for variable in normalized.variables.values():
-        variable.attrs.pop("_FillValue", None)
-    return normalized
-
-
-def assert_files_equivalent(
-    test: unittest.TestCase,
-    actual_path: Path,
-    expected_path: Path,
-) -> None:
-    test.assertTrue(actual_path.exists())
-    test.assertTrue(expected_path.exists())
-    with xr.open_dataset(actual_path, decode_times=False) as actual_opened:
-        actual = actual_opened.load()
-    with xr.open_dataset(expected_path, decode_times=False) as expected_opened:
-        expected = expected_opened.load()
-    xr.testing.assert_identical(equivalent(actual), equivalent(expected))
 
 
 def is_full_zarr_selection(selection: object, shape: tuple[int, ...]) -> bool:

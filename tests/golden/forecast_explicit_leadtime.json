@@ -1,0 +1,110 @@
+{
+ "coords": [
+  "time"
+ ],
+ "data_vars": [
+  "leadtime",
+  "reftime",
+  "tas"
+ ],
+ "dims": {
+  "time": 3
+ },
+ "file_name": "forecast-explicit.nc",
+ "global_attributes": {
+  "Conventions": "CF-1.12",
+  "branded_variable": "tas",
+  "cmor_version": "4.0.0a1",
+  "creation_date": "<volatile>",
+  "frequency": "6hr",
+  "history": "<volatile>",
+  "variable_id": "tas",
+  "variant_label": "r1i1p1f1"
+ },
+ "variables": {
+  "leadtime": {
+   "attrs": {
+    "standard_name": "forecast_period",
+    "units": "days"
+   },
+   "dims": [
+    "time"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    0.0,
+    0.25,
+    0.5
+   ]
+  },
+  "reftime": {
+   "attrs": {
+    "calendar": "standard",
+    "standard_name": "forecast_reference_time",
+    "units": "hours since 2020-01-01"
+   },
+   "dims": [],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": 0.0
+  },
+  "tas": {
+   "attrs": {
+    "_FillValue": "NaN",
+    "_FillValue:dtype": "float64",
+    "branded_variable_name": "tas",
+    "coordinates": "reftime leadtime",
+    "units": "K"
+   },
+   "dims": [
+    "time"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    280.0,
+    281.0,
+    282.0
+   ]
+  },
+  "time": {
+   "attrs": {
+    "axis": "T",
+    "calendar": "standard",
+    "standard_name": "time",
+    "units": "hours since 2020-01-01"
+   },
+   "dims": [
+    "time"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    0.0,
+    6.0,
+    12.0
+   ]
+  }
+ }
+}

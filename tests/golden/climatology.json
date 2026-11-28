@@ -1,0 +1,129 @@
+{
+ "coords": [
+  "time"
+ ],
+ "data_vars": [
+  "climatology_bnds",
+  "co2"
+ ],
+ "dims": {
+  "bnds": 2,
+  "time": 2
+ },
+ "file_name": "co2_mon_201801-201802.nc",
+ "global_attributes": {
+  "Conventions": "CF-1.12",
+  "activity_id": "CMIP",
+  "area_label": "u",
+  "branded_variable": "co2_tclm-u-hm-u",
+  "branding_suffix": "tclm-u-hm-u",
+  "cmor_version": "4.0.0a1",
+  "creation_date": "<volatile>",
+  "experiment_id": "amip",
+  "forcing_index": "f3",
+  "frequency": "mon",
+  "grid_label": "g101",
+  "history": "<volatile>",
+  "horizontal_label": "hm",
+  "initialization_index": "i1",
+  "institution_id": "CNRM-CERFACS",
+  "license_id": "CC-BY-4.0",
+  "mip_era": "CMIP7",
+  "nominal_resolution": "100 km",
+  "physics_index": "p1",
+  "realization_index": "r9",
+  "region": "glb",
+  "source_id": "CNRM-ESM2-1e",
+  "temporal_label": "tclm",
+  "title": "CNRM-ESM2-1e output prepared for CMIP7",
+  "variable_id": "co2",
+  "variant_label": "r9i1p1f3",
+  "version": "v20200101",
+  "vertical_label": "u"
+ },
+ "variables": {
+  "climatology_bnds": {
+   "attrs": {},
+   "dims": [
+    "time",
+    "bnds"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "chunksizes": [
+     2,
+     2
+    ],
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    [
+     0.0,
+     31.0
+    ],
+    [
+     31.0,
+     60.0
+    ]
+   ]
+  },
+  "co2": {
+   "attrs": {
+    "_FillValue": "NaN",
+    "_FillValue:dtype": "float32",
+    "area_label": "u",
+    "branded_variable_name": "co2_tclm-u-hm-u",
+    "branding_suffix": "tclm-u-hm-u",
+    "horizontal_label": "hm",
+    "temporal_label": "tclm",
+    "vertical_label": "u"
+   },
+   "dims": [
+    "time"
+   ],
+   "dtype": "float32",
+   "encoding": {
+    "chunksizes": [
+     2
+    ],
+    "complevel": 0,
+    "dtype": "float32",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    400.0,
+    401.0
+   ]
+  },
+  "time": {
+   "attrs": {
+    "axis": "T",
+    "calendar": "360_day",
+    "climatology": "climatology_bnds",
+    "standard_name": "time",
+    "units": "days since 2018"
+   },
+   "dims": [
+    "time"
+   ],
+   "dtype": "float64",
+   "encoding": {
+    "chunksizes": [
+     2
+    ],
+    "complevel": 0,
+    "dtype": "float64",
+    "shuffle": false,
+    "zlib": false
+   },
+   "values": [
+    15.0,
+    45.0
+   ]
+  }
+ }
+}
