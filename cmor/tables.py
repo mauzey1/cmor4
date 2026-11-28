@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -716,7 +715,10 @@ class ProjectTables:
                 dataset.setdefault(key, value)
 
         if "table_info" not in dataset and variable_entry.table_file is not None:
-            dataset["table_info"] = _build_table_info(variable_entry.table_file)
+            dataset["table_info"] = _build_table_info(
+                variable_entry.table_file,
+                getattr(header, "table_date", None),
+            )
 
     def _add_variable_global_defaults(
         self, dataset: dict[str, Any], variable: Variable
@@ -766,17 +768,19 @@ def _resolve_optional_table(
     return None
 
 
-def _build_table_info(table_file: Path) -> str:
-    """Build a table_info string with the filename, creation date, and MD5 hash.
+def _build_table_info(table_file: Path, table_date: str | None = None) -> str:
+    """Build a table_info string with the filename, table date, and MD5 hash.
 
     Matches the format written by CMOR3:
     ``Name: <file>; Creation Date:(<date>) MD5:<hash>``
+
+    The date is the ``table_date`` from the table header, copied as written.
+    When the header has no ``table_date``, the date part is left out.
     """
     try:
-        raw = table_file.read_bytes()
-        md5 = hashlib.md5(raw).hexdigest()
-        mtime = datetime.fromtimestamp(table_file.stat().st_mtime, timezone.utc)
-        creation_date_str = mtime.strftime("%Y-%m-%d %H:%M:%S")
-        return f"Name: {table_file.name}; Creation Date:({creation_date_str}) MD5:{md5}"
+        md5 = hashlib.md5(table_file.read_bytes()).hexdigest()
     except OSError:
         return f"Name: {table_file.name};"
+    if table_date:
+        return f"Name: {table_file.name}; Creation Date:({table_date}) MD5:{md5}"
+    return f"Name: {table_file.name}; MD5:{md5}"
