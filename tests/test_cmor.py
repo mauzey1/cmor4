@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -15,6 +17,7 @@ import cmor.exceptions
 import cmor._time as time_utils
 import cmor.axis as axis_validation
 from cmor._paths import build_output_path
+from cmor.tables import _build_table_info as build_table_info
 from dataset_helpers import open_created_dataset
 from table_helpers import cmip7_project
 
@@ -1264,6 +1267,11 @@ class TableInfoTest(unittest.TestCase):
     def setUp(self):
         self.project = cmip7_project("tables/CMIP7_ocean.json")
 
+    def _table_file(self) -> Path:
+        entry = self.project.variable_table.entries["tos_tavg-u-hxy-sea"]
+        assert entry.table_file is not None
+        return entry.table_file
+
     def _axes(self):
         return [time_axis(self.project), *horizontal_axes(self.project)]
 
@@ -1286,6 +1294,41 @@ class TableInfoTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             ds = self._make_dataset(tmp_dir)
         self.assertIn("Creation Date:(", ds.attrs["table_info"])
+
+    def test_table_info_date_is_the_header_table_date(self):
+        table_file = self._table_file()
+        header = json.loads(table_file.read_text())["Header"]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            ds = self._make_dataset(tmp_dir)
+        self.assertIn(
+            f"Creation Date:({header['table_date']}) MD5:", ds.attrs["table_info"]
+        )
+
+    def test_table_info_does_not_depend_on_file_modification_time(self):
+        table_file = self._table_file()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            before = self._make_dataset(tmp_dir).attrs["table_info"]
+        stat = table_file.stat()
+        try:
+            os.utime(table_file, (stat.st_atime, stat.st_mtime - 86400 * 365))
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                after = self._make_dataset(tmp_dir).attrs["table_info"]
+        finally:
+            os.utime(table_file, (stat.st_atime, stat.st_mtime))
+        self.assertEqual(after, before)
+
+    def test_table_info_without_header_table_date_omits_the_date(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            table_file = tmp_path / "Undated.json"
+            table_file.write_text(
+                json.dumps({
+                    "Header": {"table_id": "undated"},
+                    "variable_entry": {"tas": {"dimensions": "time", "units": "K"}},
+                })
+            )
+            info = build_table_info(table_file)
+        self.assertRegex(info, r"^Name: Undated.json; MD5:[0-9a-f]{32}$")
 
     def test_table_info_includes_md5_hash(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
