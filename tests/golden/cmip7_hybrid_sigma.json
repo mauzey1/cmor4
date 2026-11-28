@@ -60,7 +60,7 @@
   "source": "CNRM-ESM2-1e: aerosol: tactic; atmosphere: arpege-climat-version-6-3; atmospheric-chemistry: reprobus-c-v2-0; land-surface: surfex-v8-modeling-platform; ocean-biogeochemistry: piscesv2-gas; ocean: nemo-v3-6; sea-ice: gelato",
   "source_id": "CNRM-ESM2-1e",
   "table_id": "atmos",
-  "table_info": "Name: CMIP7_atmos.json; Creation Date:(2026-11-19 21:22:34) MD5:ace6aee3a948a7f5299964aeafece466",
+  "table_info": "Name: CMIP7_atmos.json; Creation Date:(2026-11-19 11:22:16) MD5:ace6aee3a948a7f5299964aeafece466",
   "temporal_label": "tavg",
   "title": "CNRM-ESM2-1e output prepared for CMIP7",
   "tracking_id": "<volatile>",

@@ -45,6 +45,7 @@ class TableHeader(TableModel):
     table_id: str | None = None
     Conventions: str | None = None
     data_specs_version: str | None = None
+    table_date: str | None = None
     valid_min: Any = None
     valid_max: Any = None
     ok_min_mean_abs: Any = None
