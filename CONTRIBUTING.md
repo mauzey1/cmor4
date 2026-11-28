@@ -53,20 +53,21 @@ python -m pytest --cov --cov-report=term-missing   # tests and coverage floor
 for f in examples/example_*.py; do                  # examples, warning-free
   python -W error::RuntimeWarning "$f" --output-dir /tmp/cmor-examples || break
 done
+python tools/check_notebook_outputs.py             # notebook outputs, warning-free
 ```
 
 The `lint` job runs the two ruff commands. Each job in the build matrix runs mypy
 and the test suite with coverage. The job fails if coverage is below the floor.
 The `examples` job runs every script in `examples/` with `RuntimeWarning` treated
-as an error.
+as an error. The `notebooks` job runs `tools/check_notebook_outputs.py`, which
+fails if any saved output in `notebooks/` has an error, stderr output or a
+warning. It checks the saved outputs only and doesn't run the notebooks, so
+after you edit a notebook, rebuild its outputs, for example
+`tools/rebuild_notebook_output.sh notebooks/07_non_lat_lon_sea_ice_concentration.ipynb`,
+and commit the result.
 
 The test suite includes these checks:
 
-- **Saved notebook outputs** (`tests/test_notebook_outputs.py`) must contain no
-  errors, no stderr output and no warnings. The notebooks are not run in CI.
-  After you edit a notebook, rebuild its outputs, for example
-  `tools/rebuild_notebook_output.sh notebooks/07_non_lat_lon_sea_ice_concentration.ipynb`,
-  and commit the result.
 - **Golden snapshots** (`tests/test_golden_datasets.py`) compare complete
   `cmorize()` output with the files in `tests/golden/`. If your change is meant
   to alter output, regenerate them with

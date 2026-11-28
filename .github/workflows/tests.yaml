@@ -66,6 +66,24 @@ jobs:
             echo "::endgroup::"
           done
 
+  notebooks:
+    name: Notebook outputs have no warnings
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Check saved notebook outputs
+        run: |
+          python tools/check_notebook_outputs.py
+
   build:
     name: Build (${{ matrix.os }} - Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
